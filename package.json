@@ -6,6 +6,7 @@
     "dev": "turbo dev",
     "build": "turbo build",
     "lint": "turbo lint",
+    "typecheck": "turbo typecheck",
     "version:patch": "node scripts/version-bump.mjs patch",
     "version:minor": "node scripts/version-bump.mjs minor",
     "version:major": "node scripts/version-bump.mjs major"

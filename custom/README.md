@@ -27,4 +27,6 @@ belong next to the sketch.
 - [x] Forked to `4holdingdirectlimited/mault`, `origin` + `upstream` configured
 - [x] Clone synced to upstream `a1dfa44` (main.ino unchanged upstream)
 - [x] Build/setup docs added to `arduino/main/` (untracked — commit on `custom`)
+- [x] Item 1: command id / ACK correlation — see `CHANGES.md`
+- [x] Item 2: tooling (typecheck + firmware compile + CI) — see `CHANGES.md`
 - [ ] Implement "faster + more robust" rework — see `PLAN.md`

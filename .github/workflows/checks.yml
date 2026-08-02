@@ -1,0 +1,43 @@
+# CI checks for the fork: typecheck the web app and compile the firmware on
+# every push to master/custom and on pull requests.
+#
+# Note: GitHub disables Actions on forks by default — enable them at
+# Settings -> Actions -> General -> "Allow all actions and reusable workflows".
+
+name: Checks
+
+on:
+  push:
+    branches: [master, custom]
+  pull_request:
+
+jobs:
+  web-typecheck:
+    name: Web app typecheck + lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.1.3
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm lint
+
+  firmware-compile:
+    name: Firmware compile (Uno R4 Minima)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: arduino/arduino-cli-action@v1
+        with:
+          library-manager: update
+      - run: arduino-cli core update-index
+      - run: arduino-cli core install arduino:renesas_uno
+      - run: arduino-cli lib install ArduinoJson
+      - run: arduino-cli lib install "Adafruit PWM Servo Driver Library"
+      - run: arduino-cli compile --fqbn arduino:renesas_uno:minima arduino/main
