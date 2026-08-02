@@ -116,6 +116,7 @@ export const bins = pgTable(
     guid: uuid("guid").defaultRandom(),
     rules: jsonb("rules").notNull(),
     isCatchAll: boolean("is_catch_all").notNull().default(false),
+    maxCapacity: integer("max_capacity").notNull().default(0),
     binNumber: integer("bin_number").notNull(),
     binSet: integer("bin_set")
       .notNull()

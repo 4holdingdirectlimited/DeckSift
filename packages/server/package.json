@@ -8,7 +8,8 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "db:prune-images": "tsx src/lib/prune-images.ts"
   },
   "dependencies": {
     "@hono/node-server": "^1.19.9",

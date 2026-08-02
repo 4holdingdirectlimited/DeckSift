@@ -15,7 +15,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 export function useCalibrationPage() {
-  const { isConnected, connect, disconnect, sendCommand, sendBin, sendTest, receiveResponse } =
+  const { isConnected, connect, disconnect, sendCommand, sendCommandWithResponse, sendBin, sendTest } =
     useSerial();
   const { configs, saveConfig, moveServo } = useModuleConfigs();
   const { feederConfig, saveConfig: saveFeeder, previewSpeed } = useFeederConfig();
@@ -277,11 +277,9 @@ export function useCalibrationPage() {
     if (irBusyRef.current || activeBinRef.current !== null) return;
     irBusyRef.current = true;
     try {
-      const sent = await sendCommand(JSON.stringify({ readIR: true }));
-      if (!sent) return;
-      const response = await receiveResponse(2000);
+      const response = await sendCommandWithResponse({ readIR: true }, 2000);
       if (!response) return;
-      const parsed = JSON.parse(response);
+      const parsed = response as Record<string, unknown>;
       if (Array.isArray(parsed.ir)) setIrStates(parsed.ir as boolean[]);
       if (typeof parsed.hopper === "boolean") setHopperHasCards(parsed.hopper);
     } catch {
@@ -289,7 +287,7 @@ export function useCalibrationPage() {
     } finally {
       irBusyRef.current = false;
     }
-  }, [sendCommand, receiveResponse]);
+  }, [sendCommandWithResponse]);
 
   const handleToggleIrMonitor = useCallback(() => {
     setIrMonitoring((prev) => !prev);

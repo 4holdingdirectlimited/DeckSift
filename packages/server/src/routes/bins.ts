@@ -34,6 +34,7 @@ function toBinSet(row: {
     binNumber: number;
     rules: unknown;
     isCatchAll: boolean;
+    maxCapacity: number;
   }[];
   game: {
     guid: string | null;
@@ -55,6 +56,7 @@ function toBinSet(row: {
       binNumber: bin.binNumber,
       rules: bin.rules as BinRuleGroup,
       isCatchAll: bin.isCatchAll,
+      maxCapacity: bin.maxCapacity,
     })),
     game: row.game
       ? {
@@ -83,7 +85,7 @@ const binSetQuery = {
   },
   with: {
     bins: {
-      columns: { guid: true, binNumber: true, rules: true, isCatchAll: true },
+      columns: { guid: true, binNumber: true, rules: true, isCatchAll: true, maxCapacity: true },
     },
     game: true,
   },
@@ -106,13 +108,14 @@ async function _snapshotBinSet(
 ) {
   const rows = await tx.query.bins.findMany({
     where: (bins, { eq }) => eq(bins.binSet, binSetId),
-    columns: { guid: true, binNumber: true, rules: true, isCatchAll: true },
+    columns: { guid: true, binNumber: true, rules: true, isCatchAll: true, maxCapacity: true },
   });
   const snapshot: BinConfig[] = rows.map((r) => ({
     guid: r.guid!,
     binNumber: r.binNumber,
     rules: r.rules as BinRuleGroup,
     isCatchAll: r.isCatchAll,
+    maxCapacity: r.maxCapacity,
   }));
   await tx.insert(binSetAudit).values({ binSetGuid, snapshot, orgId });
 }
@@ -228,12 +231,14 @@ router.post("/", requireAuth, requireOrg, async (c) => {
             binNumber: i + 1,
             rules: emptyRules(),
             isCatchAll: false,
+            maxCapacity: 0,
           }));
       await tx.insert(bins).values(
         binsToInsert.map((b) => ({
           binNumber: b.binNumber,
           rules: b.rules,
           isCatchAll: b.isCatchAll,
+          maxCapacity: b.maxCapacity ?? 0,
           binSet: newBinSet.id,
           orgId,
         })),
@@ -273,7 +278,7 @@ router.post("/copies", requireAuth, requireOrg, async (c) => {
               ),
         columns: { id: true },
         with: {
-          bins: { columns: { binNumber: true, rules: true, isCatchAll: true } },
+          bins: { columns: { binNumber: true, rules: true, isCatchAll: true, maxCapacity: true } },
         },
       });
       const activeBins = active?.bins ?? [];
@@ -287,6 +292,7 @@ router.post("/copies", requireAuth, requireOrg, async (c) => {
             binNumber: bin.binNumber,
             rules: bin.rules,
             isCatchAll: bin.isCatchAll,
+            maxCapacity: bin.maxCapacity ?? 0,
             binSet: newBinSet.id,
             orgId,
           })),
@@ -306,9 +312,10 @@ router.put("/bins/:binNumber", requireAuth, requireOrg, async (c) => {
   const orgId = c.get("orgId");
   const binNumber = parseInt(c.req.param("binNumber"));
   const gameGuid = c.req.query("gameGuid");
-  const { rules, isCatchAll } = await c.req.json<{
+  const { rules, isCatchAll, maxCapacity } = await c.req.json<{
     rules: BinRuleGroup;
     isCatchAll?: boolean;
+    maxCapacity?: number;
   }>();
   try {
     const result = await authQuery(c.get("jwtClaims"), async (tx) => {
@@ -341,6 +348,7 @@ router.put("/bins/:binNumber", requireAuth, requireOrg, async (c) => {
           .set({
             rules,
             isCatchAll: isCatchAll ?? false,
+            maxCapacity: maxCapacity ?? 0,
             updatedAt: new Date(),
           })
           .where(eq(bins.id, existing.id))
@@ -349,12 +357,14 @@ router.put("/bins/:binNumber", requireAuth, requireOrg, async (c) => {
             binNumber: bins.binNumber,
             rules: bins.rules,
             isCatchAll: bins.isCatchAll,
+            maxCapacity: bins.maxCapacity,
           });
         savedBin = {
           guid: updated.guid!,
           binNumber: updated.binNumber,
           rules: updated.rules as BinRuleGroup,
           isCatchAll: updated.isCatchAll,
+          maxCapacity: updated.maxCapacity,
         };
       } else {
         const [inserted] = await tx
@@ -363,6 +373,7 @@ router.put("/bins/:binNumber", requireAuth, requireOrg, async (c) => {
             binNumber,
             rules,
             isCatchAll: isCatchAll ?? false,
+            maxCapacity: maxCapacity ?? 0,
             binSet: activeBinSet.id,
             orgId,
           })
@@ -371,12 +382,14 @@ router.put("/bins/:binNumber", requireAuth, requireOrg, async (c) => {
             binNumber: bins.binNumber,
             rules: bins.rules,
             isCatchAll: bins.isCatchAll,
+            maxCapacity: bins.maxCapacity,
           });
         savedBin = {
           guid: inserted.guid!,
           binNumber: inserted.binNumber,
           rules: inserted.rules as BinRuleGroup,
           isCatchAll: inserted.isCatchAll,
+          maxCapacity: inserted.maxCapacity,
         };
       }
 

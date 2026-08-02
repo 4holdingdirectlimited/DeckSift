@@ -40,8 +40,8 @@ export function CardScanner({ className, compact }: CardScannerProps) {
     connect,
     disconnect,
     sendTest,
-    sendCommand,
-    receiveResponse,
+    sendFeed,
+    sendCommandWithResponse,
   } = useSerial();
   const [isFeeding, setIsFeeding] = useState(false);
   const [isClearingDevice, setIsClearingDevice] = useState(false);
@@ -113,28 +113,30 @@ export function CardScanner({ className, compact }: CardScannerProps) {
         dismissible: true,
       });
       void reportSerialEvent({ command: "jam", sent: true, response: raw });
+    } else if (
+      typeof msg === "object" &&
+      msg !== null &&
+      "error" in msg &&
+      (msg as Record<string, unknown>).error === "recovered"
+    ) {
+      // Firmware reported cards already sitting at a module IR when it booted
+      // (e.g. power loss mid-run) — tell the operator to flush the device.
+      const raw = msg as Record<string, unknown>;
+      toast.warning("Cards found in sorter", {
+        description: `Module ${String(raw.module)} had a card when the sorter booted. Use “Clear device” to flush it.`,
+        duration: Infinity,
+        dismissible: true,
+      });
     }
   });
 
   const handleFeed = useCallback(async () => {
     setIsFeeding(true);
     try {
-      const sent = await sendCommand(JSON.stringify({ feeder: true }));
-      if (!sent) {
-        toast.error("Feed failed", {
-          description: "Could not send feeder command.",
-        });
-        void reportSerialEvent({
-          command: "feeder",
-          sent: false,
-          response: null,
-        });
-        return;
-      }
-      const response = await receiveResponse(10000);
+      const response = await sendFeed();
       if (!response) {
-        toast.error("Feed timeout", {
-          description: "Feeder did not respond in time.",
+        toast.error("Feed failed", {
+          description: "Could not send feeder command or no response in time.",
         });
         void reportSerialEvent({
           command: "feeder",
@@ -143,46 +145,39 @@ export function CardScanner({ className, compact }: CardScannerProps) {
         });
         return;
       }
-      try {
-        const parsed = JSON.parse(response) as Record<string, unknown>;
-        if (parsed.empty) {
-          handlePause();
-          toast.error("Feeder empty", {
-            description:
-              "No cards remaining in the hopper. Add more cards to continue.",
-            duration: Infinity,
-            dismissible: true,
-          });
-          void reportSerialEvent({
-            command: "feeder",
-            sent: true,
-            response: parsed,
-          });
-        } else if (parsed.error) {
-          toast.error("Feeder error", {
-            description: String(parsed.error),
-            duration: Infinity,
-            dismissible: true,
-          });
-          void reportSerialEvent({
-            command: "feeder",
-            sent: true,
-            response: parsed,
-          });
-        } else {
-          // Feeder confirmed a card reached module 1 - capture it now.
-          captureCard();
-        }
-      } catch {
-        toast.error("Feed error", {
-          description: "Unexpected response from feeder.",
+      const parsed = response as Record<string, unknown>;
+      if (parsed.empty) {
+        handlePause();
+        toast.error("Feeder empty", {
+          description:
+            "No cards remaining in the hopper. Add more cards to continue.",
+          duration: Infinity,
+          dismissible: true,
         });
-        void reportSerialEvent({ command: "feeder", sent: true, response });
+        void reportSerialEvent({
+          command: "feeder",
+          sent: true,
+          response: parsed,
+        });
+      } else if (parsed.error) {
+        toast.error("Feeder error", {
+          description: String(parsed.error),
+          duration: Infinity,
+          dismissible: true,
+        });
+        void reportSerialEvent({
+          command: "feeder",
+          sent: true,
+          response: parsed,
+        });
+      } else {
+        // Feeder confirmed a card reached module 1 - capture it now.
+        captureCard();
       }
     } finally {
       setIsFeeding(false);
     }
-  }, [sendCommand, receiveResponse, captureCard, handlePause]);
+  }, [sendFeed, captureCard, handlePause]);
 
   // Opens every module's bottom paddle at once so any card resting in the
   // mechanism (jammed, stuck between modules, etc.) drops through to the
@@ -191,16 +186,12 @@ export function CardScanner({ className, compact }: CardScannerProps) {
   const handleClearDevice = useCallback(async () => {
     setIsClearingDevice(true);
     try {
-      const sent = await sendCommand(JSON.stringify({ clearDevice: true }));
-      if (!sent) {
-        toast.error("Clear failed", {
-          description: "Could not send command to the device.",
-        });
-        return;
-      }
-      const response = await receiveResponse(10000);
+      const response = await sendCommandWithResponse(
+        { clearDevice: true },
+        10000,
+      );
       if (!response) {
-        toast.error("Clear timeout", {
+        toast.error("Clear failed", {
           description: "Device did not respond in time.",
         });
         return;
@@ -211,7 +202,7 @@ export function CardScanner({ className, compact }: CardScannerProps) {
     } finally {
       setIsClearingDevice(false);
     }
-  }, [sendCommand, receiveResponse]);
+  }, [sendCommandWithResponse]);
 
   // Skipping a duplicate means routing the physical card to the catch-all
   // bin (it was never sent anywhere since sendBin is only called on

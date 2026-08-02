@@ -47,8 +47,7 @@ export function ScannedCardsProvider({
   const [cards, setCards] = useState<ScannedCard[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const { configs: binConfigs, fieldDefinitions } = useBinConfigs();
-  const { sendBin, sendCommand, receiveResponse, isConnected, isReady } =
-    useSerial();
+  const { sendBin, sendFeed, isConnected, isReady } = useSerial();
   const { activeCollection } = useCollections();
 
   const { locks, currentUserId } = useCollectionLocks();
@@ -66,8 +65,7 @@ export function ScannedCardsProvider({
   const fieldDefinitionsRef = useRef(fieldDefinitions);
   const serialRef = useRef({
     sendBin,
-    sendCommand,
-    receiveResponse,
+    sendFeed,
     isConnected,
     isReady,
   });
@@ -77,6 +75,12 @@ export function ScannedCardsProvider({
   const autoFeedRef = useRef(true);
   const cardArrivedHookRef = useRef<(() => void) | null>(null);
   const pauseHookRef = useRef<(() => void) | null>(null);
+  // Software bin capacity — with no bin-full sensors we count cards per bin
+  // this session and refuse to route into a bin that has reached its max.
+  const binCountsRef = useRef<Record<number, number>>({});
+  // Captured-image dedupe — reusing the photo of a card already scanned this
+  // session avoids storing a fresh base64 JPEG for every duplicate card.
+  const capturedImageRef = useRef<Record<string, string>>({});
   const [timerTrigger, setTimerTrigger] = useState<number | undefined>(
     undefined,
   );
@@ -97,17 +101,25 @@ export function ScannedCardsProvider({
   useEffect(() => {
     serialRef.current = {
       sendBin,
-      sendCommand,
-      receiveResponse,
+      sendFeed,
       isConnected,
       isReady,
     };
-  }, [sendBin, sendCommand, receiveResponse, isConnected, isReady]);
+  }, [sendBin, sendFeed, isConnected, isReady]);
 
-  const setAutoFeed = useCallback((enabled: boolean) => {
-    autoFeedRef.current = enabled;
-    setAutoFeedState(enabled);
+  const resetBinCounts = useCallback(() => {
+    binCountsRef.current = {};
   }, []);
+
+  const setAutoFeed = useCallback(
+    (enabled: boolean) => {
+      autoFeedRef.current = enabled;
+      setAutoFeedState(enabled);
+      // Starting a run means the bins were just emptied — restart the count.
+      if (enabled) resetBinCounts();
+    },
+    [resetBinCounts],
+  );
 
   const registerCardArrivedHook = useCallback((fn: () => void) => {
     cardArrivedHookRef.current = fn;
@@ -124,28 +136,12 @@ export function ScannedCardsProvider({
   }, []);
 
   const triggerAutoFeed = useCallback(async () => {
-    const sent = await serialRef.current.sendCommand(
-      JSON.stringify({ feeder: true }),
-    );
-    if (!sent) {
+    const parsed = await serialRef.current.sendFeed();
+    if (parsed === null) {
       autoFeedRef.current = false;
       setAutoFeedState(false);
       toast.error("Auto-feed failed", {
-        description: "Could not send feeder command.",
-      });
-      void reportSerialEvent({
-        command: "auto-feed",
-        sent: false,
-        response: null,
-      });
-      return;
-    }
-    const response = await serialRef.current.receiveResponse(10000);
-    if (!response) {
-      autoFeedRef.current = false;
-      setAutoFeedState(false);
-      toast.error("Auto-feed timeout", {
-        description: "Feeder did not respond in time.",
+        description: "Could not send feeder command or no response in time.",
       });
       void reportSerialEvent({
         command: "auto-feed",
@@ -154,46 +150,37 @@ export function ScannedCardsProvider({
       });
       return;
     }
-    try {
-      const parsed = JSON.parse(response) as Record<string, unknown>;
-      if (parsed.empty) {
-        autoFeedRef.current = false;
-        setAutoFeedState(false);
-        pauseHookRef.current?.();
-        toast.error("Feeder empty", {
-          description:
-            "No cards remaining in the hopper. Add more cards to continue.",
-          duration: Infinity,
-          dismissible: true,
-        });
-        void reportSerialEvent({
-          command: "auto-feed",
-          sent: true,
-          response: parsed,
-        });
-      } else if (parsed.error) {
-        autoFeedRef.current = false;
-        setAutoFeedState(false);
-        toast.error("Feeder error", {
-          description: String(parsed.error),
-          duration: Infinity,
-          dismissible: true,
-        });
-        void reportSerialEvent({
-          command: "auto-feed",
-          sent: true,
-          response: parsed,
-        });
-      } else {
-        cardArrivedHookRef.current?.();
-      }
-    } catch {
+    const res = parsed as Record<string, unknown>;
+    if (res.empty) {
       autoFeedRef.current = false;
       setAutoFeedState(false);
-      toast.error("Auto-feed error", {
-        description: "Unexpected response from feeder.",
+      pauseHookRef.current?.();
+      toast.error("Feeder empty", {
+        description:
+          "No cards remaining in the hopper. Add more cards to continue.",
+        duration: Infinity,
+        dismissible: true,
       });
-      void reportSerialEvent({ command: "auto-feed", sent: true, response });
+      void reportSerialEvent({
+        command: "auto-feed",
+        sent: true,
+        response: res,
+      });
+    } else if (res.error) {
+      autoFeedRef.current = false;
+      setAutoFeedState(false);
+      toast.error("Feeder error", {
+        description: String(res.error),
+        duration: Infinity,
+        dismissible: true,
+      });
+      void reportSerialEvent({
+        command: "auto-feed",
+        sent: true,
+        response: res,
+      });
+    } else {
+      cardArrivedHookRef.current?.();
     }
   }, []);
 
@@ -220,6 +207,10 @@ export function ScannedCardsProvider({
       setIsLoading(false);
       return;
     }
+
+    // New collection = fresh session: reset the image dedupe and bin counts.
+    capturedImageRef.current = {};
+    resetBinCounts();
 
     let cancelled = false;
     setCards([]);
@@ -269,12 +260,19 @@ export function ScannedCardsProvider({
         binConfigsRef.current,
         fieldDefinitionsRef.current,
       );
+      // Reuse the first capture of this card this session (dedupe) so repeated
+      // copies don't each store a full base64 JPEG.
+      let effectiveImage = capturedImageRef.current[card.id];
+      if (!effectiveImage && capturedImageUrl) {
+        effectiveImage = capturedImageUrl;
+        capturedImageRef.current[card.id] = effectiveImage;
+      }
       const record: ScannedCard = {
         scanId: generateScanId(),
         card,
         scannedAt: Date.now(),
         binNumber: matchedBin?.binNumber,
-        capturedImageUrl,
+        capturedImageUrl: effectiveImage,
         alternativeMatches: alternativeMatches?.length
           ? alternativeMatches
           : undefined,
@@ -299,6 +297,21 @@ export function ScannedCardsProvider({
         serialRef.current.isConnected &&
         serialRef.current.isReady
       ) {
+        const maxCapacity = matchedBin.maxCapacity ?? 0;
+        if (
+          maxCapacity > 0 &&
+          (binCountsRef.current[matchedBin.binNumber] ?? 0) >= maxCapacity
+        ) {
+          toast.error(`Bin ${matchedBin.binNumber} is full`, {
+            description: `Reached its capacity of ${maxCapacity} cards. Empty the bin, then re-enable auto-feed to continue.`,
+            duration: Infinity,
+            dismissible: true,
+          });
+          autoFeedRef.current = false;
+          setAutoFeedState(false);
+          pauseHookRef.current?.();
+          return;
+        }
         serialRef.current.sendBin(matchedBin.binNumber).then((response) => {
           if (!response) {
             toast.error("Routing failed", {
@@ -352,6 +365,8 @@ export function ScannedCardsProvider({
             setAutoFeedState(false);
             return;
           }
+          binCountsRef.current[matchedBin.binNumber] =
+            (binCountsRef.current[matchedBin.binNumber] ?? 0) + 1;
           if (autoFeedRef.current) {
             triggerAutoFeed();
           }
@@ -368,6 +383,21 @@ export function ScannedCardsProvider({
       serialRef.current.isConnected &&
       serialRef.current.isReady
     ) {
+      const maxCapacity = catchAll.maxCapacity ?? 0;
+      if (
+        maxCapacity > 0 &&
+        (binCountsRef.current[catchAll.binNumber] ?? 0) >= maxCapacity
+      ) {
+        toast.error(`Catch-all bin ${catchAll.binNumber} is full`, {
+          description: `Reached its capacity of ${maxCapacity} cards. Empty it, then re-enable auto-feed to continue.`,
+          duration: Infinity,
+          dismissible: true,
+        });
+        autoFeedRef.current = false;
+        setAutoFeedState(false);
+        pauseHookRef.current?.();
+        return;
+      }
       serialRef.current.sendBin(catchAll.binNumber).then((response) => {
         if (!response) {
           toast.error("Routing failed", {
@@ -418,6 +448,8 @@ export function ScannedCardsProvider({
           setAutoFeedState(false);
           return;
         }
+        binCountsRef.current[catchAll.binNumber] =
+          (binCountsRef.current[catchAll.binNumber] ?? 0) + 1;
         if (autoFeedRef.current) {
           triggerAutoFeed();
         }
@@ -503,6 +535,8 @@ export function ScannedCardsProvider({
 
   const clearCards = useCallback(() => {
     const collection = activeCollectionRef.current;
+    capturedImageRef.current = {};
+    resetBinCounts();
     setCards([]);
     setTimerTrigger(undefined);
     setTimerResetSignal((s) => s + 1);
@@ -511,7 +545,7 @@ export function ScannedCardsProvider({
         console.error("Failed to clear cards:", err),
       );
     }
-  }, []);
+  }, [resetBinCounts]);
 
   return (
     <ScannedCardsContext

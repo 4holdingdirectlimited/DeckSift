@@ -32,7 +32,8 @@ export function ModuleConfigsProvider({
 }) {
   const queryClient = useQueryClient();
   const { activeOrg } = useOrg();
-  const { sendCommand, receiveResponse, registerPreTestHook } = useSerial();
+  const { sendCommand, sendCommandWithResponse, registerPreTestHook } =
+    useSerial();
 
   const { data: configs = defaultConfigs() } = useQuery({ ...modulesQueryOptions, enabled: !!activeOrg });
 
@@ -40,16 +41,12 @@ export function ModuleConfigsProvider({
     registerPreTestHook(async () => {
       const fresh = await queryClient.fetchQuery(modulesQueryOptions);
       for (const config of fresh) {
-        const p = receiveResponse();
-        await sendCommand(
-          JSON.stringify({
-            setConfig: { module: config.moduleNumber, ...config.calibration },
-          }),
-        );
-        await p;
+        await sendCommandWithResponse({
+          setConfig: { module: config.moduleNumber, ...config.calibration },
+        });
       }
     });
-  }, [registerPreTestHook, queryClient, sendCommand, receiveResponse]);
+  }, [registerPreTestHook, queryClient, sendCommandWithResponse]);
 
   const saveConfigMutation = useMutation({
     mutationFn: ({
@@ -79,9 +76,9 @@ export function ModuleConfigsProvider({
     onSuccess: (result, { moduleNumber, calibration }) => {
       if (result.success && result.data) {
         queryClient.setQueryData(["modules"], result.data);
-        sendCommand(
-          JSON.stringify({ setConfig: { module: moduleNumber, ...calibration } }),
-        );
+        void sendCommandWithResponse({
+          setConfig: { module: moduleNumber, ...calibration },
+        });
       }
     },
   });

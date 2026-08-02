@@ -67,6 +67,7 @@ export const binRuleGroupSchema: z.ZodType<{
 export const binConfigSchema = z.object({
   isCatchAll: z.boolean(),
   rules: binRuleGroupSchema,
+  maxCapacity: z.number().int().min(0).max(10000).optional(),
 });
 
 export type BinConfigFormValues = z.infer<typeof binConfigSchema>;

@@ -52,6 +52,8 @@ export interface BinConfig {
   binNumber: number;
   rules: BinRuleGroup;
   isCatchAll?: boolean;
+  /** Max cards per run before routing pauses (0/unset = unlimited). */
+  maxCapacity?: number;
 }
 
 export interface BinSet {

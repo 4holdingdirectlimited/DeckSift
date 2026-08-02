@@ -32,7 +32,8 @@ export function FeederConfigProvider({
 }) {
   const queryClient = useQueryClient();
   const { activeOrg } = useOrg();
-  const { sendCommand, receiveResponse, registerPreTestHook } = useSerial();
+  const { sendCommand, sendCommandWithResponse, registerPreTestHook } =
+    useSerial();
 
   const { data: feederConfig = { ...DEFAULT_FEEDER_CALIBRATION } } =
     useQuery({ ...feederQueryOptions, enabled: !!activeOrg });
@@ -40,11 +41,9 @@ export function FeederConfigProvider({
   useEffect(() => {
     registerPreTestHook(async () => {
       const fresh = await queryClient.fetchQuery(feederQueryOptions);
-      const p = receiveResponse();
-      await sendCommand(JSON.stringify({ setFeederConfig: fresh }));
-      await p;
+      await sendCommandWithResponse({ setFeederConfig: fresh });
     });
-  }, [registerPreTestHook, queryClient, sendCommand, receiveResponse]);
+  }, [registerPreTestHook, queryClient, sendCommandWithResponse]);
 
   const saveConfigMutation = useMutation({
     mutationFn: (calibration: FeederCalibration) =>
@@ -63,7 +62,7 @@ export function FeederConfigProvider({
     onSuccess: (result) => {
       if (result.success && result.data) {
         queryClient.setQueryData(["feeder"], result.data);
-        sendCommand(JSON.stringify({ setFeederConfig: result.data }));
+        void sendCommandWithResponse({ setFeederConfig: result.data });
       }
     },
   });

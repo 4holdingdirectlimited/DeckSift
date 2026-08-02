@@ -130,6 +130,7 @@ export type DefaultBinInit = {
   binNumber: number;
   rules: BinRuleGroup;
   isCatchAll: boolean;
+  maxCapacity?: number;
 };
 
 const COLOR_BINS: Array<{ binNumber: number; colors: string[] }> = [

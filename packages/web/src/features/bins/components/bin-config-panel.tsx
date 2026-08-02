@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { FieldError } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useBinConfigs } from "@/features/bins/api/use-bin-configs";
@@ -32,6 +33,7 @@ export function BinConfigPanel() {
     defaultValues: {
       isCatchAll: false,
       rules: emptyRuleGroup(),
+      maxCapacity: 0,
     },
   });
 
@@ -40,6 +42,7 @@ export function BinConfigPanel() {
       isCatchAll: config.isCatchAll ?? false,
       rules:
         config.rules.conditions.length > 0 ? config.rules : emptyRuleGroup(),
+      maxCapacity: config.maxCapacity ?? 0,
     });
   }, [config, form]);
 
@@ -56,7 +59,7 @@ export function BinConfigPanel() {
         });
         return;
       }
-      save(config.binNumber, values.rules as BinRuleGroup, values.isCatchAll);
+      save(config.binNumber, values.rules as BinRuleGroup, values.isCatchAll, values.maxCapacity);
     },
     [config, save, isOnlyCatchAll, form],
   );
@@ -71,6 +74,7 @@ export function BinConfigPanel() {
     form.reset({
       isCatchAll: false,
       rules: emptyRuleGroup(),
+      maxCapacity: 0,
     });
     clear(config.binNumber);
   }, [config, clear, form, isOnlyCatchAll]);
@@ -118,6 +122,28 @@ export function BinConfigPanel() {
           />
         </ScrollArea>
       )}
+      <div className="mb-4 flex items-center gap-2">
+        <Label htmlFor="maxCapacity" className="mb-0">
+          Max capacity per run
+        </Label>
+        <Controller
+          name="maxCapacity"
+          control={form.control}
+          render={({ field }) => (
+            <Input
+              id="maxCapacity"
+              type="number"
+              min={0}
+              value={field.value ?? 0}
+              onChange={(e) => field.onChange(Number(e.target.value) || 0)}
+              className="w-24"
+            />
+          )}
+        />
+        <p className="text-xs text-muted-foreground">
+          0 = unlimited. Routing pauses when the bin reaches this many cards.
+        </p>
+      </div>
       {form.formState.errors.isCatchAll && (
         <FieldError errors={[form.formState.errors.isCatchAll]} />
       )}

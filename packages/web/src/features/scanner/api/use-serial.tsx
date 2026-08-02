@@ -1,4 +1,5 @@
 import { reportSerialEvent } from "@/features/notifications/api/notification-settings";
+import { EXPECTED_PROTO_VERSION } from "@/features/scanner/constants";
 import type {
   SerialContextValue,
   SerialMessageListener,
@@ -108,8 +109,8 @@ export function SerialProvider({ children }: { children: React.ReactNode }) {
       };
 
       const waiter: PendingWaiter = {
-        // Legacy "next line wins" semantics — kept for receiveResponse(),
-        // which calibration tooling still relies on.
+        // "Next line wins" semantics — used to consume the boot message on
+        // connect (commands themselves are matched by id).
         match: () => true,
         resolve: (_msg, raw) => finish(raw),
       };
@@ -259,9 +260,23 @@ export function SerialProvider({ children }: { children: React.ReactNode }) {
       });
 
       (async () => {
-        // Consume the Arduino's boot message before sending the test
-        await waitForLine(5000);
+        // Consume the Arduino's boot message and check the protocol version,
+        // so an app/firmware mismatch surfaces here instead of failing
+        // silently on the first command.
+        const bootLine = await waitForLine(5000);
         if (!portRef.current) return;
+        if (bootLine) {
+          try {
+            const boot: unknown = JSON.parse(bootLine);
+            if (isRecord(boot) && boot.proto !== EXPECTED_PROTO_VERSION) {
+              toast.warning("Firmware version mismatch", {
+                description: `Arduino reports protocol ${String(boot.proto)}; this app expects ${EXPECTED_PROTO_VERSION}. Flash the matching main.ino.`,
+              });
+            }
+          } catch {
+            // Non-JSON boot output — nothing to verify, continue
+          }
+        }
         if (preTestHookRef.current) {
           await preTestHookRef.current();
         }
@@ -360,11 +375,6 @@ export function SerialProvider({ children }: { children: React.ReactNode }) {
     [sendCommand],
   );
 
-  const receiveResponse = useCallback(
-    (timeoutMs = 5000) => waitForLine(timeoutMs),
-    [waitForLine],
-  );
-
   const binBusyRef = useRef(false);
 
   const sendBin = useCallback(
@@ -391,6 +401,53 @@ export function SerialProvider({ children }: { children: React.ReactNode }) {
     [sendCommand, waitForId],
   );
 
+  const sendCommandWithResponse = useCallback(
+    async (
+      data: Record<string, unknown>,
+      timeoutMs = 5000,
+    ): Promise<unknown | null> => {
+      if (!portRef.current || !writableRef.current) return null;
+
+      const id = nextCmdIdRef.current++;
+      const sent = await sendCommand(JSON.stringify({ ...data, id }) + "\n");
+      if (!sent) return null;
+
+      return await waitForId(id, timeoutMs);
+    },
+    [sendCommand, waitForId],
+  );
+
+  // Device heartbeat: pings the firmware every 10 s so a hung board (stuck
+  // servo, watchdog timeout) is surfaced within seconds instead of waiting out
+  // a 15 s bin timeout. Id-correlated, so asynchronous messages can't fake a
+  // pong. Warns once per unresponsive stretch, clears on recovery.
+  useEffect(() => {
+    if (!isConnected || !isReady) return;
+    let warned = false;
+    const interval = setInterval(() => {
+      void sendCommandWithResponse({ ping: true }, 5000).then((pong) => {
+        if (pong) {
+          warned = false;
+          return;
+        }
+        if (warned) return;
+        warned = true;
+        toast.warning("Device unresponsive", {
+          description:
+            "No response from the sorter. Check the USB connection and power.",
+          duration: Infinity,
+          dismissible: true,
+        });
+      });
+    }, 10000);
+    return () => clearInterval(interval);
+  }, [isConnected, isReady, sendCommandWithResponse]);
+
+  const sendFeed = useCallback(
+    () => sendCommandWithResponse({ feeder: true }, 10000),
+    [sendCommandWithResponse],
+  );
+
   return (
     <SerialContext
       value={{
@@ -401,7 +458,8 @@ export function SerialProvider({ children }: { children: React.ReactNode }) {
         sendBin,
         sendTest,
         sendCommand: sendCommandWithNewline,
-        receiveResponse,
+        sendCommandWithResponse,
+        sendFeed,
         subscribe,
         registerPreTestHook,
       }}
