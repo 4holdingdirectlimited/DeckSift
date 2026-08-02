@@ -19,10 +19,11 @@ Commands without an `id` are answered without one (backward compatible).
 
 ## Boot
 
-On reset the board replies:
+On reset the board replies with its status and the protocol version (used by
+the web app to detect app/firmware mismatches):
 
 ```json
-{"status":"ready"}
+{"status":"ready","proto":2}
 ```
 
 ## Commands
@@ -70,6 +71,19 @@ Opens every bottom and paddle, sweeps all pushers left then right, resets to neu
 
 ```json
 {"status":"test_complete"}
+```
+
+### Liveness check
+
+```json
+{"ping": true}
+```
+
+Replies immediately — the web app uses this as a heartbeat to detect a hung
+or unresponsive board within seconds:
+
+```json
+{"status":"pong"}
 ```
 
 ### Reset to neutral
@@ -209,6 +223,33 @@ Replies:
 {"status":"ok"}
 ```
 
+### Save config to EEPROM
+
+```json
+{"saveConfig": true}
+```
+
+Persists the current module + feeder config to EEPROM so a reboot (e.g. a
+power blip mid-run) restores the tuned values. Note that `setConfig` and
+`setFeederConfig` already save automatically. Replies:
+
+```json
+{"status":"saved"}
+```
+
+### Reset config
+
+```json
+{"resetConfig": true}
+```
+
+Restores factory defaults in RAM and EEPROM and returns all servos to
+neutral. Replies:
+
+```json
+{"status":"reset"}
+```
+
 ### Read IR sensors
 
 ```json
@@ -229,14 +270,25 @@ The firmware can emit these without a request:
 
 | Message | Meaning |
 | --- | --- |
-| `{"status":"ready"}` | Boot complete |
-| `{"error":"jam","module":1}` | A card has sat at module 1's sensor for > 20 s with no routing command in progress (idle-time jam watch) |
+| `{"status":"ready","proto":2}` | Boot complete — `proto` is the protocol version the app uses to detect mismatches |
+| `{"error":"jam","module":N}` | A card has sat at module N's (1–3) sensor for > 20 s with no routing command in progress (idle-time jam watch) |
+| `{"error":"recovered","module":N}` | Emitted once on boot if a card was already resting at module N's sensor (e.g. power loss mid-run) |
+| `{"error":"aborted: jam detected","aborted":true}` | An operation was aborted mid-way (jam reported or watchdog deadline) and all servos returned to neutral |
 | `{"error":"invalid JSON"}` | Line failed to parse |
 | `{"error":"unknown command"}` | Valid JSON but no recognized field |
 | `{"error":"bin must be 1-7"}` / `{"error":"module must be 1-3"}` / `{"error":"servo must be bottom, paddle, or pusher"}` / `{"error":"invalid position"}` / `{"error":"led must be 1 to 4"}` | Bad arguments |
 
 ## Notes
 
-- All configuration (`setConfig`, `setFeederConfig`) is **RAM-only** — it resets on reboot. Defaults are compiled into the sketch (see `BUILD.md` → Firmware default values).
+- Motion waits are **interruptible** — the jam watch runs *during* operations
+  (not just between them), and each command has a watchdog budget
+  (`commandGuardStart`). On a jam or deadline the operation aborts to neutral
+  with `{"error":"aborted: jam detected","aborted":true}`.
+- Configuration (`setConfig`, `setFeederConfig`) is persisted to **EEPROM** —
+  both apply to RAM *and* save, so a reboot restores the tuned values.
+  `{"saveConfig": true}` and `{"resetConfig": true}` manage persistence
+  explicitly. Stored data is version-guarded: if the firmware's config layout
+  changes (or a servo swap invalidates old values), stale data is ignored and
+  factory defaults are used.
 - `runFeeder()` checks the module 1 sensor **before** the hopper sensor, so the last card in an empty hopper still routes correctly.
 - The jam watch only runs between commands — routing/feeding blocks `loop()` for their duration.

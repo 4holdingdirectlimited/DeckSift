@@ -1,6 +1,7 @@
 #include <ArduinoJson.h>
 #include <Wire.h>
 #include <Adafruit_PWMServoDriver.h>
+#include <EEPROM.h>
 
 Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver();
 
@@ -20,10 +21,11 @@ Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver();
 #define IR_PIN_MODULE3 4
 #define IR_TIMEOUT_MS  3000  // max ms to wait for a card before aborting
 
-// Module 1 is where every card lands right after feeding, before any routing
-// decision is made — if it sits there this long with no routing command in
-// progress (e.g. the app never sent a bin command), something's stuck.
-#define MODULE1_JAM_TIMEOUT_MS 20000
+// Any module where a card sits at the gate continuously for this long with no
+// routing command in progress (e.g. the app never sent a bin command) is
+// reported as a jam. Only checked while idle — routeCard()/runFeeder() block
+// loop() for their duration.
+#define JAM_TIMEOUT_MS 20000
 
 // Hopper IR sensor — active LOW: pin reads LOW while cards remain in the feeder stack
 #define IR_PIN_HOPPER 5
@@ -33,7 +35,7 @@ Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver();
 // defined later — if FeedResult were declared next to runFeeder() instead,
 // the hoisted `FeedResult runFeeder();` prototype would precede it and fail
 // to compile ("FeedResult does not name a type").
-enum FeedResult { FEED_DETECTED, FEED_TIMEOUT, FEED_EMPTY };
+enum FeedResult { FEED_DETECTED, FEED_TIMEOUT, FEED_EMPTY, FEED_ABORTED };
 
 int irPin(int module) {
   if (module == 1) return IR_PIN_MODULE1;
@@ -45,11 +47,44 @@ bool hopperHasCards() {
   return digitalRead(IR_PIN_HOPPER) == LOW;
 }
 
+// ─── Stage-1 watchdog / interruptible timing ────────────────────────────────
+// A new jam alert during an operation sets this flag so the active command
+// aborts to neutral instead of driving servos into a jammed mechanism. It is
+// cleared at the start of every command.
+bool jamAbortRequested = false;
+// Total-duration budget for the active command; interruptibleDelay() aborts
+// once this passes so no operation can run unbounded. 0 = no guard active.
+unsigned long commandDeadline = 0;
+
+void commandGuardStart(unsigned long budgetMs) {
+  commandDeadline = millis() + budgetMs;
+}
+
+// Interruptible replacement for delay(): polls the jam sensors and checks the
+// command watchdog while waiting, so an issue is caught mid-operation instead
+// of after it completes. Returns false when the active command should abort
+// (new jam reported or watchdog deadline passed).
+bool interruptibleDelay(unsigned long ms) {
+  unsigned long start = millis();
+  while (millis() - start < ms) {
+    if (jamAbortRequested ||
+        (commandDeadline != 0 && millis() > commandDeadline)) {
+      return false;
+    }
+    checkModuleJams();  // reports new jams (id-less) and sets jamAbortRequested
+    delay(5);
+  }
+  return true;
+}
+
 // Returns true when the IR sensor at 'module' detects a card within timeoutMs.
+// Also services the jam watch and aborts early if a jam was reported.
 bool waitForCard(int module, int timeoutMs = IR_TIMEOUT_MS) {
   unsigned long start = millis();
   while (digitalRead(irPin(module)) == HIGH) {
     if (millis() - start > (unsigned long)timeoutMs) return false;
+    checkModuleJams();
+    if (jamAbortRequested) return false;
     delay(5);
   }
   return true;
@@ -79,12 +114,66 @@ struct FeederConfig {
 
 FeederConfig feederConfig = {400, 3000, 80, 50, 150};
 
+// ─── Calibration persistence (EEPROM) ───────────────────────────────────────
+// Module/feeder config is persisted so a reboot (e.g. a power blip mid-run)
+// restores the tuned values instead of silently reverting to stock pulses.
+// The magic + version guard detects stale data from older firmware or a
+// hardware change (e.g. servo swap) and falls back to factory defaults.
+#define CONFIG_MAGIC       0x4D56  // "MV"
+#define CONFIG_VERSION     1
+#define CONFIG_EEPROM_ADDR 0
+
+struct PersistedCalibration {
+  uint16_t magic;
+  uint8_t version;
+  ModuleConfig modules[NUM_MODULES];
+  FeederConfig feeder;
+};
+
+// Factory defaults — keep in sync with the moduleConfig/feederConfig
+// initializers above; resetConfig restores these.
+void setFactoryDefaults() {
+  ModuleConfig factoryModules[NUM_MODULES] = {
+    {150, 307, 150, 307, 150, 307, 460},
+    {150, 307, 150, 307, 150, 307, 460},
+    {150, 307, 150, 307, 150, 307, 460},
+  };
+  memcpy(moduleConfig, factoryModules, sizeof(moduleConfig));
+  feederConfig.speed = 400;
+  feederConfig.duration = 3000;
+  feederConfig.pulseDuration = 80;
+  feederConfig.pauseDuration = 50;
+  feederConfig.settleDuration = 150;
+}
+
+void loadCalibration() {
+  PersistedCalibration stored;
+  EEPROM.get(CONFIG_EEPROM_ADDR, stored);
+  if (stored.magic == CONFIG_MAGIC && stored.version == CONFIG_VERSION) {
+    memcpy(moduleConfig, stored.modules, sizeof(moduleConfig));
+    feederConfig = stored.feeder;
+  }
+}
+
+void saveCalibration() {
+  PersistedCalibration data;
+  data.magic = CONFIG_MAGIC;
+  data.version = CONFIG_VERSION;
+  memcpy(data.modules, moduleConfig, sizeof(moduleConfig));
+  data.feeder = feederConfig;
+  EEPROM.put(CONFIG_EEPROM_ADDR, data);
+}
+
 // Routing delays (ms) — tune to match your hardware timing
 #define DELAY_CARD_ENTER   300  // time for card to settle after target bottom opens
 #define DELAY_PADDLE       300  // time for paddle to engage
 #define DELAY_PUSH         600  // time for pusher to complete its stroke
 
-String inputBuffer = "";
+// Fixed-size serial line buffer — avoids String heap fragmentation on long
+// sessions. Oversized lines are discarded cleanly.
+#define INPUT_BUFFER_MAX 256
+char inputBuffer[INPUT_BUFFER_MAX + 1];
+int inputBufferLen = 0;
 
 // Request/response correlation. A command may carry an optional numeric "id";
 // every reply to that command then echoes it, so the web app can match
@@ -112,9 +201,10 @@ void replyLiteral(const char* json) {
   Serial.println();
 }
 
-// Idle-time jam watch for module 1 — see checkModule1Jam().
-unsigned long module1PresentSince = 0;
-bool module1JamAlerted = false;
+// Idle-time jam watch — one entry per module index (1..NUM_MODULES; see
+// checkModuleJams()).
+unsigned long modulePresentSince[NUM_MODULES + 1] = {0, 0, 0, 0};
+bool moduleJamAlerted[NUM_MODULES + 1] = {false, false, false, false};
 
 int getChannel(int module, int servoOffset) {
   return MODULE_CHANNEL_OFFSET + (module - 1) * 3 + servoOffset;
@@ -140,12 +230,16 @@ void stopFeeder() {
 // run time is needed. But the last card has nothing behind it to push it in —
 // so if the hopper is now empty, keep the motor running for
 // feederConfig.settleDuration more ms before stopping, to carry it the rest
-// of the way into the mechanism.
-void settleAndStopFeeder() {
+// of the way into the mechanism. Returns false if the wait was aborted (jam).
+bool settleAndStopFeeder() {
   if (!hopperHasCards()) {
-    delay(feederConfig.settleDuration);
+    if (!interruptibleDelay(feederConfig.settleDuration)) {
+      stopFeeder();
+      return false;
+    }
   }
   stopFeeder();
+  return true;
 }
 
 // Runs the feeder in short pulses, checking module 1 IR between each stop.
@@ -173,10 +267,12 @@ FeedResult runFeeder() {
   if (feederConfig.pulseDuration <= 0) {
     setServoPosition(FEEDER_CHANNEL, feederConfig.speed);
     while (millis() - start < (unsigned long)feederConfig.duration) {
+      if (jamAbortRequested) { stopFeeder(); return FEED_ABORTED; }
       if (digitalRead(irPin(1)) == LOW) {
-        settleAndStopFeeder();
+        if (!settleAndStopFeeder()) return FEED_ABORTED;
         return FEED_DETECTED;
       }
+      checkModuleJams();
       delay(2);
     }
     stopFeeder();
@@ -192,8 +288,9 @@ FeedResult runFeeder() {
     // Poll IR mid-pulse so we catch the moment the card trips the sensor
     unsigned long pulseStart = millis();
     while (millis() - pulseStart < (unsigned long)feederConfig.pulseDuration) {
+      if (jamAbortRequested) { stopFeeder(); return FEED_ABORTED; }
       if (digitalRead(irPin(1)) == LOW) {
-        settleAndStopFeeder();
+        if (!settleAndStopFeeder()) return FEED_ABORTED;
         return FEED_DETECTED;
       }
       delay(2);
@@ -205,40 +302,49 @@ FeedResult runFeeder() {
       // last card (hopper now empty) needs an extra push to fully seat it.
       if (!hopperHasCards()) {
         setServoPosition(FEEDER_CHANNEL, feederConfig.speed);
-        delay(feederConfig.settleDuration);
+        if (!interruptibleDelay(feederConfig.settleDuration)) {
+          stopFeeder();
+          return FEED_ABORTED;
+        }
         stopFeeder();
       }
       return FEED_DETECTED;
     }
-    delay(feederConfig.pauseDuration);
+    if (!interruptibleDelay(feederConfig.pauseDuration)) {
+      stopFeeder();
+      return FEED_ABORTED;
+    }
   }
   return FEED_TIMEOUT;
 }
 
-// Watches module 1's IR sensor while idle (only runs between commands, since
-// routeCard()/runFeeder() block loop() for their duration). If a card has
-// been sitting there continuously longer than MODULE1_JAM_TIMEOUT_MS — e.g.
-// the app never followed up with a bin command — report it once so it isn't
-// silently left for the operator to discover. Clears itself (and re-arms)
-// as soon as the sensor sees the card leave.
-void checkModule1Jam() {
-  bool present = digitalRead(IR_PIN_MODULE1) == LOW;
-  if (!present) {
-    module1PresentSince = 0;
-    module1JamAlerted = false;
-    return;
-  }
-  if (module1PresentSince == 0) {
-    module1PresentSince = millis();
-    return;
-  }
-  if (!module1JamAlerted && millis() - module1PresentSince > MODULE1_JAM_TIMEOUT_MS) {
-    module1JamAlerted = true;
-    JsonDocument res;
-    res["error"] = "jam";
-    res["module"] = 1;
-    serializeJson(res, Serial);
-    Serial.println();
+// Watches every module's IR sensor while idle (only runs between commands,
+// since routeCard()/runFeeder() block loop() for their duration). If a card
+// has been sitting at a module's gate continuously longer than JAM_TIMEOUT_MS
+// — e.g. the app never followed up with a bin command — report it once so it
+// isn't silently left for the operator to discover. Clears itself (and
+// re-arms) as soon as the sensor sees the card leave.
+void checkModuleJams() {
+  for (int m = 1; m <= NUM_MODULES; m++) {
+    bool present = digitalRead(irPin(m)) == LOW;
+    if (!present) {
+      modulePresentSince[m] = 0;
+      moduleJamAlerted[m] = false;
+      continue;
+    }
+    if (modulePresentSince[m] == 0) {
+      modulePresentSince[m] = millis();
+      continue;
+    }
+    if (!moduleJamAlerted[m] && millis() - modulePresentSince[m] > JAM_TIMEOUT_MS) {
+      moduleJamAlerted[m] = true;
+      jamAbortRequested = true;
+      JsonDocument res;
+      res["error"] = "jam";
+      res["module"] = m;
+      serializeJson(res, Serial);  // async — deliberately no command id
+      Serial.println();
+    }
   }
 }
 
@@ -273,6 +379,17 @@ int getServoOffset(const char* servo) {
   return -1;
 }
 
+// Returns everything to neutral and reports an aborted operation. Used when
+// interruptibleDelay() detects a jam or a watchdog deadline mid-command.
+void abortCommand(const char* reason) {
+  stopFeeder();
+  setAllNeutral();
+  JsonDocument res;
+  res["error"] = reason;
+  res["aborted"] = true;
+  replyJson(res);
+}
+
 // Route a card to the given bin number (1–7).
 //   Bin 1: wait for card at module 1, open paddle, push left
 //   Bin 2: wait for card at module 1, open paddle, push right
@@ -286,15 +403,20 @@ void routeCard(int bin) {
     replyLiteral("{\"error\":\"bin must be 1-7\"}");
     return;
   }
+  commandGuardStart(15000);
 
   // Run feeder until module 1 IR detects the card (or timeout/empty hopper)
   FeedResult feedResult = runFeeder();
   if (feedResult != FEED_DETECTED) {
     JsonDocument res;
-    res["error"] = feedResult == FEED_EMPTY
-      ? "empty: feeder hopper is out of cards"
-      : "timeout: feeder did not deliver card to module 1";
-    res["empty"] = feedResult == FEED_EMPTY;
+    if (feedResult == FEED_ABORTED) {
+      res["error"] = "aborted: jam detected";
+    } else {
+      res["error"] = feedResult == FEED_EMPTY
+        ? "empty: feeder hopper is out of cards"
+        : "timeout: feeder did not deliver card to module 1";
+      res["empty"] = feedResult == FEED_EMPTY;
+    }
     replyJson(res);
     setAllNeutral();
     return;
@@ -305,19 +427,19 @@ void routeCard(int bin) {
     for (int m = 1; m <= NUM_MODULES; m++) {
       setServoPosition(getChannel(m, 0), moduleConfig[m - 1].bottomOpen);
     }
-    delay(DELAY_PUSH);
+    if (!interruptibleDelay(DELAY_PUSH)) { abortCommand("aborted: jam detected"); return; }
     setAllNeutral();
-    delay(200);
+    interruptibleDelay(200);
 
   } else if (bin <= 2) {
     // Module 1: open paddle, then push
     ModuleConfig& c = moduleConfig[0];
     setServoPosition(getChannel(1, 1), c.paddleOpen);
-    delay(DELAY_PADDLE);
+    if (!interruptibleDelay(DELAY_PADDLE)) { abortCommand("aborted: jam detected"); return; }
     setServoPosition(getChannel(1, 2), bin == 1 ? c.pusherLeft : c.pusherRight);
-    delay(DELAY_PUSH);
+    if (!interruptibleDelay(DELAY_PUSH)) { abortCommand("aborted: jam detected"); return; }
     setModuleNeutral(1);
-    delay(200);
+    interruptibleDelay(200);
 
   } else if (bin <= 4) {
     // Open module 1 bottom and wait for card to arrive at module 2
@@ -329,16 +451,16 @@ void routeCard(int bin) {
       setAllNeutral();
       return;
     }
-    delay(DELAY_CARD_ENTER);
+    if (!interruptibleDelay(DELAY_CARD_ENTER)) { abortCommand("aborted: jam detected"); return; }
 
     ModuleConfig& c2 = moduleConfig[1];
     setServoPosition(getChannel(2, 1), c2.paddleOpen);
-    delay(DELAY_PADDLE);
+    if (!interruptibleDelay(DELAY_PADDLE)) { abortCommand("aborted: jam detected"); return; }
     setServoPosition(getChannel(2, 2), pushLeft ? c2.pusherLeft : c2.pusherRight);
-    delay(DELAY_PUSH);
+    if (!interruptibleDelay(DELAY_PUSH)) { abortCommand("aborted: jam detected"); return; }
     setModuleNeutral(1);
     setModuleNeutral(2);
-    delay(200);
+    interruptibleDelay(200);
 
   } else {
     // Open module 1 bottom and wait for card at module 2, then open module 2 bottom
@@ -358,17 +480,17 @@ void routeCard(int bin) {
       setAllNeutral();
       return;
     }
-    delay(DELAY_CARD_ENTER);
+    if (!interruptibleDelay(DELAY_CARD_ENTER)) { abortCommand("aborted: jam detected"); return; }
 
     ModuleConfig& c3 = moduleConfig[2];
     setServoPosition(getChannel(3, 1), c3.paddleOpen);
-    delay(DELAY_PADDLE);
+    if (!interruptibleDelay(DELAY_PADDLE)) { abortCommand("aborted: jam detected"); return; }
     setServoPosition(getChannel(3, 2), pushLeft ? c3.pusherLeft : c3.pusherRight);
-    delay(DELAY_PUSH);
+    if (!interruptibleDelay(DELAY_PUSH)) { abortCommand("aborted: jam detected"); return; }
     setModuleNeutral(1);
     setModuleNeutral(2);
     setModuleNeutral(3);
-    delay(200);
+    interruptibleDelay(200);
   }
 
   JsonDocument res;
@@ -377,7 +499,7 @@ void routeCard(int bin) {
   replyJson(res);
 }
 
-void handleCommand(const String& json) {
+void handleCommand(const char* json) {
   JsonDocument doc;
   if (deserializeJson(doc, json)) {
     Serial.println("{\"error\":\"invalid JSON\"}");
@@ -389,36 +511,41 @@ void handleCommand(const String& json) {
   g_cmdId = doc["id"] | 0;
   g_hasCmdId = doc["id"].is<int>();
 
+  // Re-arm the jam abort for this command (a jam alert during the previous
+  // one must not abort this one before it even starts).
+  jamAbortRequested = false;
+
   // {"test": true} — run a full mechanical test sequence then confirm connection
   if (doc["test"].is<bool>() && doc["test"].as<bool>()) {
+    commandGuardStart(10000);
     // Open all bottoms and paddles
     for (int m = 1; m <= NUM_MODULES; m++) {
       setServoPosition(getChannel(m, 0), moduleConfig[m - 1].bottomOpen);
       setServoPosition(getChannel(m, 1), moduleConfig[m - 1].paddleOpen);
     }
-    delay(DELAY_PUSH);
+    if (!interruptibleDelay(DELAY_PUSH)) { abortCommand("aborted: jam detected"); return; }
 
     // Move all pushers left
     for (int m = 1; m <= NUM_MODULES; m++) {
       setServoPosition(getChannel(m, 2), moduleConfig[m - 1].pusherLeft);
     }
-    delay(DELAY_PUSH);
+    if (!interruptibleDelay(DELAY_PUSH)) { abortCommand("aborted: jam detected"); return; }
 
     // Move all pushers right
     for (int m = 1; m <= NUM_MODULES; m++) {
       setServoPosition(getChannel(m, 2), moduleConfig[m - 1].pusherRight);
     }
-    delay(DELAY_PUSH);
+    if (!interruptibleDelay(DELAY_PUSH)) { abortCommand("aborted: jam detected"); return; }
 
     // Reset all servos
     setAllNeutral();
-    delay(200);
+    interruptibleDelay(200);
 
     // Test feeder: spin briefly to verify motor movement (no card expected)
     setServoPosition(FEEDER_CHANNEL, feederConfig.speed);
-    delay(500);
+    if (!interruptibleDelay(500)) { stopFeeder(); abortCommand("aborted: jam detected"); return; }
     stopFeeder();
-    delay(200);
+    interruptibleDelay(200);
 
     // Cycle through LEDs
     for (int led = 1; led <= 4; led++) {
@@ -429,6 +556,12 @@ void handleCommand(const String& json) {
     }
 
     replyLiteral("{\"status\":\"test_complete\"}");
+    return;
+  }
+
+  // {"ping": true} — liveness check; the web app uses this as a heartbeat
+  if (doc["ping"].is<bool>() && doc["ping"].as<bool>()) {
+    replyLiteral("{\"status\":\"pong\"}");
     return;
   }
 
@@ -445,12 +578,13 @@ void handleCommand(const String& json) {
   // call runFeeder() first - it's meant to flush out whatever's physically
   // stuck regardless of feeder/hopper state.
   if (doc["clearDevice"].is<bool>() && doc["clearDevice"].as<bool>()) {
+    commandGuardStart(5000);
     for (int m = 1; m <= NUM_MODULES; m++) {
       setServoPosition(getChannel(m, 0), moduleConfig[m - 1].bottomOpen);
     }
-    delay(DELAY_PUSH);
+    if (!interruptibleDelay(DELAY_PUSH)) { abortCommand("aborted: jam detected"); return; }
     setAllNeutral();
-    delay(200);
+    interruptibleDelay(200);
     replyLiteral("{\"status\":\"cleared\"}");
     return;
   }
@@ -524,6 +658,7 @@ void handleCommand(const String& json) {
     c.pusherLeft    = cfg["pusherLeft"]    | c.pusherLeft;
     c.pusherNeutral = cfg["pusherNeutral"] | c.pusherNeutral;
     c.pusherRight   = cfg["pusherRight"]   | c.pusherRight;
+    saveCalibration();  // persist so a reboot keeps the tuned values
 
     JsonDocument res;
     res["status"] = "ok";
@@ -536,9 +671,13 @@ void handleCommand(const String& json) {
   if (doc["feeder"].is<bool>() && doc["feeder"].as<bool>()) {
     FeedResult result = runFeeder();
     JsonDocument res;
-    res["status"] = "ok";
-    res["detected"] = result == FEED_DETECTED;
-    res["empty"] = result == FEED_EMPTY;
+    if (result == FEED_ABORTED) {
+      res["error"] = "aborted: jam detected";
+    } else {
+      res["status"] = "ok";
+      res["detected"] = result == FEED_DETECTED;
+      res["empty"] = result == FEED_EMPTY;
+    }
     replyJson(res);
     return;
   }
@@ -570,9 +709,26 @@ void handleCommand(const String& json) {
     feederConfig.pauseDuration  = cfg["pauseDuration"]  | feederConfig.pauseDuration;
     feederConfig.settleDuration = cfg["settleDuration"] | feederConfig.settleDuration;
     stopFeeder();
+    saveCalibration();  // persist so a reboot keeps the tuned values
     JsonDocument res;
     res["status"] = "ok";
     replyJson(res);
+    return;
+  }
+
+  // {"saveConfig": true} — persist current module + feeder config to EEPROM
+  if (doc["saveConfig"].is<bool>() && doc["saveConfig"].as<bool>()) {
+    saveCalibration();
+    replyLiteral("{\"status\":\"saved\"}");
+    return;
+  }
+
+  // {"resetConfig": true} — restore factory defaults in RAM and EEPROM
+  if (doc["resetConfig"].is<bool>() && doc["resetConfig"].as<bool>()) {
+    setFactoryDefaults();
+    saveCalibration();
+    setAllNeutral();
+    replyLiteral("{\"status\":\"reset\"}");
     return;
   }
 
@@ -602,6 +758,8 @@ void setup() {
   Serial.begin(9600);
   while (!Serial);
 
+  loadCalibration();  // restore tuned config before any servo moves
+
   // IR sensors: active LOW (internal pull-up, sensor pulls LOW when card present)
   pinMode(IR_PIN_MODULE1, INPUT_PULLUP);
   pinMode(IR_PIN_MODULE2, INPUT_PULLUP);
@@ -612,21 +770,37 @@ void setup() {
   pwm.setPWMFreq(50);
   delay(10);
   setAllNeutral();
-  Serial.println("{\"status\":\"ready\"}");
+  Serial.println("{\"status\":\"ready\",\"proto\":2}");
+
+  // Report cards already resting at a module gate on boot (e.g. power loss
+  // mid-run) so the operator can clear the device before the first feed.
+  for (int m = 1; m <= NUM_MODULES; m++) {
+    if (digitalRead(irPin(m)) == LOW) {
+      JsonDocument res;
+      res["error"] = "recovered";
+      res["module"] = m;
+      serializeJson(res, Serial);
+      Serial.println();
+    }
+  }
 }
 
 void loop() {
   while (Serial.available()) {
     char c = Serial.read();
     if (c == '\n' || c == '\r') {
-      if (inputBuffer.length() > 0) {
+      if (inputBufferLen > 0) {
+        inputBuffer[inputBufferLen] = '\0';
         handleCommand(inputBuffer);
-        inputBuffer = "";
+        inputBufferLen = 0;
       }
     } else {
-      inputBuffer += c;
-      if (inputBuffer.length() > 256) inputBuffer = "";
+      if (inputBufferLen < INPUT_BUFFER_MAX) {
+        inputBuffer[inputBufferLen++] = c;
+      } else {
+        inputBufferLen = 0;  // oversized line — discard
+      }
     }
   }
-  checkModule1Jam();
+  checkModuleJams();
 }
