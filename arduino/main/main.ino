@@ -86,6 +86,32 @@ FeederConfig feederConfig = {400, 3000, 80, 50, 150};
 
 String inputBuffer = "";
 
+// Request/response correlation. A command may carry an optional numeric "id";
+// every reply to that command then echoes it, so the web app can match
+// responses to requests even while the firmware emits asynchronous messages
+// (e.g. the jam alert) in between. Messages that are NOT replies to a command
+// (boot "ready", jam alerts) intentionally never carry an id.
+int g_cmdId = 0;
+bool g_hasCmdId = false;
+
+void replyJson(JsonDocument& res) {
+  if (g_hasCmdId) res["id"] = g_cmdId;
+  serializeJson(res, Serial);
+  Serial.println();
+}
+
+void replyLiteral(const char* json) {
+  if (!g_hasCmdId) {
+    Serial.println(json);
+    return;
+  }
+  JsonDocument res;
+  deserializeJson(res, json);
+  res["id"] = g_cmdId;
+  serializeJson(res, Serial);
+  Serial.println();
+}
+
 // Idle-time jam watch for module 1 — see checkModule1Jam().
 unsigned long module1PresentSince = 0;
 bool module1JamAlerted = false;
@@ -257,7 +283,7 @@ int getServoOffset(const char* servo) {
 //   Bin 7: wait for card at module 1, open all bottoms (catch-all)
 void routeCard(int bin) {
   if (bin < 1 || bin > 7) {
-    Serial.println("{\"error\":\"bin must be 1-7\"}");
+    replyLiteral("{\"error\":\"bin must be 1-7\"}");
     return;
   }
 
@@ -269,8 +295,7 @@ void routeCard(int bin) {
       ? "empty: feeder hopper is out of cards"
       : "timeout: feeder did not deliver card to module 1";
     res["empty"] = feedResult == FEED_EMPTY;
-    serializeJson(res, Serial);
-    Serial.println();
+    replyJson(res);
     setAllNeutral();
     return;
   }
@@ -300,7 +325,7 @@ void routeCard(int bin) {
     setServoPosition(getChannel(1, 0), moduleConfig[0].bottomOpen);
 
     if (!waitForCard(2)) {
-      Serial.println("{\"error\":\"timeout: no card detected at module 2\"}");
+      replyLiteral("{\"error\":\"timeout: no card detected at module 2\"}");
       setAllNeutral();
       return;
     }
@@ -322,14 +347,14 @@ void routeCard(int bin) {
     setServoPosition(getChannel(1, 0), moduleConfig[0].bottomOpen);
 
     if (!waitForCard(2)) {
-      Serial.println("{\"error\":\"timeout: no card detected at module 2\"}");
+      replyLiteral("{\"error\":\"timeout: no card detected at module 2\"}");
       setAllNeutral();
       return;
     }
     setServoPosition(getChannel(2, 0), moduleConfig[1].bottomOpen);
 
     if (!waitForCard(3)) {
-      Serial.println("{\"error\":\"timeout: no card detected at module 3\"}");
+      replyLiteral("{\"error\":\"timeout: no card detected at module 3\"}");
       setAllNeutral();
       return;
     }
@@ -349,8 +374,7 @@ void routeCard(int bin) {
   JsonDocument res;
   res["status"] = "routed";
   res["bin"]    = bin;
-  serializeJson(res, Serial);
-  Serial.println();
+  replyJson(res);
 }
 
 void handleCommand(const String& json) {
@@ -359,6 +383,11 @@ void handleCommand(const String& json) {
     Serial.println("{\"error\":\"invalid JSON\"}");
     return;
   }
+
+  // Optional numeric "id" — echoed on every reply to this command so the web
+  // app can correlate the response (see replyJson/replyLiteral).
+  g_cmdId = doc["id"] | 0;
+  g_hasCmdId = doc["id"].is<int>();
 
   // {"test": true} — run a full mechanical test sequence then confirm connection
   if (doc["test"].is<bool>() && doc["test"].as<bool>()) {
@@ -399,14 +428,14 @@ void handleCommand(const String& json) {
       delay(100);
     }
 
-    Serial.println("{\"status\":\"test_complete\"}");
+    replyLiteral("{\"status\":\"test_complete\"}");
     return;
   }
 
   // {"neutral": true} — reset all servos
   if (doc["neutral"].is<bool>() && doc["neutral"].as<bool>()) {
     setAllNeutral();
-    Serial.println("{\"status\":\"ok\"}");
+    replyLiteral("{\"status\":\"ok\"}");
     return;
   }
 
@@ -422,7 +451,7 @@ void handleCommand(const String& json) {
     delay(DELAY_PUSH);
     setAllNeutral();
     delay(200);
-    Serial.println("{\"status\":\"cleared\"}");
+    replyLiteral("{\"status\":\"cleared\"}");
     return;
   }
 
@@ -430,7 +459,7 @@ void handleCommand(const String& json) {
   if (doc["led"].is<int>()) {
     int led = doc["led"].as<int>();
     if (led < 1 || led > 4) {
-      Serial.println("{\"error\":\"led must be 1 to 4\"}");
+      replyLiteral("{\"error\":\"led must be 1 to 4\"}");
       return;
     }
     bool on = doc["on"] | false;
@@ -440,8 +469,7 @@ void handleCommand(const String& json) {
     res["status"] = "ok";
     res["led"] = led;
     res["on"] = on;
-    serializeJson(res, Serial);
-    Serial.println();
+    replyJson(res);
     return;
   }
 
@@ -451,12 +479,12 @@ void handleCommand(const String& json) {
     const char* servo = doc["servo"];
     int module = doc["module"] | 0;
     if (module < 1 || module > NUM_MODULES) {
-      Serial.println("{\"error\":\"module must be 1-3\"}");
+      replyLiteral("{\"error\":\"module must be 1-3\"}");
       return;
     }
     int offset = getServoOffset(servo);
     if (offset < 0) {
-      Serial.println("{\"error\":\"servo must be bottom, paddle, or pusher\"}");
+      replyLiteral("{\"error\":\"servo must be bottom, paddle, or pusher\"}");
       return;
     }
     int pulse;
@@ -465,7 +493,7 @@ void handleCommand(const String& json) {
     } else {
       pulse = getPositionPulse(module, offset, doc["position"] | "neutral");
       if (pulse < 0) {
-        Serial.println("{\"error\":\"invalid position\"}");
+        replyLiteral("{\"error\":\"invalid position\"}");
         return;
       }
     }
@@ -476,8 +504,7 @@ void handleCommand(const String& json) {
     res["status"] = "ok";
     res["servo"] = servo;
     res["module"] = module;
-    serializeJson(res, Serial);
-    Serial.println();
+    replyJson(res);
     return;
   }
 
@@ -486,7 +513,7 @@ void handleCommand(const String& json) {
     JsonObject cfg = doc["setConfig"];
     int module = cfg["module"] | 0;
     if (module < 1 || module > NUM_MODULES) {
-      Serial.println("{\"error\":\"module must be 1-3\"}");
+      replyLiteral("{\"error\":\"module must be 1-3\"}");
       return;
     }
     ModuleConfig& c = moduleConfig[module - 1];
@@ -501,8 +528,7 @@ void handleCommand(const String& json) {
     JsonDocument res;
     res["status"] = "ok";
     res["module"] = module;
-    serializeJson(res, Serial);
-    Serial.println();
+    replyJson(res);
     return;
   }
 
@@ -513,8 +539,7 @@ void handleCommand(const String& json) {
     res["status"] = "ok";
     res["detected"] = result == FEED_DETECTED;
     res["empty"] = result == FEED_EMPTY;
-    serializeJson(res, Serial);
-    Serial.println();
+    replyJson(res);
     return;
   }
 
@@ -523,8 +548,7 @@ void handleCommand(const String& json) {
     setServoPosition(FEEDER_CHANNEL, doc["feederValue"].as<int>());
     JsonDocument res;
     res["status"] = "ok";
-    serializeJson(res, Serial);
-    Serial.println();
+    replyJson(res);
     return;
   }
 
@@ -533,8 +557,7 @@ void handleCommand(const String& json) {
     stopFeeder();
     JsonDocument res;
     res["status"] = "ok";
-    serializeJson(res, Serial);
-    Serial.println();
+    replyJson(res);
     return;
   }
 
@@ -549,8 +572,7 @@ void handleCommand(const String& json) {
     stopFeeder();
     JsonDocument res;
     res["status"] = "ok";
-    serializeJson(res, Serial);
-    Serial.println();
+    replyJson(res);
     return;
   }
 
@@ -563,8 +585,7 @@ void handleCommand(const String& json) {
       ir.add(digitalRead(irPin(m)) == LOW);  // true = card present
     }
     res["hopper"] = hopperHasCards();  // true = cards remain in feeder stack
-    serializeJson(res, Serial);
-    Serial.println();
+    replyJson(res);
     return;
   }
 
@@ -574,7 +595,7 @@ void handleCommand(const String& json) {
     return;
   }
 
-  Serial.println("{\"error\":\"unknown command\"}");
+  replyLiteral("{\"error\":\"unknown command\"}");
 }
 
 void setup() {

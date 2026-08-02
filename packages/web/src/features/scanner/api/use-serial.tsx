@@ -15,6 +15,15 @@ import { toast } from "sonner";
 
 export type { SerialMessageListener } from "@/features/scanner/types";
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+interface PendingWaiter {
+  match: (msg: unknown) => boolean;
+  resolve: (msg: unknown, raw: string) => void;
+}
+
 const SerialContext = createContext<SerialContextValue | null>(null);
 
 export function SerialProvider({ children }: { children: React.ReactNode }) {
@@ -27,7 +36,8 @@ export function SerialProvider({ children }: { children: React.ReactNode }) {
   const writableRef = useRef<WritableStream<Uint8Array> | null>(null);
   const writeQueueRef = useRef<Promise<void>>(Promise.resolve());
   const bufferRef = useRef("");
-  const pendingRef = useRef<Array<(line: string) => void>>([]);
+  const pendingRef = useRef<PendingWaiter[]>([]);
+  const nextCmdIdRef = useRef(1);
   const listenersRef = useRef(new Set<SerialMessageListener>());
   const disconnectingRef = useRef<Promise<void> | null>(null);
   const preTestHookRef = useRef<(() => Promise<void>) | null>(null);
@@ -59,13 +69,17 @@ export function SerialProvider({ children }: { children: React.ReactNode }) {
                 for (const listener of listenersRef.current) {
                   listener(parsed);
                 }
+
+                // Deliver the message to every waiter whose predicate matches
+                // (e.g. waiters expecting a specific command id), then drop it.
+                const remaining: PendingWaiter[] = [];
+                for (const waiter of pendingRef.current) {
+                  if (waiter.match(parsed)) waiter.resolve(parsed, trimmed);
+                  else remaining.push(waiter);
+                }
+                pendingRef.current = remaining;
               } catch {
                 console.warn("[Serial] Non-JSON message:", trimmed);
-              }
-
-              const pending = pendingRef.current.shift();
-              if (pending) {
-                pending(trimmed);
               }
             }
           }
@@ -84,24 +98,56 @@ export function SerialProvider({ children }: { children: React.ReactNode }) {
 
   const waitForLine = useCallback((timeoutMs: number): Promise<string> => {
     return new Promise<string>((resolve) => {
-      let wrapper: ((line: string) => void) | null = null;
+      let settled = false;
 
-      const timeout = setTimeout(() => {
-        if (wrapper) {
-          const idx = pendingRef.current.indexOf(wrapper);
-          if (idx !== -1) pendingRef.current.splice(idx, 1);
-        }
-        resolve("");
-      }, timeoutMs);
-
-      wrapper = (line: string) => {
-        clearTimeout(timeout);
+      const finish = (line: string) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
         resolve(line);
       };
 
-      pendingRef.current.push(wrapper);
+      const waiter: PendingWaiter = {
+        // Legacy "next line wins" semantics — kept for receiveResponse(),
+        // which calibration tooling still relies on.
+        match: () => true,
+        resolve: (_msg, raw) => finish(raw),
+      };
+
+      pendingRef.current.push(waiter);
+      const timer = setTimeout(() => {
+        pendingRef.current = pendingRef.current.filter((w) => w !== waiter);
+        finish("");
+      }, timeoutMs);
     });
   }, []);
+
+  const waitForId = useCallback(
+    (id: number, timeoutMs: number): Promise<unknown | null> => {
+      return new Promise<unknown | null>((resolve) => {
+        let settled = false;
+
+        const finish = (msg: unknown | null) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          resolve(msg);
+        };
+
+        const waiter: PendingWaiter = {
+          match: (msg) => isRecord(msg) && msg.id === id,
+          resolve: (msg) => finish(msg),
+        };
+
+        pendingRef.current.push(waiter);
+        const timer = setTimeout(() => {
+          pendingRef.current = pendingRef.current.filter((w) => w !== waiter);
+          finish(null);
+        }, timeoutMs);
+      });
+    },
+    [],
+  );
 
   const sendCommand = useCallback((data: string): Promise<boolean> => {
     if (!portRef.current || !writableRef.current) return Promise.resolve(false);
@@ -126,19 +172,15 @@ export function SerialProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const sendTest = useCallback(async (): Promise<boolean> => {
-    const sent = await sendCommand(JSON.stringify({ test: true }) + "\n");
+    const id = nextCmdIdRef.current++;
+    const sent = await sendCommand(JSON.stringify({ test: true, id }) + "\n");
     if (!sent) return false;
 
-    const response = await waitForLine(10000);
+    const response = await waitForId(id, 10000);
     if (!response) return false;
 
-    try {
-      const parsed = JSON.parse(response);
-      return parsed.status === "test_complete";
-    } catch {
-      return false;
-    }
-  }, [sendCommand, waitForLine]);
+    return isRecord(response) && response.status === "test_complete";
+  }, [sendCommand, waitForId]);
 
   const disconnect = useCallback(() => {
     const port = portRef.current;
@@ -153,8 +195,8 @@ export function SerialProvider({ children }: { children: React.ReactNode }) {
     setIsReady(false);
 
     // Reject any outstanding waiters
-    for (const pending of pendingRef.current) {
-      pending("");
+    for (const waiter of pendingRef.current) {
+      waiter.resolve(null, "");
     }
     pendingRef.current = [];
     bufferRef.current = "";
@@ -332,25 +374,21 @@ export function SerialProvider({ children }: { children: React.ReactNode }) {
 
       binBusyRef.current = true;
       try {
+        const id = nextCmdIdRef.current++;
         const sent = await sendCommand(
-          JSON.stringify({ bin: binNumber }) + "\n",
+          JSON.stringify({ bin: binNumber, id }) + "\n",
         );
         if (!sent) return null;
 
-        const response = await waitForLine(15000);
-        if (!response) return null;
-
-        try {
-          return JSON.parse(response);
-        } catch {
-          console.warn("[Serial] Non-JSON response:", response);
-          return null;
-        }
+        // Correlate on the echoed command id so asynchronous messages (jam
+        // alerts, boot "ready") can never be mistaken for this command's
+        // response.
+        return await waitForId(id, 15000);
       } finally {
         binBusyRef.current = false;
       }
     },
-    [sendCommand, waitForLine],
+    [sendCommand, waitForId],
   );
 
   return (

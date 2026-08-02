@@ -4,6 +4,19 @@ The firmware communicates over USB serial at **9600 baud**, one JSON object per 
 
 **Frame format:** newline- (`\n` or `\r`) terminated JSON. Lines longer than 256 characters are discarded.
 
+## Command ids (request/response correlation)
+
+Every command may carry an optional numeric `"id"` field. When present, the firmware echoes it on **every reply to that command**:
+
+```json
+{"bin": 3, "id": 17}
+{"status":"routed","bin":3,"id":17}
+```
+
+The web app uses this to correlate responses to requests instead of assuming "the next line is the answer". Messages that are **not** replies to a command — the boot `{"status":"ready"}` line and asynchronous `{"error":"jam",...}` alerts — never carry an id, so they can never be mistaken for a command's response.
+
+Commands without an `id` are answered without one (backward compatible).
+
 ## Boot
 
 On reset the board replies:
