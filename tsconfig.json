@@ -2,10 +2,5 @@
   "compilerOptions": {
     "strict": true,
     "skipLibCheck": true
-  },
-  "references": [
-    { "path": "./packages/shared" },
-    { "path": "./packages/server" },
-    { "path": "./packages/web" }
-  ]
+  }
 }
