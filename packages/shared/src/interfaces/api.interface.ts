@@ -4,6 +4,8 @@ export interface SearchCardMatch {
   id: string;
   scryfallId: string;
   distance: number;
+  /** Full card data for close matches, hydrated server-side. */
+  card?: PlayingCard | null;
 }
 
 export interface ScryfallListResponse {

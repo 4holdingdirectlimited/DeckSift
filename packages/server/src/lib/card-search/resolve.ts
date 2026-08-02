@@ -46,7 +46,11 @@ export async function resolveGameDataSourceUrl(
 export async function resolveCardSearch(
   jwtClaims: string,
   collectionGuid: string | undefined,
-): Promise<{ adapter: CardSearchAdapter; baseUrl: string } | null> {
+): Promise<{
+  adapter: CardSearchAdapter;
+  baseUrl: string;
+  gameKey: string;
+} | null> {
   if (!collectionGuid) return null;
   const game = await findCollectionGame(jwtClaims, collectionGuid);
   if (!game) return null;
@@ -58,5 +62,5 @@ export async function resolveCardSearch(
     game.dataSourceUrl ||
     (await resolveGameDataSourceUrl(game.key, adapter.defaultUrl));
 
-  return { adapter, baseUrl };
+  return { adapter, baseUrl, gameKey: game.key };
 }

@@ -1,5 +1,4 @@
 import { searchByImage } from "@/features/cards/api/card";
-import { getCardById } from "@/features/cards/api/card-search";
 import { useCollections } from "@/features/collections/api/use-collections";
 import { orgSettingsQueryOptions } from "@/features/companies/api/org-settings";
 import { useOrg } from "@/features/companies/api/use-organization";
@@ -56,7 +55,16 @@ function playDingSound() {
   oscillator.stop(ctx.currentTime + 0.3);
 }
 
-const CLOSE_MATCH_DELTA = 0.05;
+// Encode a blob to a data URL without a second canvas encode — the upload
+// blob and the debug image should share the same JPEG.
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(new Error("Failed to read image blob"));
+    reader.readAsDataURL(blob);
+  });
+}
 
 async function searchCardImage(
   canvas: HTMLCanvasElement,
@@ -68,8 +76,10 @@ async function searchCardImage(
   debugImageUrl: string;
 }> {
   const warpedCanvas = contour ? extractCardImage(canvas, contour) : canvas;
-  const debugImageUrl = warpedCanvas.toDataURL("image/jpeg", 0.8);
+  // Encode once: the upload blob and the debug image share the same JPEG,
+  // so we don't run two full canvas encodes per scan.
   const blob = await canvasToBlob(warpedCanvas);
+  const debugImageUrl = await blobToDataUrl(blob);
   const formData = new FormData();
   formData.append("image", blob, "card.jpg");
   if (collectionGuid) formData.append("collectionGuid", collectionGuid);
@@ -78,18 +88,11 @@ async function searchCardImage(
   if (!data || data.length === 0)
     return { card: null, alternativeMatches: [], debugImageUrl };
 
-  const closeMatches = data.filter(
-    (m) => m.distance - data[0].distance <= CLOSE_MATCH_DELTA,
-  );
-  const resolved = await Promise.all(
-    closeMatches.map((m) =>
-      getCardById(m.scryfallId, collectionGuid).then((r) =>
-        r.data ? { ...r.data, distance: m.distance } : null,
-      ),
-    ),
-  );
-
-  const cards = resolved.filter(Boolean) as PlayingCardWithDistance[];
+  // Matches are hydrated server-side — close matches already carry full card
+  // data, so no follow-up per-match requests are needed.
+  const cards: PlayingCardWithDistance[] = data
+    .map((m) => (m.card ? { ...m.card, distance: m.distance } : null))
+    .filter((c): c is PlayingCardWithDistance => c !== null);
   if (cards.length === 0)
     return { card: null, alternativeMatches: [], debugImageUrl };
 

@@ -1,8 +1,12 @@
-import type { SearchCardMatch } from "@magic-vault/shared";
+import {
+  CLOSE_MATCH_DELTA,
+  type SearchCardMatch,
+} from "@magic-vault/shared";
 import { sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { authQuery } from "../db";
-import { resolveCardSearch, resolveGameKey } from "../lib/card-search/resolve";
+import { resolveCardDetails } from "../lib/card-cache";
+import { resolveCardSearch } from "../lib/card-search/resolve";
 import { sendDiscordNotification } from "../lib/discord";
 import { vectorizeImageFromBuffer } from "../lib/vectorize";
 import { requireAuth, type AppEnv } from "../middleware/auth";
@@ -42,17 +46,18 @@ router.post("/", requireAuth, async (c) => {
   }
 
   const embeddingStr = `[${embedding.join(",")}]`;
-  const gameKey = await resolveGameKey(c.get("jwtClaims"), collectionGuid);
-  if (!gameKey) {
+  const resolved = await resolveCardSearch(c.get("jwtClaims"), collectionGuid);
+  if (!resolved) {
     return c.json(
       { success: false, message: "No game configured for this collection." },
       400,
     );
   }
+  const { adapter, baseUrl, gameKey } = resolved;
 
   try {
-    const result = await authQuery(c.get("jwtClaims"), async (tx) => {
-      const matches = await tx.execute(sql`
+    const matches = await authQuery(c.get("jwtClaims"), async (tx) => {
+      const rows = await tx.execute(sql`
         SELECT
           scryfall_id,
           embedding <=> ${embeddingStr}::vector(768) AS distance
@@ -62,20 +67,34 @@ router.post("/", requireAuth, async (c) => {
         LIMIT 5
       `);
 
-      const matchList: SearchCardMatch[] = matches.rows.map((row) => ({
+      return rows.rows.map((row) => ({
         id: row.scryfall_id as string,
         scryfallId: row.scryfall_id as string,
         distance: row.distance as number,
       }));
-
-      return {
-        message: "Successfully searched for card.",
-        success: true,
-        data: matchList.length > 0 ? matchList : null,
-      };
     });
 
-    return c.json(result);
+    // Hydrate the close matches with full card data here so the client does
+    // one request per scan instead of one request per close match. Repeats of
+    // the same card (playsets) are served from the in-memory cache.
+    let data: SearchCardMatch[] | null = null;
+    if (matches.length > 0) {
+      const closeMatches = matches.filter(
+        (m) => m.distance - matches[0].distance <= CLOSE_MATCH_DELTA,
+      );
+      data = await Promise.all(
+        closeMatches.map(async (m) => ({
+          ...m,
+          card: await resolveCardDetails(adapter, baseUrl, m.scryfallId),
+        })),
+      );
+    }
+
+    return c.json({
+      message: "Successfully searched for card.",
+      success: true,
+      data,
+    });
   } catch (err) {
     console.error(err);
     const orgId = c.req.header("X-Org-Id");
