@@ -40,4 +40,7 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# local disk caches (sync catalogs, proxied card art)
+packages/server/.cache/
+
 **/.turbo/**

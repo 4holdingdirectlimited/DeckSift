@@ -1,5 +1,9 @@
 import type { SyncSource, SyncSourceCard } from "../card-search/sync-types";
+import { loadCachedCatalog, saveCachedCatalog } from "../sync-cache";
 import { SCRYFALL_DEFAULT_URL, SCRYFALL_HEADERS } from "./search";
+
+// Cache key for the bulk catalog; must match the game key in sync-job.ts.
+const GAME_KEY = "mtg";
 
 type ScryfallBulkCard = {
   id: string;
@@ -42,12 +46,26 @@ async function fetchCards(
     throw new Error(`Scryfall catalog fetch failed: ${catalogRes.status}`);
   }
   const catalog = (await catalogRes.json()) as {
-    data: { type: string; download_uri: string }[];
+    data: { type: string; download_uri: string; updated_at?: string }[];
   };
 
   const artEntry = catalog.data.find((e) => e.type === "unique_artwork");
   if (!artEntry)
     throw new Error("Could not find unique_artwork bulk data entry");
+
+  // Local-first: Scryfall bulk files are static snapshots with an updated_at
+  // timestamp. When we already have this exact version on disk, skip the
+  // multi-hundred-MB download entirely.
+  const version = artEntry.updated_at ?? "";
+  if (version) {
+    const cached = loadCachedCatalog(GAME_KEY, version);
+    if (cached) {
+      addLog(
+        `Using cached bulk artwork data (${cached.length} cards, unchanged since ${version}).`,
+      );
+      return cached;
+    }
+  }
 
   addLog("Downloading bulk artwork data...");
 
@@ -60,12 +78,14 @@ async function fetchCards(
   const cards = (await bulkRes.json()) as ScryfallBulkCard[];
   addLog(`Downloaded ${cards.length} cards.`);
 
-  return cards.map((c) => ({
+  const mapped = cards.map((c) => ({
     id: c.id,
     name: c.name,
     setCode: c.set,
     imageUrl: cardImageUrl(c),
   }));
+  saveCachedCatalog(GAME_KEY, version, mapped);
+  return mapped;
 }
 
 async function fetchOne(id: string, baseUrl: string) {

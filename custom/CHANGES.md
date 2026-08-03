@@ -704,6 +704,60 @@ straight into the scanner.
 
 ---
 
+## Item 14 — Local-first card art and sync catalog cache (web + database)
+
+**Status:** implemented, committed with the local build.
+
+### Why
+
+The app should work offline once data is in place. Two remaining online paths
+were needless: the card grid always fetched art from Scryfall/Gundam/Pokémon
+hosts even though every scanned card already has a webcam capture, and every
+sync re-downloaded Scryfall's multi-hundred-MB bulk catalog even when nothing
+had changed upstream.
+
+### What changed
+
+- **Web — scanned card art is local-first.** `ScannedCardItem` takes an optional
+  `capturedImageUrl` (the webcam capture, already stored in
+  `collection_cards.captured_image_data_url`) and renders it instead of the
+  online art when present, falling back to `getCardImageUris()` only when a
+  scan is missing. The grid passes the capture through; the detail panel shows
+  the capture as the main art for the scanned card (online art still shown for
+  corrected/alternative candidates).
+- **Server — sync catalog cache.** `packages/server/src/lib/sync-cache.ts`
+  stores the downloaded Scryfall bulk catalog (`packages/server/.cache/sync`)
+  keyed by the catalog's `updated_at`. On re-sync the server first fetches the
+  tiny bulk-data index, and when the version is unchanged it loads the catalog
+  from disk instead of re-downloading the ~GB file. New cards are still
+  detected because the sync always compares against the cached catalog; only
+  cards without an embedding are vectorized.
+- **Server — art proxy disk cache.** `/api/cards/image-proxy` now stores every
+  fetched image in `packages/server/.cache/art` (keyed by SHA-256 of the URL)
+  and serves previously-viewed art from disk with no network call. Cache
+  locations are overridable via `SYNC_CACHE_DIR` / `ART_CACHE_DIR` (see
+  `.env.example`).
+
+### Behavior notes
+
+- First sync still downloads the full catalog once; subsequent syncs skip the
+  download until Scryfall publishes a new version (roughly daily).
+- Card art for cards that have been viewed before works offline; brand-new
+  art still needs one fetch to populate the cache.
+- The webcam capture is what the vision model matched on, so the grid now
+  shows the physical card as scanned — glare/angle and all.
+
+### How to revert
+
+1. Web: remove the `capturedImageUrl` prop plumbing in `ScannedCardItem`/
+   `card-grid.tsx`/`card-detail-panel.tsx` and restore the `getCardImageUris`
+   art.
+2. Server: delete the cache checks in `lib/scryfall/sync.ts` and
+   `routes/card.ts`, and remove `lib/sync-cache.ts`.
+3. Optionally delete `packages/server/.cache/` to drop stored catalogs/art.
+
+---
+
 *Template for future entries:*
 
 ## Item N — <short title> (area)

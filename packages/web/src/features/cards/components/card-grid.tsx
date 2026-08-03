@@ -293,6 +293,7 @@ export function CardGrid() {
               <ScannedCardItem
                 key={card.scanId}
                 card={card.card}
+                capturedImageUrl={card.capturedImageUrl}
                 onOpen={() => setOpenScanId(card.scanId)}
                 binNumber={card.binNumber}
                 isSelected={selectedIds.has(card.scanId)}

@@ -49,6 +49,8 @@ export interface CardToolbarProps {
 
 export interface ScannedCardItemProps {
   card: PlayingCardWithDistance;
+  /** Webcam capture of the physical card; preferred over online art when present. */
+  capturedImageUrl?: string;
   onOpen: () => void;
   binNumber?: number;
   isSelected?: boolean;

@@ -177,6 +177,11 @@ export function CardDetailPanel({
   const selectedCard =
     candidates.find((c) => c.id === selectedId) ?? currentCard;
   const hasMultipleCandidates = candidates.length > 1;
+  // When the displayed card is the card we actually scanned (no correction
+  // chosen), show the webcam capture as the main art instead of online art.
+  const showScanAsArt = !!(
+    capturedImageUrl && currentCard && selectedCard?.id === currentCard.id
+  );
 
   const prices = selectedCard
     ? [
@@ -322,16 +327,18 @@ export function CardDetailPanel({
                     <div className="w-44 aspect-[2.5/3.5] rounded-lg overflow-hidden border shadow-sm">
                       <img
                         src={
-                          (selectedCard
-                            ? getCardImageUris(selectedCard)
-                            : undefined
-                          )?.normal || ""
+                          showScanAsArt
+                            ? capturedImageUrl
+                            : (selectedCard
+                                ? getCardImageUris(selectedCard)
+                                : undefined
+                              )?.normal || ""
                         }
                         alt={selectedCard?.name}
                         className="w-full h-full object-cover"
                       />
                     </div>
-                    {capturedImageUrl && (
+                    {capturedImageUrl && !showScanAsArt && (
                       <>
                         <p className="text-xs text-muted-foreground">
                           Captured scan

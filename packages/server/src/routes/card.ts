@@ -1,3 +1,6 @@
+import { createHash } from "node:crypto";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   CLOSE_MATCH_DELTA,
   type SearchCardMatch,
@@ -12,6 +15,24 @@ import { vectorizeImageFromBuffer } from "../lib/vectorize";
 import { requireAuth, type AppEnv } from "../middleware/auth";
 
 const router = new Hono<AppEnv>();
+
+// Disk cache for proxied card art. Once a card's art has been fetched from the
+// upstream image host it is stored locally, so re-viewing a card (or viewing a
+// playset) works with no internet connection. Best-effort: cache write/read
+// failures fall back to a live upstream fetch.
+const ART_CACHE_DIR =
+  process.env.ART_CACHE_DIR ?? join(process.cwd(), ".cache", "art");
+
+function artCachePaths(url: string): {
+  imgPath: string;
+  metaPath: string;
+} {
+  const key = createHash("sha256").update(url).digest("hex");
+  return {
+    imgPath: join(ART_CACHE_DIR, `${key}.img`),
+    metaPath: join(ART_CACHE_DIR, `${key}.meta`),
+  };
+}
 
 router.post("/", requireAuth, async (c) => {
   const body = await c.req.parseBody();
@@ -178,6 +199,23 @@ router.get("/image-proxy", async (c) => {
     return c.json({ success: false, message: "Host not allowed." }, 400);
   }
 
+  // Local-first: serve previously-fetched art from disk so already-viewed
+  // cards render without hitting the network.
+  const { imgPath, metaPath } = artCachePaths(parsed.toString());
+  if (existsSync(imgPath) && existsSync(metaPath)) {
+    try {
+      const buffer = readFileSync(imgPath);
+      const contentType = readFileSync(metaPath, "utf8");
+      return c.body(buffer, 200, {
+        "Content-Type": contentType,
+        "Cache-Control": "public, max-age=86400",
+        "Cross-Origin-Resource-Policy": "cross-origin",
+      });
+    } catch {
+      // Corrupt/missing cache entry — fall through to a live fetch.
+    }
+  }
+
   const upstream = await fetch(parsed.toString(), {
     headers: { "User-Agent": "MagicVault/1.0", Accept: "image/*" },
   });
@@ -187,6 +225,13 @@ router.get("/image-proxy", async (c) => {
   }
 
   const buffer = Buffer.from(await upstream.arrayBuffer());
+  try {
+    mkdirSync(ART_CACHE_DIR, { recursive: true });
+    writeFileSync(imgPath, buffer);
+    writeFileSync(metaPath, contentType);
+  } catch (err) {
+    console.error("[image-proxy] failed to cache art:", err);
+  }
   return c.body(buffer, 200, {
     "Content-Type": contentType,
     "Cache-Control": "public, max-age=86400",

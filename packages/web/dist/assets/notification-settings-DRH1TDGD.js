@@ -1,0 +1,1 @@
+import{t as i}from"./use-organization-CC7ONF5Y.js";async function n(t){return i("/api/notifications/test",{type:t})}async function o(t){await i("/api/notifications/serial-event",t).catch(()=>{})}export{o as r,n as s};

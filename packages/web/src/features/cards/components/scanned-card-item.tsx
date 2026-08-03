@@ -20,6 +20,7 @@ import { memo } from "react";
 
 export const ScannedCardItem = memo(function ScannedCardItem({
   card,
+  capturedImageUrl,
   onOpen,
   binNumber,
   isSelected = false,
@@ -117,7 +118,11 @@ export const ScannedCardItem = memo(function ScannedCardItem({
             </Tooltip>
           </div>
           <img
-            src={resolveCardImageUrl(getCardImageUris(card)?.normal) || ""}
+            src={
+              capturedImageUrl ||
+              resolveCardImageUrl(getCardImageUris(card)?.normal) ||
+              ""
+            }
             alt={card.name}
             className="w-full h-full object-cover"
           />
