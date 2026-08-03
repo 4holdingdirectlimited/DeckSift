@@ -908,6 +908,88 @@ MTG it saves the operator a correction per foil card.
    `card-scanner.tsx`, `use-scanned-cards.tsx`, and the `onSearchResults`/
    `addCard` signatures.
 
+## Item 18 — Scan light + two-frame holo detection (firmware + web)
+
+**Status:** implemented, uncommitted.
+
+### Why
+
+Single-frame holo heuristics are the weakest link in foil detection. The
+physical signature is angle-dependent: a holo changes COLOR with the light
+angle (diffraction grating), a matte card only gets brighter. A toggleable
+angled light makes that discrimination nearly deterministic — and the
+PCA9685 already had the wiring spots.
+
+### What changed
+
+- **Firmware — LED 5 on PCA9685 ch14.** `{"led": 5, "on": bool}` (range
+  extended 4 → 5); header comment + SERIAL_PROTOCOL.md updated.
+- **Web — two-frame scan with smart skip.** `foil-detect.ts` adds
+  `computeFoilDifferenceScore` (hue/saturation shift fraction between frames)
+  and `shouldUseSecondFrame` (frame A below `FOIL_SECOND_FRAME_THRESHOLD` =
+  clearly matte → skip the light + second picture entirely). `searchCardImage`
+  orchestrates: frame A (light off) → score → if ambiguous: toggle scan light
+  (`toggleScanLight` prop, wired to `{"led":5}` via `useSerial`), 120 ms
+  settle, frame B (light on) → chroma-difference decision → light off. The
+  lit frame doubles as the upload/match image (better illumination).
+- **Fallback:** no serial connection → single-frame heuristic (v1) as before.
+- **Docs:** BUILD.md scan-light wiring (LED + resistor on ch14, angled mount),
+  SERIAL_PROTOCOL.md LED 5.
+
+### Behavior notes
+
+- Most cards (matte) cost one picture + no light toggle. Only holo-looking
+  frames trigger the second capture (~200 ms extra, hidden under the sort).
+- Thresholds (`FOIL_SECOND_FRAME_THRESHOLD`, `FOIL_DIFF_THRESHOLD`) are
+  calibration starting points for when the rig is built.
+
+### How to revert
+
+1. Firmware: revert the LED range to 4.
+2. Web: remove `toggleScanLight` from `CardScannerProps`/`useCardScanner` and
+   the two-frame branch in `searchCardImage`.
+
+---
+
+## Item 19 — Config-driven multi-TCG adapter: Yu-Gi-Oh! + Digimon (server)
+
+**Status:** implemented, uncommitted.
+
+### Why
+
+Adding a TCG previously meant duplicating the whole search/sync/normalize
+adapter (Pokémon pattern). With DBZ/One Piece and others coming, that doesn't
+scale. Most TCG databases expose the same JSON shape; only the URLs and field
+mapping differ.
+
+### What changed
+
+- **`lib/card-search/generic.ts`** — `createSearchAdapter(config)` +
+  `createSyncSource(config)` factory. Config = search URL, optional by-id
+  URL (else bulk-catalog filter), bulk URL, result-path extractor, and
+  field-mapping functions. Ships `baseCard()`, `imageUris()`, `str()/num()`
+  helpers and a complete PlayingCard shape so configs stay ~40 lines.
+- **`lib/card-search/generic-configs.ts`** — `yugiohConfig` (YGOPRODeck) and
+  `digimonConfig` (digimoncard.io). Both endpoints verified live:
+  search, by-id, bulk, and image hosts.
+- Registered in `resolve.ts` (search) + `sync-job.ts` (sync) as `yugioh` and
+  `digimon`; image hosts added to the proxy allowlist in `routes/card.ts`.
+- Sync stores the **normalized** card in `cards.card_data`, so hydration
+  serves the correct PlayingCard shape for the new games.
+
+### Behavior notes
+
+- Add the game row in the web admin UI (Settings → Games) with key `yugioh` /
+  `digimon`, then run its sync once (bulk embed; YGO ~13k cards, Digimon
+  ~9k — one-time, hours on this machine, resumable).
+- Top-20 TCG plan + per-game data-source status: `custom/TCGS.md`.
+
+### How to revert
+
+1. Remove the `yugioh`/`digimon` registrations from `resolve.ts`,
+   `sync-job.ts`, and the allowlist in `routes/card.ts`.
+2. Delete `generic-configs.ts` and `generic.ts`.
+
 ---
 
 *Template for future entries:*

@@ -53,6 +53,12 @@ export interface CardScannerProps {
   onError?: (error: string) => void;
   className?: string;
   compact?: boolean;
+  /**
+   * Toggles the scan light (firmware LED 5 on PCA9685 ch14). Optional: when
+   * absent, foil detection falls back to single-frame heuristics. When the
+   * first frame is clearly non-foil the light is never toggled.
+   */
+  toggleScanLight?: (on: boolean) => Promise<boolean>;
 }
 
 export interface ScannedCard {

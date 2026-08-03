@@ -41,8 +41,17 @@ export function CardScanner({ className, compact }: CardScannerProps) {
     disconnect,
     sendTest,
     sendFeed,
+    sendCommand,
     sendCommandWithResponse,
   } = useSerial();
+
+  // Scan light = firmware LED 5 (PCA9685 ch14), used for two-frame holo
+  // detection. Absent a serial connection the scanner falls back to
+  // single-frame heuristics.
+  const toggleScanLight = useCallback(
+    (on: boolean) => sendCommand(JSON.stringify({ led: 5, on })),
+    [sendCommand],
+  );
   const [isFeeding, setIsFeeding] = useState(false);
   const [isClearingDevice, setIsClearingDevice] = useState(false);
   const { hasCatchAll } = useBinConfigs();
@@ -78,6 +87,7 @@ export function CardScanner({ className, compact }: CardScannerProps) {
     },
     onNoMatch: sendCatchAllBin,
     rotated: !isMobile,
+    toggleScanLight,
   });
 
   useSerialMessage((msg) => {

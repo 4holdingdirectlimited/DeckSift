@@ -108,13 +108,16 @@ Opens every module's bottom trapdoor at once so any card resting in the mechanis
 {"status":"cleared"}
 ```
 
-### LEDs (channels 0–3, reserved for future builds)
+### LEDs (channels 0–3) + scan light (ch14)
 
 ```json
 {"led": 1, "on": true}
+{"led": 5, "on": true}   // scan light — holo-detection light on ch14
 ```
 
-`led` is 1–4. Replies:
+`led` is 1–5. LEDs 1–4 are the indicator LEDs on channels 0–3; **LED 5 is the
+scan light** on spare channel 14, driven by the web app for two-frame holo
+scans (frame with light off → toggle → frame with light on). Replies:
 
 ```json
 {"status":"ok","led":1,"on":true}
@@ -276,7 +279,7 @@ The firmware can emit these without a request:
 | `{"error":"aborted: jam detected","aborted":true}` | An operation was aborted mid-way (jam reported or watchdog deadline) and all servos returned to neutral |
 | `{"error":"invalid JSON"}` | Line failed to parse |
 | `{"error":"unknown command"}` | Valid JSON but no recognized field |
-| `{"error":"bin must be 1-7"}` / `{"error":"module must be 1-3"}` / `{"error":"servo must be bottom, paddle, or pusher"}` / `{"error":"invalid position"}` / `{"error":"led must be 1 to 4"}` | Bad arguments |
+| `{"error":"bin must be 1-7"}` / `{"error":"module must be 1-3"}` / `{"error":"servo must be bottom, paddle, or pusher"}` / `{"error":"invalid position"}` / `{"error":"led must be 1 to 5"}` | Bad arguments |
 
 ## Notes
 

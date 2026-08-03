@@ -11,6 +11,8 @@ Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver();
 //   ch7-9   = Module 2
 //   ch10-12 = Module 3
 //   ch13    = Feeder (360° continuous rotation servo)
+//   ch14    = Scan light (LED 5) — angled holo-detection light, toggled by the
+//             web app for two-frame foil scans
 #define NUM_MODULES 3
 #define MODULE_CHANNEL_OFFSET 4
 #define FEEDER_CHANNEL 13
@@ -589,15 +591,17 @@ void handleCommand(const char* json) {
     return;
   }
 
-  // {"led": 1, "on": true} — control LED by position (1 or 2)
+  // {"led": 1, "on": true} — control LED by position (1..4) or the scan light (5)
   if (doc["led"].is<int>()) {
     int led = doc["led"].as<int>();
-    if (led < 1 || led > 4) {
-      replyLiteral("{\"error\":\"led must be 1 to 4\"}");
+    if (led < 1 || led > 5) {
+      replyLiteral("{\"error\":\"led must be 1 to 5\"}");
       return;
     }
     bool on = doc["on"] | false;
-    pwm.setPin(led - 1, on ? 4095 : 0);
+    // LEDs 1-4 live on ch0-3; the scan light is LED 5 on spare ch14.
+    int channel = led <= 4 ? led - 1 : 14;
+    pwm.setPin(channel, on ? 4095 : 0);
 
     JsonDocument res;
     res["status"] = "ok";

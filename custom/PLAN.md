@@ -144,12 +144,16 @@ problem. Software pre-reqs are noted inline.
 4. **Bundle workflow** (needs the bundle software):
    - 4-rarity bundle on bins 1–4; counts reach targets; duplicates → reject
      bin; bundle-complete pause; resume after restart.
-5. **Holo detection** (needs the classifier):
+5. **Holo detection** (classifier thresholds need calibration):
+   - The two-frame scan light is built (firmware LED 5 / PCA9685 ch14,
+     smart skip if clearly matte). Wire the LED (see BUILD.md) and calibrate
+     `FOIL_SECOND_FRAME_THRESHOLD` / `FOIL_DIFF_THRESHOLD` on real captures.
    - Collect labeled scans (manual foil toggle) during early runs; train the
      embedding classifier; verify on DBZ/One Piece foils — foil is a different
      product ID there, so detection feeds card identity, not just a badge.
 
 ## Related docs
 
+- `custom/TCGS.md` — top-20 TCG plan, data-source status, adding games.
 - `arduino/main/SERIAL_PROTOCOL.md` — current JSON contract (will grow: cancel, save/reset config, per-module jam timeouts).
-- `arduino/main/BUILD.md` — wiring/BOM notes (PSU, capacitance).
+- `arduino/main/BUILD.md` — wiring/BOM notes (PSU, capacitance, scan light).

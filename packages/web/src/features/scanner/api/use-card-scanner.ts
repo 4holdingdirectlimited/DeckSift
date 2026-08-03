@@ -13,7 +13,13 @@ import {
   extractCardImage,
   getDefaultCardContour,
 } from "@/features/scanner/lib/card-detection";
-import { computeFoilScore, isFoilByScore } from "@/features/scanner/lib/foil-detect";
+import {
+  computeFoilDifferenceScore,
+  computeFoilScore,
+  isFoilByDifference,
+  isFoilByScore,
+  shouldUseSecondFrame,
+} from "@/features/scanner/lib/foil-detect";
 import {
   DEFAULT_SCAN_REGION,
   type CardContour,
@@ -69,22 +75,49 @@ function blobToDataUrl(blob: Blob): Promise<string> {
 
 async function searchCardImage(
   canvas: HTMLCanvasElement,
-  contour?: CardContour | null,
-  collectionGuid?: string,
+  contour: CardContour | null | undefined,
+  collectionGuid: string | undefined,
+  getFreshFrame: () => HTMLCanvasElement | null,
+  toggleScanLight: ((on: boolean) => Promise<boolean>) | undefined,
 ): Promise<{
   card: PlayingCardWithDistance | null;
   alternativeMatches: PlayingCardWithDistance[];
   debugImageUrl: string;
   isFoil: boolean;
 }> {
-  const warpedCanvas = contour ? extractCardImage(canvas, contour) : canvas;
-  // Foil heuristic runs on the exact crop that gets uploaded — no extra
-  // decode or round trip. The estimate pre-fills the toggle so the operator
-  // can correct it, and the correction is stored as labeled training data.
-  const isFoil = isFoilByScore(computeFoilScore(warpedCanvas));
+  const warp = (c: HTMLCanvasElement) =>
+    contour ? extractCardImage(c, contour) : c;
+  const canvasA = warp(canvas);
+
+  // Frame A (scan light off): static foil heuristic. If it's clearly a matte
+  // card, skip the light + second frame entirely — most cards cost one
+  // picture. Only ambiguous/holo-looking frames trigger the two-shot path.
+  const scoreA = computeFoilScore(canvasA);
+  let isFoil = isFoilByScore(scoreA);
+  let uploadCanvas = canvasA;
+
+  if (shouldUseSecondFrame(scoreA) && toggleScanLight) {
+    const lit = await toggleScanLight(true);
+    if (lit) {
+      // Give the LED and the camera exposure a beat to settle.
+      await new Promise((r) => setTimeout(r, 120));
+      const fresh = getFreshFrame();
+      if (fresh) {
+        const canvasB = warp(fresh);
+        // A holo changes color with the light angle; a matte card only gets
+        // brighter. Chroma shift between the frames is the reliable signal.
+        const diff = computeFoilDifferenceScore(canvasA, canvasB);
+        isFoil = isFoilByDifference(diff) || isFoilByScore(scoreA);
+        // The lit frame is the better image for matching too.
+        uploadCanvas = canvasB;
+      }
+      await toggleScanLight(false);
+    }
+  }
+
   // Encode once: the upload blob and the debug image share the same JPEG,
   // so we don't run two full canvas encodes per scan.
-  const blob = await canvasToBlob(warpedCanvas);
+  const blob = await canvasToBlob(uploadCanvas);
   const debugImageUrl = await blobToDataUrl(blob);
   const formData = new FormData();
   formData.append("image", blob, "card.jpg");
@@ -112,6 +145,7 @@ export function useCardScanner({
   onError,
   rotated = true,
   scanRegion: scanRegionProp,
+  toggleScanLight,
 }: Omit<CardScannerProps, "className"> & {
   rotated?: boolean;
   scanRegion?: ScanRegion;
@@ -162,6 +196,8 @@ export function useCardScanner({
   const onSearchResultsRef = useRef(onSearchResults);
   const onNoMatchRef = useRef(onNoMatch);
   const handleErrorRef = useRef<(msg: string) => void>(() => {});
+  const toggleScanLightRef = useRef(toggleScanLight);
+  toggleScanLightRef.current = toggleScanLight;
 
   const [status, setStatus] = useState<ScannerStatus>("initializing");
   const [errorMessage, setErrorMessage] = useState("");
@@ -226,6 +262,8 @@ export function useCardScanner({
             canvas,
             contour,
             activeCollectionGuidRef.current,
+            () => displayCanvasRef.current,
+            toggleScanLightRef.current,
           );
         // The stream may have been replaced/unmounted while the search was in
         // flight — drop the result instead of updating a dead tree or letting

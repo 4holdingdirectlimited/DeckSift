@@ -11,12 +11,13 @@ Parts list and assembly instructions for the physical sorting unit: a hopper fee
 
 ## 1. Bill of materials
 
-Quantities match the firmware exactly — 3 modules × 3 servos, 1 feeder, 4 IR sensors, 10 of the PCA9685's 16 channels in use. Channels 0–3 are wired for status LEDs in firmware but aren't part of the current build.
+Quantities match the firmware exactly — 3 modules × 3 servos, 1 feeder, 4 IR sensors, and the PCA9685's 16 channels: 10 servos, 4 LED channels (0–3), and channel 14 for the optional scan light.
 
 ### Electronics
 
 | Qty | Part | Notes |
 | --- | --- | --- |
+| 1 | White LED + 100–220 Ω resistor (scan light) | Optional but recommended for holo detection — wired to PCA9685 ch14 (firmware LED 5). See “Scan light” wiring below. |
 | 1 | Arduino Uno R4 Minima (ABX0080) | Runs `main.ino`; USB connection to the host computer for Web Serial |
 | 1 | Adafruit PCA9685 16-channel 12-bit PWM/servo driver | I²C servo driver — drives all 10 servos |
 | 9 | SG90 micro servo, positional (180°) | 3 per module × 3 modules — bottom trapdoor, paddle gate, pusher |
@@ -94,7 +95,7 @@ All four read **active-LOW** (pin goes low when a card is present) using the Ard
 
 | Ch. | Assignment |
 | --- | --- |
-| 0–3 | Unused — reserved for LEDs in firmware, not part of this build |
+| 0–3 | LED indicators 1–4 (firmware `{"led":1..4}`) |
 | 4 | Module 1 — bottom |
 | 5 | Module 1 — paddle |
 | 6 | Module 1 — pusher |
@@ -105,6 +106,29 @@ All four read **active-LOW** (pin goes low when a card is present) using the Ard
 | 11 | Module 3 — paddle |
 | 12 | Module 3 — pusher |
 | 13 | Feeder (continuous rotation) |
+| 14 | **Scan light** (firmware `{"led":5,"on":bool}`) — angled holo-detection light |
+| 15 | Spare |
+
+### Scan light
+
+The scan light is a white LED mounted at an **angle to the card** (roughly
+30–45° off the camera axis) so its reflection grazes the foil surface. The web
+app toggles it (firmware LED 5 / PCA9685 ch14) between two captures: a frame
+with the light off, then a frame with it on. Holo cards change **color**
+between the frames (diffraction grating); matte cards only get brighter. The
+light-on frame is also the better-lit image for card matching itself.
+
+Wiring (PCA9685 outputs are open-drain — they sink current, so the LED sits
+between `V+` and the channel pin):
+
+| From | To |
+| --- | --- |
+| PCA9685 `V+` | LED anode (via 100–220 Ω resistor) |
+| PCA9685 ch14 (`OE`-side output) | LED cathode |
+
+A single high-brightness white LED is fine on the channel directly (≈25 mA).
+For a bigger light bar, drive it through a small N-channel MOSFET on the same
+pin. Keep the LED beam off the camera lens to avoid glare in the scan region.
 
 ---
 

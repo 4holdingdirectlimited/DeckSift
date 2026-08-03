@@ -20,6 +20,15 @@
 
 export const FOIL_SCORE_THRESHOLD = 0.5;
 
+// Frame A (light off) scoring below this is clearly a matte card — the
+// scan-light second frame is skipped entirely (no point toggling the light
+// and taking a second picture when the first already says non-foil).
+export const FOIL_SECOND_FRAME_THRESHOLD = 0.25;
+
+// Two-frame (light off → light on) chroma-difference score above this is a
+// holo. Calibration starting point — see PLAN.md commissioning checklist.
+export const FOIL_DIFF_THRESHOLD = 0.1;
+
 /**
  * Core scoring over raw RGBA pixels (exported so the math is unit-testable in
  * Node with a plain Uint8ClampedArray).
@@ -131,4 +140,83 @@ export function computeFoilScore(source: HTMLCanvasElement): number {
 
 export function isFoilByScore(score: number | undefined): boolean {
   return score != null && score >= FOIL_SCORE_THRESHOLD;
+}
+
+/**
+ * True when frame A's static score is ambiguous/holo-ish enough that the
+ * angled scan light + second frame is worth taking. Low scores are clearly
+ * matte and skip the light entirely.
+ */
+export function shouldUseSecondFrame(scoreA: number): boolean {
+  return scoreA >= FOIL_SECOND_FRAME_THRESHOLD;
+}
+
+/**
+ * Two-frame holo discriminator: the scan light toggled between captures makes
+ * a diffraction-grating (holo) card change COLOR while a matte card only
+ * changes BRIGHTNESS. Returns the fraction of pixels whose hue or saturation
+ * shifted significantly between the two frames (0..1).
+ */
+export function computeFoilDifferenceScore(
+  frameA: HTMLCanvasElement,
+  frameB: HTMLCanvasElement,
+): number {
+  const width = 192;
+  const a = downscale(frameA, width);
+  const b = downscale(frameB, width);
+  const n = a.data.length / 4;
+  if (n === 0) return 0;
+
+  let shifted = 0;
+  for (let i = 0; i < n; i++) {
+    const [h1, s1] = rgbToHs(a.data, i);
+    const [h2, s2] = rgbToHs(b.data, i);
+    let hueDelta = Math.abs(h1 - h2);
+    if (hueDelta > 180) hueDelta = 360 - hueDelta; // circular
+    const satDelta = Math.abs(s1 - s2);
+    if (hueDelta > 25 || satDelta > 0.25) shifted++;
+  }
+  return shifted / n;
+}
+
+/** True when the two-frame chroma shift indicates a holo. */
+export function isFoilByDifference(diff: number): boolean {
+  return diff >= FOIL_DIFF_THRESHOLD;
+}
+
+function downscale(
+  source: HTMLCanvasElement,
+  width: number,
+): { data: Uint8ClampedArray } {
+  const aspect = source.height / source.width;
+  const height = Math.max(1, Math.round(width * aspect));
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  if (!ctx) return { data: new Uint8ClampedArray(0) };
+  ctx.drawImage(source, 0, 0, width, height);
+  return { data: ctx.getImageData(0, 0, width, height).data };
+}
+
+function rgbToHs(
+  data: Uint8ClampedArray,
+  i: number,
+): [number, number] {
+  const r = data[i * 4] / 255;
+  const g = data[i * 4 + 1] / 255;
+  const b = data[i * 4 + 2] / 255;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const s = max === 0 ? 0 : (max - min) / max;
+  let h = 0;
+  const d = max - min;
+  if (d > 0) {
+    if (max === r) h = ((g - b) / d) % 6;
+    else if (max === g) h = (b - r) / d + 2;
+    else h = (r - g) / d + 4;
+    h *= 60;
+    if (h < 0) h += 360;
+  }
+  return [h, s];
 }

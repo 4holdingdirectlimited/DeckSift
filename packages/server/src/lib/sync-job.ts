@@ -6,6 +6,8 @@ import { gundamSyncSource } from "./gundam/sync";
 import { pokemonSyncSource } from "./pokemon/sync";
 import { scryfallSyncSource } from "./scryfall/sync";
 import type { SyncSource } from "./card-search/sync-types";
+import { digimonConfig, yugiohConfig } from "./card-search/generic-configs";
+import { createSyncSource } from "./card-search/generic";
 import { resolveGameDataSourceUrl } from "./card-search/resolve";
 import { sendDiscordNotification } from "./discord";
 import { vectorizeImageFromBuffer } from "./vectorize";
@@ -14,6 +16,8 @@ export const SYNC_SOURCES: Record<string, SyncSource> = {
   mtg: scryfallSyncSource,
   gundam: gundamSyncSource,
   pokemon: pokemonSyncSource,
+  yugioh: createSyncSource(yugiohConfig),
+  digimon: createSyncSource(digimonConfig),
 };
 
 type SseWriter = (event: string, data: unknown) => void;
