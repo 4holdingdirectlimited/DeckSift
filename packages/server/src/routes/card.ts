@@ -5,9 +5,10 @@ import {
   CLOSE_MATCH_DELTA,
   type SearchCardMatch,
 } from "@magic-vault/shared";
-import { sql } from "drizzle-orm";
+import { and, count, sql } from "drizzle-orm";
 import { Hono } from "hono";
-import { authQuery } from "../db";
+import { authQuery, db } from "../db";
+import { cardImageVectors } from "../db/schema";
 import { resolveCardDetails } from "../lib/card-cache";
 import { resolveCardSearch } from "../lib/card-search/resolve";
 import { sendDiscordNotification } from "../lib/discord";
@@ -15,6 +16,69 @@ import { vectorizeImageFromBuffer } from "../lib/vectorize";
 import { requireAuth, type AppEnv } from "../middleware/auth";
 
 const router = new Hono<AppEnv>();
+
+// GET /cards/library — browse the synced card library with filters
+// (game, name search, rarity, set code). Art and rarity come from the stored
+// card_data jsonb; image_uris are proxied URLs the client resolves locally.
+router.get("/library", requireAuth, async (c) => {
+  const gameKey = (c.req.query("gameKey") ?? "").trim() || undefined;
+  const search = (c.req.query("search") ?? "").trim();
+  const rarity = (c.req.query("rarity") ?? "").trim() || undefined;
+  const setCode = (c.req.query("set") ?? "").trim().toUpperCase() || undefined;
+  const page = Math.max(1, Number(c.req.query("page") ?? 1));
+  const limit = Math.min(
+    100,
+    Math.max(1, Number(c.req.query("limit") ?? 60)),
+  );
+  const offset = (page - 1) * limit;
+
+  const conditions = [];
+  if (gameKey) conditions.push(sql`${cardImageVectors.gameKey} = ${gameKey}`);
+  if (search)
+    conditions.push(
+      sql`${cardImageVectors.name} ILIKE ${`%${search}%`}`,
+    );
+  if (rarity)
+    conditions.push(
+      sql`${cardImageVectors.cardData}->>'rarity' = ${rarity}`,
+    );
+  if (setCode)
+    conditions.push(sql`${cardImageVectors.setCode} = ${setCode}`);
+  const where = conditions.length > 0 ? and(...conditions) : undefined;
+
+  try {
+    const [rows, [rowCount]] = await Promise.all([
+      db
+        .select({
+          scryfallId: cardImageVectors.scryfallId,
+          gameKey: cardImageVectors.gameKey,
+          name: cardImageVectors.name,
+          setCode: cardImageVectors.setCode,
+          rarity: sql<string>`${cardImageVectors.cardData}->>'rarity'`,
+          setName: sql<string>`${cardImageVectors.cardData}->>'set_name'`,
+          imageUrl: sql<string>`${cardImageVectors.cardData}->'image_uris'->>'large'`,
+          cardData: cardImageVectors.cardData,
+        })
+        .from(cardImageVectors)
+        .where(where)
+        .orderBy(cardImageVectors.name)
+        .limit(limit)
+        .offset(offset),
+      db
+        .select({ total: count() })
+        .from(cardImageVectors)
+        .where(where),
+    ]);
+
+    return c.json({
+      success: true,
+      data: { cards: rows, total: rowCount.total, page, limit },
+    });
+  } catch (err) {
+    console.error(err);
+    return c.json({ success: false, message: "Database error." }, 500);
+  }
+});
 
 // Disk cache for proxied card art. Once a card's art has been fetched from the
 // upstream image host it is stored locally, so re-viewing a card (or viewing a

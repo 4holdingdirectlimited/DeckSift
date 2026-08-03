@@ -19,6 +19,7 @@ import {
   IconFolders,
   IconLayoutSidebarLeftCollapse,
   IconLayoutSidebarLeftExpand,
+  IconLibrary,
   IconPigFilled,
   IconSettings,
   IconWifi,
@@ -212,6 +213,12 @@ export function AppNav() {
       to: "/app/collections",
       icon: <IconFolders size={20} />,
       label: "Collections",
+      desktopOnly: true,
+    },
+    {
+      to: "/app/library",
+      icon: <IconLibrary size={20} />,
+      label: "Library",
       desktopOnly: true,
     },
     {

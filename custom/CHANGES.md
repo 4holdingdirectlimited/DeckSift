@@ -1296,6 +1296,42 @@ five games one at a time meant babysitting the Admin page for hours, clicking
 2. Remove the queue functions from `sync-job.ts`, the queue endpoints from
    `admin.ts`, and the Sync All button.
 
+## Item 28 — Card Library browser (server + web)
+
+**Status:** implemented, committed.
+
+### Why
+
+The synced card database had no real browsing UI — only a bare text list in
+Admin (name + set code, no art, no filters). The library is the payoff of the
+sync work, so it should be browsable like a collection.
+
+### What changed
+
+- **`GET /api/cards/library`** (new, in `routes/card.ts`) — paginated card
+  browsing with filters: `gameKey`, name `search` (ILIKE), `rarity` and `set`
+  (both extracted from the stored `card_data` jsonb). Returns art URL + rarity
+  + set name + the full card object so detail views need no second request.
+- **`/app/library` page** (new) — art grid (lazy-loaded thumbnails) with game
+  tabs (All / Magic / Pokémon / Yu-Gi-Oh! / Digimon / Gundam), debounced name
+  search, a per-game rarity dropdown (from the game's field definitions), a set
+  code filter, and “Load more” pagination. Clicking a card opens a detail panel
+  (large art, rarity badge, type line, collector number, prices, oracle text).
+- **Nav** — new Library item in the sidebar.
+
+### Behavior notes
+
+- Art is served through the existing local image proxy, so re-viewing a card
+  is instant/offline once its art is cached.
+- The rarity dropdown shows the options seeded for each game; games with
+  rarities outside those options can still be found via search/set filters.
+
+### How to revert
+
+1. Remove the `/library` route from `card.ts`.
+2. Delete `packages/web/src/app/routes/app/library.tsx`, the library feature
+   folder, the route entry, and the nav item.
+
 ---
 
 *Template for future entries:*
