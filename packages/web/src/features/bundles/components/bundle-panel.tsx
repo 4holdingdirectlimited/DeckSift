@@ -17,15 +17,20 @@ import {
   useBundles,
 } from "@/features/bundles/api/use-bundles";
 import type { BundleConfigWithRun } from "@/features/bundles/api/bundles";
+import { useCollections } from "@/features/collections/api/use-collections";
 import {
   bundleTargetKey,
+  gameAcronym,
+  type BundleRunCard,
   type BundleTarget,
   type FoilFilter,
 } from "@magic-vault/shared";
 import { cn } from "@/lib/utils";
 import {
+  IconDownload,
   IconEdit,
   IconLoader2,
+  IconPackage,
   IconPlayerPlay,
   IconPlayerStop,
   IconPlus,
@@ -39,6 +44,14 @@ const DEFAULT_TARGETS: BundleTarget[] = [
   { rarity: "uncommon", count: 15, binNumber: 2 },
   { rarity: "rare", count: 5, binNumber: 3 },
   { rarity: "mythic", count: 5, binNumber: 4 },
+];
+
+const KNOWN_GAMES: { key: string; label: string }[] = [
+  { key: "mtg", label: "Magic: The Gathering" },
+  { key: "yugioh", label: "Yu-Gi-Oh!" },
+  { key: "pokemon", label: "Pokémon" },
+  { key: "digimon", label: "Digimon" },
+  { key: "gundam", label: "Gundam" },
 ];
 
 function titleCase(rarity: string): string {
@@ -60,7 +73,11 @@ function BundleConfigDialog({
   config?: BundleConfigWithRun | null;
 }) {
   const { createConfig, updateConfig } = useBundles();
+  const { activeCollection } = useCollections();
   const [name, setName] = useState(config?.name ?? "");
+  const [gameKey, setGameKey] = useState<string>(
+    config?.gameKey ?? activeCollection?.game?.key ?? "",
+  );
   const [targets, setTargets] = useState<BundleTarget[]>(
     config?.targets?.length ? config.targets : DEFAULT_TARGETS,
   );
@@ -81,6 +98,9 @@ function BundleConfigDialog({
   useEffect(() => {
     if (open) {
       setName(config?.name ?? "");
+      setGameKey(
+        config?.gameKey ?? activeCollection?.game?.key ?? "",
+      );
       setTargets(config?.targets?.length ? config.targets : DEFAULT_TARGETS);
       setRejectBinNumber(config?.rejectBinNumber ?? 7);
       setAllowDuplicates(config?.allowDuplicates ?? false);
@@ -117,6 +137,7 @@ function BundleConfigDialog({
       rejectBinNumber: Math.max(1, Math.floor(rejectBinNumber)),
       allowDuplicates,
       holoDetection,
+      gameKey: gameKey.trim() || null,
     };
     if (config) {
       await updateConfig(config.guid, payload);
@@ -153,6 +174,25 @@ function BundleConfigDialog({
           onChange={(e) => setName(e.target.value)}
           placeholder="Standard Bundle (15/15/5/5)"
         />
+      </Field>
+
+      <Field>
+        <FieldLabel>Game (SKU prefix)</FieldLabel>
+        <Select value={gameKey} onValueChange={(v) => setGameKey(v ?? "")}>
+          <SelectTrigger className="w-full">
+            <SelectValue placeholder="Select a game" />
+          </SelectTrigger>
+          <SelectContent>
+            {KNOWN_GAMES.map((g) => (
+              <SelectItem key={g.key} value={g.key}>
+                {g.label} ({gameAcronym(g.key)})
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <p className="text-[11px] text-muted-foreground">
+          Used for the bundle SKU (e.g. {gameKey ? `${gameAcronym(gameKey)}-40-001` : "MTG-40-001"}).
+        </p>
       </Field>
 
       <div className="grid grid-cols-2 gap-3">
@@ -329,6 +369,11 @@ function BundleProgress() {
           </span>
         </span>
       </div>
+      {activeRun.sku && (
+        <p className="text-[11px] font-mono text-muted-foreground">
+          SKU {activeRun.sku}
+        </p>
+      )}
       <div className="h-1.5 rounded-full bg-muted overflow-hidden">
         <div
           className="h-full bg-primary transition-all"
@@ -386,6 +431,98 @@ function BundleProgress() {
   );
 }
 
+// ─── Bundle inventory (created bundles) ──────────────────────────────────────
+
+function BundleInventory() {
+  const { runs, exportRunCsv, getRunCards } = useBundles();
+  const pastRuns = useMemo(() => runs.filter((r) => r.status !== "active"), [runs]);
+  const [cardsFor, setCardsFor] = useState<BundleRunCard[] | null>(null);
+
+  if (pastRuns.length === 0) return null;
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="flex items-center gap-1.5 mt-1">
+        <IconPackage className="size-3.5 text-muted-foreground" />
+        <span className="text-xs font-medium">Bundle inventory</span>
+        <span className="text-[10px] text-muted-foreground">({pastRuns.length})</span>
+      </div>
+      {pastRuns.map((run) => (
+        <div
+          key={run.guid}
+          className="flex items-center gap-1.5 rounded-lg border px-2 py-1.5"
+        >
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-mono font-medium truncate">
+              {run.sku ?? run.guid.slice(0, 8)}
+            </p>
+            <p className="text-[11px] text-muted-foreground truncate">
+              {run.configName} · {run.placedCardIds.length} cards
+              {run.totalValueUsd > 0
+                ? ` · $${run.totalValueUsd.toFixed(2)}`
+                : ""}
+              · {run.status}
+            </p>
+          </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-7 shrink-0 text-muted-foreground"
+            title="View cards in this bundle"
+            onClick={() =>
+              void getRunCards(run.guid).then((cards) => setCardsFor(cards))
+            }
+          >
+            <IconPackage className="size-3.5" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-7 shrink-0 text-muted-foreground"
+            title="Download bundle CSV"
+            onClick={() => void exportRunCsv(run.guid)}
+          >
+            <IconDownload className="size-3.5" />
+          </Button>
+        </div>
+      ))}
+
+      <DynamicDialog
+        open={cardsFor !== null}
+        onOpenChange={(open) => !open && setCardsFor(null)}
+        title="Bundle cards"
+        description={cardsFor ? `${cardsFor.length} unique cards` : undefined}
+        className="sm:max-w-xl"
+      >
+        {cardsFor && cardsFor.length > 0 ? (
+          <div className="flex flex-col gap-1 max-h-96 overflow-y-auto">
+            {cardsFor.map((card) => (
+              <div
+                key={card.cardId}
+                className="flex items-center justify-between gap-2 text-xs py-1 border-b border-border/60 last:border-0"
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-muted-foreground shrink-0">
+                    ×{card.qty}
+                  </span>
+                  <span className="truncate font-medium">{card.name}</span>
+                </div>
+                <span className="text-muted-foreground shrink-0 truncate">
+                  {card.setName} · {card.setCode} · {card.rarity}
+                </span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-xs text-muted-foreground">
+            No cards recorded for this run.
+          </p>
+        )}
+      </DynamicDialog>
+    </div>
+  );
+}
+
 // ─── Panel ────────────────────────────────────────────────────────────────────
 
 export function BundlePanel() {
@@ -398,6 +535,7 @@ export function BundlePanel() {
       <Field>
         <FieldLabel>Bundle Mode</FieldLabel>
         <BundleProgress />
+        <BundleInventory />
       </Field>
     );
   }
@@ -418,7 +556,14 @@ export function BundlePanel() {
               className="flex items-center gap-1.5 rounded-lg border px-2 py-1.5"
             >
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium truncate">{config.name}</p>
+                <p className="text-sm font-medium truncate">
+                  {config.name}
+                  {config.gameKey && (
+                    <span className="ml-1.5 text-[10px] font-mono text-muted-foreground">
+                      {gameAcronym(config.gameKey)}
+                    </span>
+                  )}
+                </p>
                 <p className="text-xs text-muted-foreground truncate">
                   {config.targets
                     .map((t) => `${t.count} ${t.rarity}`)
@@ -476,6 +621,7 @@ export function BundlePanel() {
         onOpenChange={setDialogOpen}
         config={editing}
       />
+      <BundleInventory />
     </Field>
   );
 }

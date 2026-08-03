@@ -2,15 +2,18 @@ import {
   type BundleConfig,
   type BundlePlaceResult,
   type BundleRun,
+  type BundleRunCard,
   type BundleTarget,
   bundleTargetKey,
   type FoilFilter,
+  gameAcronym,
+  type PlayingCard,
 } from "@magic-vault/shared";
-import { and, desc, eq } from "drizzle-orm";
+import { and, count, desc, eq, inArray, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import type { Transaction } from "../db";
 import { authQuery } from "../db";
-import { bundleConfigs, bundleRuns } from "../db/schema";
+import { bundleConfigs, bundleRuns, cardImageVectors } from "../db/schema";
 import { requireAuth, requireOrg, type AppEnv } from "../middleware/auth";
 
 const router = new Hono<AppEnv>();
@@ -26,6 +29,7 @@ function toConfig(row: ConfigRow): BundleConfig {
     rejectBinNumber: row.rejectBinNumber,
     allowDuplicates: row.allowDuplicates,
     holoDetection: row.holoDetection,
+    gameKey: row.gameKey ?? null,
     isActive: row.isActive,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
@@ -47,6 +51,7 @@ function toRun(row: RunRow, configName: string, configGuid: string): BundleRun {
     placedCardIds: (row.placedCardIds as string[]) ?? [],
     counts: (row.counts as Record<string, number>) ?? {},
     totalValueUsd: Number(row.totalValueUsd) || 0,
+    sku: row.sku ?? null,
     createdAt: row.createdAt.toISOString(),
     completedAt: row.completedAt?.toISOString() ?? null,
     updatedAt: row.updatedAt.toISOString(),
@@ -96,6 +101,110 @@ async function _loadActiveRun(
   };
 }
 
+/**
+ * Next sequential SKU for a game: `{ACRONYM}-{CARD_COUNT}-{SEQ}` (e.g.
+ * "MTG-40-001"). SEQ is the run count for that game + 1, so SKUs are
+ * stable, human-readable inventory codes.
+ */
+async function nextBundleSku(
+  tx: Transaction,
+  orgId: string,
+  gameKey: string | null,
+  totalCount: number,
+): Promise<string> {
+  const rows = await tx
+    .select({ n: count() })
+    .from(bundleRuns)
+    .innerJoin(bundleConfigs, eq(bundleRuns.configId, bundleConfigs.id))
+    .where(
+      and(
+        eq(bundleRuns.orgId, orgId),
+        gameKey
+          ? eq(bundleConfigs.gameKey, gameKey)
+          : sql`${bundleConfigs.gameKey} IS NULL`,
+      ),
+    );
+  const seq = Number(rows[0]?.n ?? 0) + 1;
+  return `${gameAcronym(gameKey)}-${totalCount}-${String(seq).padStart(3, "0")}`;
+}
+
+/** Resolve a run's placed card ids into display rows (grouped by card). */
+async function loadRunCards(
+  tx: Transaction,
+  gameKey: string | null,
+  cardIds: string[],
+): Promise<BundleRunCard[]> {
+  if (cardIds.length === 0) return [];
+  const grouped = new Map<string, number>();
+  for (const id of cardIds) grouped.set(id, (grouped.get(id) ?? 0) + 1);
+
+  const rows = await tx
+    .select({
+      scryfallId: cardImageVectors.scryfallId,
+      name: cardImageVectors.name,
+      setCode: cardImageVectors.setCode,
+      cardData: cardImageVectors.cardData,
+    })
+    .from(cardImageVectors)
+    .where(
+      and(
+        gameKey ? eq(cardImageVectors.gameKey, gameKey) : undefined,
+        inArray(cardImageVectors.scryfallId, cardIds),
+      ),
+    );
+
+  return rows.map((row) => {
+    const cd = row.cardData as PlayingCard | null;
+    return {
+      cardId: row.scryfallId,
+      name: cd?.name ?? row.name ?? row.scryfallId,
+      setName: cd?.set_name ?? "",
+      setCode: cd?.set ?? row.setCode ?? "",
+      rarity: cd?.rarity ?? "",
+      priceUsd: cd?.prices?.usd ?? null,
+      qty: grouped.get(row.scryfallId) ?? 1,
+    };
+  });
+}
+
+function csvCell(value: string | number | null | undefined): string {
+  if (value == null || value === "") return "";
+  const text = String(value);
+  return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '\"\"')}"` : text;
+}
+
+function buildBundleCsv(
+  run: BundleRun,
+  configName: string,
+  gameKey: string | null,
+  cards: BundleRunCard[],
+): string {
+  const lines: string[] = [];
+  lines.push(`SKU,${csvCell(run.sku ?? "")}`);
+  lines.push(`Config,${csvCell(configName)}`);
+  lines.push(`Game,${csvCell(gameKey ?? "")}`);
+  lines.push(`Created,${csvCell(run.createdAt.slice(0, 10))}`);
+  lines.push(`Cards,${run.placedCardIds.length}`);
+  lines.push(`Total value USD,${(Number(run.totalValueUsd) || 0).toFixed(2)}`);
+  lines.push("");
+  lines.push("Qty,Card Name,Set,Set Code,Rarity,Price USD");
+  for (const card of cards) {
+    lines.push(
+      [
+        card.qty,
+        card.name,
+        card.setName,
+        card.setCode,
+        card.rarity,
+        card.priceUsd ?? "",
+      ]
+        .map((v) => csvCell(v))
+        .join(","),
+    );
+  }
+  return lines.join("\n");
+}
+
 // GET /bundles — all configs, each with its active run (if any)
 router.get("/", requireAuth, requireOrg, async (c) => {
   const orgId = c.get("orgId");
@@ -120,6 +229,7 @@ router.post("/", requireAuth, requireOrg, async (c) => {
       rejectBinNumber: number;
       allowDuplicates?: boolean;
       holoDetection?: boolean;
+      gameKey?: string | null;
     }>()
     .catch(() => null);
   if (!body || !body.name?.trim()) {
@@ -153,6 +263,7 @@ router.post("/", requireAuth, requireOrg, async (c) => {
         rejectBinNumber,
         allowDuplicates: body.allowDuplicates ?? false,
         holoDetection: body.holoDetection ?? false,
+        gameKey: body.gameKey?.trim() || null,
         isActive: true,
         orgId,
       });
@@ -176,6 +287,7 @@ router.put("/:guid", requireAuth, requireOrg, async (c) => {
       rejectBinNumber?: number;
       allowDuplicates?: boolean;
       holoDetection?: boolean;
+      gameKey?: string | null;
     }>()
     .catch(() => null);
   try {
@@ -210,6 +322,9 @@ router.put("/:guid", requireAuth, requireOrg, async (c) => {
       }
       if (body && typeof body.holoDetection === "boolean") {
         updates.holoDetection = body.holoDetection;
+      }
+      if (body && "gameKey" in body) {
+        updates.gameKey = body.gameKey?.trim() || null;
       }
       await tx
         .update(bundleConfigs)
@@ -256,7 +371,7 @@ router.post("/:guid/start", requireAuth, requireOrg, async (c) => {
       const config = await tx.query.bundleConfigs.findFirst({
         where: (t, { eq, and }) =>
           and(eq(t.guid, guid), eq(t.orgId, orgId)),
-        columns: { id: true },
+        columns: { id: true, name: true, gameKey: true, targets: true },
       });
       if (!config) return { success: false, message: "Bundle config not found." };
       await tx
@@ -265,16 +380,125 @@ router.post("/:guid/start", requireAuth, requireOrg, async (c) => {
         .where(
           and(eq(bundleRuns.orgId, orgId), eq(bundleRuns.status, "active")),
         );
+      const totalCount = (config.targets as BundleTarget[]).reduce(
+        (n, t) => n + (t.count ?? 0),
+        0,
+      );
+      const sku = await nextBundleSku(
+        tx,
+        orgId,
+        config.gameKey ?? null,
+        totalCount,
+      );
       await tx.insert(bundleRuns).values({
         configId: config.id,
         orgId,
         status: "active",
         placedCardIds: [],
         counts: {},
+        sku,
       });
       return { success: true, data: (await _loadConfigs(tx, orgId)) };
     });
     return c.json(data);
+  } catch (err) {
+    console.error(err);
+    return c.json({ success: false, message: "Database error." }, 500);
+  }
+});
+
+// GET /bundles/runs — every run (active + past) for the inventory view.
+router.get("/runs", requireAuth, requireOrg, async (c) => {
+  const orgId = c.get("orgId");
+  try {
+    const data = await authQuery(c.get("jwtClaims"), async (tx) => {
+      const runs = await tx.query.bundleRuns.findMany({
+        where: (t, { eq }) => eq(t.orgId, orgId),
+        orderBy: (t, { desc }) => [desc(t.createdAt)],
+      });
+      const configs = await tx.query.bundleConfigs.findMany({
+        where: (t, { eq }) => eq(t.orgId, orgId),
+      });
+      const byId = new Map(configs.map((cfg) => [cfg.id, cfg]));
+      return runs.map((r) => {
+        const cfg = byId.get(r.configId);
+        return toRun(
+          r,
+          cfg?.name ?? "Deleted config",
+          cfg?.guid ?? String(r.configId),
+        );
+      });
+    });
+    return c.json({ success: true, data });
+  } catch (err) {
+    console.error(err);
+    return c.json({ success: false, message: "Database error." }, 500);
+  }
+});
+
+// GET /bundles/run/:guid/cards — card details for a run (for the inventory
+// view + CSV). Groups duplicates runs by card id with a quantity.
+router.get("/run/:guid/cards", requireAuth, requireOrg, async (c) => {
+  const orgId = c.get("orgId");
+  const guid = c.req.param("guid");
+  try {
+    const data = await authQuery(c.get("jwtClaims"), async (tx) => {
+      const run = await tx.query.bundleRuns.findFirst({
+        where: (t, { eq, and }) => and(eq(t.guid, guid), eq(t.orgId, orgId)),
+      });
+      if (!run) return null;
+      const config = await tx.query.bundleConfigs.findFirst({
+        where: (t, { eq }) => eq(t.id, run.configId),
+      });
+      return loadRunCards(
+        tx,
+        config?.gameKey ?? null,
+        (run.placedCardIds as string[]) ?? [],
+      );
+    });
+    if (!data) return c.json({ success: false, message: "Run not found." }, 404);
+    return c.json({ success: true, data });
+  } catch (err) {
+    console.error(err);
+    return c.json({ success: false, message: "Database error." }, 500);
+  }
+});
+
+// GET /bundles/run/:guid/csv — downloadable inventory record for a run.
+router.get("/run/:guid/csv", requireAuth, requireOrg, async (c) => {
+  const orgId = c.get("orgId");
+  const guid = c.req.param("guid");
+  try {
+    const data = await authQuery(c.get("jwtClaims"), async (tx) => {
+      const run = await tx.query.bundleRuns.findFirst({
+        where: (t, { eq, and }) => and(eq(t.guid, guid), eq(t.orgId, orgId)),
+      });
+      if (!run) return null;
+      const config = await tx.query.bundleConfigs.findFirst({
+        where: (t, { eq }) => eq(t.id, run.configId),
+      });
+      const cards = await loadRunCards(
+        tx,
+        config?.gameKey ?? null,
+        (run.placedCardIds as string[]) ?? [],
+      );
+      return {
+        sku: run.sku ?? guid,
+        csv: buildBundleCsv(
+          toRun(run, config?.name ?? "Deleted config", config?.guid ?? String(run.configId)),
+          config?.name ?? "Deleted config",
+          config?.gameKey ?? null,
+          cards,
+        ),
+      };
+    });
+    if (!data) return c.json({ success: false, message: "Run not found." }, 404);
+    c.header("Content-Type", "text/csv; charset=utf-8");
+    c.header(
+      "Content-Disposition",
+      `attachment; filename="bundle-${data.sku.replace(/[^A-Za-z0-9-]/g, "")}.csv"`,
+    );
+    return c.body(data.csv);
   } catch (err) {
     console.error(err);
     return c.json({ success: false, message: "Database error." }, 500);

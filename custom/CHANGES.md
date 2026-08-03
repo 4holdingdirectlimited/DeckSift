@@ -1762,6 +1762,51 @@ is v8-only.
    `pnpm install`.
 2. Remove the `pnpm.overrides` block from root `package.json`.
 
+## Item 41 — Fix theme toggles + bundle SKU/inventory (web + server)
+
+**Status:** implemented, uncommitted.
+
+### Why
+
+Two things: (a) the Light/Dark/System theme toggles did nothing — `next-themes`
+`useTheme()` was used but no `ThemeProvider` was mounted (the provider lived in
+the auth-gated layout removed in item 13, so this has been broken since); (b) a
+seller needs every completed bundle to be traceable — a SKU, the list of cards
+that went into it, and a CSV record for disputes/claims.
+
+### What changed
+
+- **Theme** — `packages/web/src/main.tsx` now wraps the app in
+  `<ThemeProvider attribute="class" defaultTheme="system" enableSystem>`;
+  the CSS already had the class-based `dark` variant and `.dark` variables.
+- **Bundle SKU** — `bundle_runs.sku` column (migration `0005_bundle_sku`)
+  assigned at run start: `{ACRONYM}-{CARD_COUNT}-{SEQ}` (e.g. `MTG-40-001`)
+  from the config's game + total target count + per-game run sequence.
+  `bundle_configs.game_key` column records the game (picked in the bundle
+  editor, defaulting to the active collection's game). Shared
+  `GAME_ACRONYMS` / `gameAcronym()` in
+  `packages/shared/src/constants/game-acronyms.constant.ts` (MTG/YGO/PKM/DIG/GUN,
+  `TCG` fallback).
+- **Bundle inventory** — new endpoints: `GET /bundles/runs` (all runs),
+  `GET /bundles/run/:guid/cards` (card details grouped with qty),
+  `GET /bundles/run/:guid/csv` (downloadable inventory CSV). The panel shows
+  the SKU on the active run, a **Bundle inventory** list of past runs, a
+  view-cards dialog, and an Export CSV button per run.
+- Seeder now sets `game_key: "mtg"` on the default bundle.
+
+### Behavior notes
+
+- Existing runs/configs predating the columns show no SKU/game until a new
+  run is started (configs can be edited to set a game).
+- The CSV is the inventory record: SKU, config, game, date, card count, total
+  value, then per-card rows (qty, name, set, rarity, price).
+
+### How to revert
+
+1. Drop migration `0005` (`bundle_runs.sku`, `bundle_configs.game_key`).
+2. Remove the SKU/inventory endpoints + panel additions and the
+   `ThemeProvider` wrap in `main.tsx`.
+
 ---
 
 *Template for future entries:*

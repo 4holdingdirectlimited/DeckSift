@@ -12,6 +12,7 @@ export * from "./interfaces/scryfall.interface";
 export * from "./interfaces/sort-bins.interface";
 
 // Constants
+export * from "./constants/game-acronyms.constant";
 export * from "./constants/rarity.constant";
 export * from "./constants/scryfall.constant";
 export * from "./constants/sort-bins.constant";

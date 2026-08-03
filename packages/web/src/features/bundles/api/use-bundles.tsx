@@ -2,6 +2,7 @@ import { bundleTargetKey } from "@magic-vault/shared";
 import type {
   BundlePlaceResult,
   BundleRun,
+  BundleRunCard,
   BundleTarget,
 } from "@magic-vault/shared";
 import {
@@ -9,7 +10,10 @@ import {
   completeBundleRun,
   createBundle,
   deleteBundle,
+  downloadRunCsv,
+  loadBundleRuns,
   loadBundles,
+  loadRunCards,
   placeCardInBundle,
   startBundleRun,
   updateBundle,
@@ -35,12 +39,19 @@ interface BundlesContextValue {
   isBundleActive: boolean;
   /** Reject bin of the config backing the active run (safe-failure fallback). */
   rejectBinNumber: number | null;
+  /** Every run (active + past), newest first — the bundle inventory. */
+  runs: BundleRun[];
+  /** Card details (grouped with qty) for a run. */
+  getRunCards: (runGuid: string) => Promise<BundleRunCard[]>;
+  /** Download a run's inventory CSV. */
+  exportRunCsv: (runGuid: string) => Promise<void>;
   createConfig: (input: {
     name: string;
     targets: BundleTarget[];
     rejectBinNumber: number;
     allowDuplicates?: boolean;
     holoDetection?: boolean;
+    gameKey?: string | null;
   }) => Promise<void>;
   updateConfig: (
     guid: string,
@@ -50,6 +61,7 @@ interface BundlesContextValue {
       rejectBinNumber: number;
       allowDuplicates: boolean;
       holoDetection: boolean;
+      gameKey: string | null;
     }>,
   ) => Promise<void>;
   deleteConfig: (guid: string) => Promise<void>;
@@ -100,6 +112,12 @@ export function BundlesProvider({ children }: { children: React.ReactNode }) {
   const activeRunRef = useRef(activeRun);
   activeRunRef.current = activeRun;
 
+  const { data: runs = [] } = useQuery({
+    queryKey: ["bundles", "runs"],
+    queryFn: loadBundleRuns,
+    staleTime: Infinity,
+  });
+
   /** Refresh configs after a mutation and bounce a follow-up refresh so the
    *  embedded run state stays current. */
   const refresh = useCallback(() => {
@@ -108,6 +126,32 @@ export function BundlesProvider({ children }: { children: React.ReactNode }) {
     window.setTimeout(() => setPendingRefresh((n) => Math.max(0, n - 1)), 1500);
   }, [queryClient]);
 
+  const refreshRuns = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: ["bundles", "runs"] });
+  }, [queryClient]);
+
+  const getRunCards = useCallback(async (runGuid: string) => {
+    try {
+      return await loadRunCards(runGuid);
+    } catch (err) {
+      toast.error("Failed to load bundle cards", {
+        description: err instanceof Error ? err.message : undefined,
+      });
+      return [];
+    }
+  }, []);
+
+  const exportRunCsv = useCallback(async (runGuid: string) => {
+    try {
+      await downloadRunCsv(runGuid);
+      toast.success("Bundle CSV downloaded");
+    } catch (err) {
+      toast.error("Failed to download bundle CSV", {
+        description: err instanceof Error ? err.message : undefined,
+      });
+    }
+  }, []);
+
   const createConfig = useCallback(
     async (input: {
       name: string;
@@ -115,10 +159,12 @@ export function BundlesProvider({ children }: { children: React.ReactNode }) {
       rejectBinNumber: number;
       allowDuplicates?: boolean;
       holoDetection?: boolean;
+      gameKey?: string | null;
     }) => {
       try {
         await createBundle(input);
         refresh();
+        refreshRuns();
         toast.success("Bundle config created");
       } catch (err) {
         toast.error("Failed to create bundle", {
@@ -138,6 +184,7 @@ export function BundlesProvider({ children }: { children: React.ReactNode }) {
         rejectBinNumber: number;
         allowDuplicates: boolean;
         holoDetection: boolean;
+        gameKey: string | null;
       }>,
     ) => {
       try {
@@ -173,6 +220,7 @@ export function BundlesProvider({ children }: { children: React.ReactNode }) {
       try {
         await startBundleRun(configGuid);
         refresh();
+        refreshRuns();
         toast.success("Bundle run started", {
           description:
             "Bundle routing is now active — duplicates and overflow go to the reject bin.",
@@ -282,6 +330,9 @@ export function BundlesProvider({ children }: { children: React.ReactNode }) {
         activeRun,
         isBundleActive,
         rejectBinNumber,
+        runs,
+        getRunCards,
+        exportRunCsv,
         createConfig,
         updateConfig,
         deleteConfig,

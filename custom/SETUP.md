@@ -80,6 +80,15 @@ The **Bundle Mode** panel lives on the scanner page (left sidebar).
   pauses, and the bundle is done. Start the next run to assemble another.
 - **Resume** — runs persist in Postgres; reloading or restarting the app
   resumes the active run exactly where it left off.
+- **Game (SKU prefix)** — pick the game when creating a bundle (defaults to
+  the active collection's game). Each run gets an inventory **SKU** at start:
+  `{GAME}-{CARD_COUNT}-{SEQ}` (e.g. `MTG-40-001`, `YGO-40-002`). Acronyms:
+  MTG, YGO, PKM, DIG, GUN (unknown keys fall back to `TCG`).
+- **Bundle inventory** — past runs are listed under the panel with their SKU,
+  card count, value, and status. Each run stores the full list of placed
+  cards; open it to view the cards, or **download the bundle CSV** — an
+  inventory record (SKU, config, game, date, total value + per-card rows) for
+  handling sales disputes / “missing card” claims.
 
 Rarity names must match what the sync stores for that game (all lowercased):
 MTG uses `common/uncommon/rare/mythic`; Yu-Gi-Oh! uses

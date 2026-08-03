@@ -24,7 +24,7 @@ Original hardware build: https://makerworld.com/en/models/3066180-tcg-card-sorti
 - **Multi-TCG support**: pluggable card-search adapters per game (MTG/Scryfall, Yu-Gi-Oh!, Digimon, Gundam Card Game, Pokémon), each with its own field definitions driving sorting, filtering, and bin rules — a config-driven architecture makes adding more games (One Piece, Dragon Ball, …) a small, independent task
 - **Rule-based sort bins**, grouped by collection, with and/or rule trees across each game's own card fields (color, rarity, price, set, type line, mana value, …)
 - **Value-based binning** — numeric price rules on every bin (`Price (USD) greater than 2` → reject bin, etc.), backed by live prices for MTG and Yu-Gi-Oh!
-- **Bundle mode** — assemble fixed-composition bundles (e.g. 15 common / 15 uncommon / 5 rare / 5 mythic) with no duplicates, optional holo filtering, live running value, and pause-on-complete
+- **Bundle mode** — assemble fixed-composition bundles (e.g. 15 common / 15 uncommon / 5 rare / 5 mythic) with no duplicates, optional holo filtering, live running value, and pause-on-complete. Every run gets an inventory **SKU** (`MTG-40-001`), stores the full list of cards it contained, and can be exported as a CSV record
 - **Set-chase mode** — route every card from a target set that you don't already own into a chase bin, automatically building set-complete piles
 - **Wishlist routing** — specific cards (by id or name pattern) route to their own bin ahead of normal rules
 - **Holo/foil detection** — two-frame scan light (firmware-controlled LED) + heuristic classifier, with a smart skip so matte cards only need one frame

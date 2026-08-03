@@ -334,6 +334,8 @@ export const bundleConfigs = pgTable(
     // and a plain common are both just "common"). When true, per-target foil
     // filters in `targets` apply.
     holoDetection: boolean("holo_detection").notNull().default(false),
+    // Game the bundle is assembled from — drives the run's SKU acronym.
+    gameKey: text("game_key"),
     isActive: boolean("is_active").notNull().default(false),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
@@ -365,6 +367,8 @@ export const bundleRuns = pgTable(
     // Running market value of accepted cards (sum of prices.usd) — lets a
     // seller see what the assembled bundle is worth.
     totalValueUsd: doublePrecision("total_value_usd").notNull().default(0),
+    // Inventory SKU assigned at run start (e.g. "MTG-40-001").
+    sku: text("sku"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     completedAt: timestamp("completed_at"),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),

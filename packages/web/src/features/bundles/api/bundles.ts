@@ -2,10 +2,11 @@ import type {
   BundleConfig,
   BundlePlaceResult,
   BundleRun,
+  BundleRunCard,
   BundleTarget,
   Result,
 } from "@magic-vault/shared";
-import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/api/client";
+import { apiDelete, apiGet, apiPost, apiPut, getAuthHeaders, API_BASE } from "@/lib/api/client";
 import { queryOptions } from "@tanstack/react-query";
 
 /** A config with its active run embedded (when one is running). */
@@ -30,6 +31,7 @@ export async function createBundle(input: {
   rejectBinNumber: number;
   allowDuplicates?: boolean;
   holoDetection?: boolean;
+  gameKey?: string | null;
 }): Promise<BundleConfigWithRun[]> {
   const r = await apiPost<Result<BundleConfigWithRun[]>>("/api/bundles", input);
   if (!r.success) throw new Error(r.message ?? "Failed to create bundle");
@@ -44,6 +46,7 @@ export async function updateBundle(
     rejectBinNumber: number;
     allowDuplicates: boolean;
     holoDetection: boolean;
+    gameKey: string | null;
   }>,
 ): Promise<BundleConfigWithRun[]> {
   const r = await apiPut<Result<BundleConfigWithRun[]>>(
@@ -104,4 +107,37 @@ export async function placeCardInBundle(
   );
   if (!r.success) throw new Error(r.message ?? "Failed to place card in bundle");
   return r.data!;
+}
+
+/** All runs (active + past) for the inventory view. */
+export async function loadBundleRuns(): Promise<BundleRun[]> {
+  const r = await apiGet<Result<BundleRun[]>>("/api/bundles/runs");
+  return r.data ?? [];
+}
+
+/** Card details (grouped with qty) for one run. */
+export async function loadRunCards(
+  runGuid: string,
+): Promise<BundleRunCard[]> {
+  const r = await apiGet<Result<BundleRunCard[]>>(
+    `/api/bundles/run/${runGuid}/cards`,
+  );
+  return r.data ?? [];
+}
+
+/** Download a run's inventory CSV. */
+export async function downloadRunCsv(runGuid: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/bundles/run/${runGuid}/csv`, {
+    headers: await getAuthHeaders(),
+  });
+  if (!res.ok) throw new Error(`Failed to download CSV (${res.status})`);
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `bundle-${runGuid}.csv`;
+  document.body.appendChild(anchor);
+  anchor.click();
+  document.body.removeChild(anchor);
+  URL.revokeObjectURL(url);
 }

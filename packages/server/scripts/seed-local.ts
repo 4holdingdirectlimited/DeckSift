@@ -243,6 +243,7 @@ async function seedBundleConfig(): Promise<void> {
       name: "Standard Bundle (15/15/5/5)",
       targets,
       rejectBinNumber: 7,
+      gameKey: "mtg",
       isActive: true,
       orgId: LOCAL_ORG_ID,
     })

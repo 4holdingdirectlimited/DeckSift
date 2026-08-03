@@ -45,6 +45,11 @@ export interface BundleConfig {
   holoDetection: boolean;
   /** Active configs are offered for runs in the UI. */
   isActive: boolean;
+  /**
+   * Game the bundle is assembled from (used for the run's SKU acronym).
+   * Set when the config is created/edited from the active collection's game.
+   */
+  gameKey?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -62,9 +67,27 @@ export interface BundleRun {
   counts: Record<string, number>;
   /** Running market value of accepted cards (sum of prices.usd). */
   totalValueUsd: number;
+  /**
+   * Inventory SKU assigned at run start: `{GAME}-{CARD_COUNT}-{SEQ}`, e.g.
+   * "MTG-40-001". Stored so completed bundles are traceable after the fact.
+   */
+  sku?: string | null;
   createdAt: string;
   completedAt?: string | null;
   updatedAt: string;
+}
+
+/** One unique card in a bundle run's placed set, with quantity. */
+export interface BundleRunCard {
+  /** Card id (scryfall id / adapter id) as placed in the run. */
+  cardId: string;
+  name: string;
+  setName: string;
+  setCode: string;
+  rarity: string;
+  priceUsd: string | null;
+  /** How many copies of this card are in the run (1 unless duplicates allowed). */
+  qty: number;
 }
 
 /** Server verdict for a card offered to the current run. */
