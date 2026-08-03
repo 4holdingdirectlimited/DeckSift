@@ -13,24 +13,6 @@ export default defineConfig({
   define: {
     __APP_VERSION__: JSON.stringify(`${version}`),
   },
-  build: {
-    rollupOptions: {
-      output: {
-        manualChunks(id) {
-          // Keep the Neon auth stack in one chunk — its UI and core modules
-          // re-export each other, and splitting them produced a circular
-          // chunk dependency warning (broken execution order risk).
-          if (
-            id.includes("@neondatabase") ||
-            id.includes("better-auth") ||
-            id.includes("better-fetch")
-          ) {
-            return "auth";
-          }
-        },
-      },
-    },
-  },
   envDir: path.resolve(__dirname, "../../"),
   resolve: {
     alias: {
