@@ -33,11 +33,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: arduino/arduino-cli-action@v1
+      # arduino/arduino-cli-action no longer exists on GitHub, which made this
+      # job fail on every push regardless of the firmware. compile-sketches is
+      # the current official Arduino action and handles core/library setup.
+      - uses: arduino/compile-sketches@v1
         with:
-          library-manager: update
-      - run: arduino-cli core update-index
-      - run: arduino-cli core install arduino:renesas_uno
-      - run: arduino-cli lib install ArduinoJson
-      - run: arduino-cli lib install "Adafruit PWM Servo Driver Library"
-      - run: arduino-cli compile --fqbn arduino:renesas_uno:minima arduino/main
+          fqbn: arduino:renesas_uno:minima
+          sketch-paths: |
+            - arduino/main
+          platforms: |
+            - name: arduino:renesas_uno
+          libraries: |
+            - name: ArduinoJson
+              version: 7.4.3
+            - name: Adafruit PWM Servo Driver Library
+              version: 3.0.3
+          enable-deltas-report: false
+          enable-warnings-report: false
