@@ -46,6 +46,7 @@ function toRun(row: RunRow, configName: string, configGuid: string): BundleRun {
     status: (row.status as BundleRun["status"]) ?? "active",
     placedCardIds: (row.placedCardIds as string[]) ?? [],
     counts: (row.counts as Record<string, number>) ?? {},
+    totalValueUsd: Number(row.totalValueUsd) || 0,
     createdAt: row.createdAt.toISOString(),
     completedAt: row.completedAt?.toISOString() ?? null,
     updatedAt: row.updatedAt.toISOString(),
@@ -369,7 +370,7 @@ router.post("/run/:guid/place", requireAuth, requireOrg, async (c) => {
   const orgId = c.get("orgId");
   const guid = c.req.param("guid");
   const body = await c.req
-    .json<{ cardId?: string; rarity?: string; isFoil?: boolean }>()
+    .json<{ cardId?: string; rarity?: string; isFoil?: boolean; priceUsd?: number }>()
     .catch(() => null);
   const cardId = body?.cardId;
   if (!cardId) {
@@ -460,13 +461,18 @@ router.post("/run/:guid/place", requireAuth, requireOrg, async (c) => {
             ? placed
             : [...placed, cardId];
           const complete = targets.every(
-            (t) => (nextCounts[bundleTargetKey(t)] ?? 0) >= t.count,
+            (tt) => (nextCounts[bundleTargetKey(tt)] ?? 0) >= tt.count,
           );
+          const price = Number(body?.priceUsd);
+          const nextValue =
+            (Number(run.totalValueUsd) || 0) +
+            (Number.isFinite(price) && price > 0 ? price : 0);
           await tx
             .update(bundleRuns)
             .set({
               placedCardIds: nextPlaced,
               counts: nextCounts,
+              totalValueUsd: nextValue,
               status: complete ? "completed" : "active",
               completedAt: complete ? new Date() : run.completedAt,
               updatedAt: new Date(),

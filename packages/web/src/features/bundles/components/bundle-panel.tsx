@@ -318,8 +318,15 @@ function BundleProgress() {
     <div className="flex flex-col gap-2 rounded-lg border p-2">
       <div className="flex items-center justify-between gap-2">
         <span className="text-sm font-semibold truncate">{config.name}</span>
-        <span className="text-xs text-muted-foreground shrink-0">
-          {totalPlaced}/{totalTarget}
+        <span className="flex items-center gap-2 shrink-0">
+          {(activeRun.totalValueUsd ?? 0) > 0 && (
+            <span className="text-xs font-semibold text-emerald-500 tabular-nums">
+              ${(activeRun.totalValueUsd ?? 0).toFixed(2)}
+            </span>
+          )}
+          <span className="text-xs text-muted-foreground">
+            {totalPlaced}/{totalTarget}
+          </span>
         </span>
       </div>
       <div className="h-1.5 rounded-full bg-muted overflow-hidden">

@@ -1425,6 +1425,225 @@ way to see per-bin fill or tell the machine “this bin is empty now”.
 2. Remove `binCounts`/`emptyBin`/`pauseForFullBin`/resume hook from
    `use-scanned-cards.tsx` and restore `setAutoFeed`'s count reset.
 
+## Item 31 — Bundle live value (shared + server + web)
+
+**Status:** implemented, uncommitted.
+
+### Why
+
+A seller needs to know what a bundle is worth while it's being assembled, not
+only after it completes. The bundle run now tracks a running `totalValueUsd`
+so the panel can show the value growing in real time.
+
+### What changed
+
+- **Schema** — `bundle_runs.total_value_usd` numeric column (migration
+  `0004_chase_wishlist_value.sql`).
+- **Shared** — `BundleRun.totalValueUsd: number` in
+  `packages/shared/src/interfaces/bundles.interface.ts`.
+- **Server** — `routes/bundles.ts` `POST /run/:guid/place` accepts an optional
+  `priceUsd`; when present and > 0 it's added to `totalValueUsd`. The value
+  persists with the run, so reload/restart resume is exact.
+- **Web** — bundle panel shows the running total next to the progress bar;
+  `bundles.ts` / `use-bundles.tsx` pass `totalValueUsd` through.
+
+### Behavior notes
+
+- Price comes from the scanned card's `prices.usd` (see "Where prices come
+  from" in `custom/SETUP.md` for which games have prices). Cards without a
+  price contribute $0.
+
+### How to revert
+
+1. Drop `bundle_runs.total_value_usd` (reverse migration `0004`).
+2. Remove `totalValueUsd` from the shared interface and the price
+   accumulation block in `routes/bundles.ts`.
+
+---
+
+## Item 32 — Export collection to CSV (web)
+
+**Status:** implemented, uncommitted.
+
+### Why
+
+A collector wants their scanned cards in a spreadsheet (inventory, pricing,
+backup) without any export plumbing.
+
+### What changed
+
+- `packages/web/src/features/cards/lib/collection-export.ts` — groups scanned
+  cards by card id and renders CSV (name, set, set code, rarity, collector #,
+  price USD, qty, foil, bin), with proper quoting.
+- `packages/web/src/features/cards/components/card-grid.tsx` — **Export CSV**
+  button downloads `collection-<date>.csv`. Exports all scanned cards, not
+  just the filtered view.
+
+### Behavior notes
+
+- Foil = “yes” when any scan of that card was foil; Bin comes from the most
+  recent scan that reported one.
+
+### How to revert
+
+1. Remove the Export CSV button from `card-grid.tsx`.
+2. Delete `collection-export.ts`.
+
+---
+
+## Item 33 — Set completeness view (web)
+
+**Status:** implemented, uncommitted.
+
+### Why
+
+Collectors chase full sets; the library can now answer “how close am I to
+finishing this set?” using the cards scanned this session.
+
+### What changed
+
+- `packages/web/src/app/routes/app/library.tsx` — **Set completeness** switch
+  on the library page. When on, search/rarity inputs are disabled and a set
+  code drives the browse; the header shows `owned / total` and a percentage.
+  Owned = scanned-card ids matching the set's cards.
+
+### Behavior notes
+
+- Ownership is session-scoped (scanned cards in the current browser session),
+  matching the scanner's count model.
+
+### How to revert
+
+1. Remove the switch + completeness query from `library.tsx`.
+
+---
+
+## Item 34 — Duplicate report (web)
+
+**Status:** implemented, uncommitted.
+
+### Why
+
+For no-duplicate workflows (and bulk resale), knowing which cards were scanned
+more than once is the fastest way to find accidental doubles.
+
+### What changed
+
+- `packages/web/src/features/cards/components/duplicates-dialog.tsx` — dialog
+  listing every card scanned more than once, with quantity.
+- `card-grid.tsx` — **Duplicates** button opens it (all scanned cards, not the
+  filtered view).
+
+### How to revert
+
+1. Remove the Duplicates button + dialog from `card-grid.tsx`.
+2. Delete `duplicates-dialog.tsx`.
+
+---
+
+## Item 35 — Set-chase mode (server + web)
+
+**Status:** implemented, uncommitted.
+
+### Why
+
+“Chase” a single set: any card from that set that the collection doesn't own
+yet routes to a chase bin; owned/duplicate/off-set cards go to the reject bin.
+Builds set-complete piles automatically.
+
+### What changed
+
+- **Schema** — `chase_configs` + `chase_runs` tables (migration `0004`),
+  org-scoped RLS like every other table.
+- **Server** — `packages/server/src/routes/chase.ts` (mounted in `index.ts`):
+  CRUD on configs, `POST /:guid/start` / `/abort`, and
+  `POST /run/:guid/place` which accepts a card only when its `setCode` matches
+  the config, isn't already found this run, and (when a collection is bound)
+  isn't already owned. Rejects return `not-in-set` / `duplicate` / `owned`
+  with the reject bin.
+- **Web** — `ChaseProvider` (`use-chase.tsx`) + **Chase panel** on the scanner
+  sidebar; scan routing in `use-scanned-cards.tsx` gives chase priority over
+  wishlist and normal bin rules (bundle still wins). Physical bin capacity is
+  checked before a chase placement, so a full chase bin pauses the machine.
+
+### Behavior notes
+
+- Chase runs resume after reload/restart (runs persist in Postgres).
+- Set code comparison is case-insensitive/uppercased on the server.
+
+### How to revert
+
+1. Drop `chase_configs` / `chase_runs` (reverse migration `0004`).
+2. Remove `routes/chase.ts` + mount line, `use-chase.tsx`, `chase-panel.tsx`,
+   and the chase branch in `use-scanned-cards.tsx`.
+
+---
+
+## Item 36 — Wishlist routing (server + web)
+
+**Status:** implemented, uncommitted.
+
+### Why
+
+A seller building orders (or a collector chasing singles) wants specific cards
+to route to their own bin no matter what the normal bin rules say.
+
+### What changed
+
+- **Schema** — `wishlists` + `wishlist_items` tables (migration `0004`).
+- **Server** — `packages/server/src/routes/wishlist.ts` (mounted in
+  `index.ts`): CRUD on wishlists and their items; items are a card id or a
+  name pattern.
+- **Web** — `WishlistProvider` (`use-wishlist.tsx`) + **Wishlist panel** on
+  the scanner sidebar. `useScannedCards.matchBin(card, gameKey)` matches an
+  active wishlist for the collection's game by card id or name pattern;
+  matches override normal bin rules (after bundle + chase). Bin capacity is
+  enforced before routing.
+
+### Behavior notes
+
+- A wishlist only fires for the same game as the active collection.
+- Name patterns match case-insensitively against the card name.
+
+### How to revert
+
+1. Drop `wishlists` / `wishlist_items` (reverse migration `0004`).
+2. Remove `routes/wishlist.ts` + mount line, `use-wishlist.tsx`,
+   `wishlist-panel.tsx`, and the wishlist branch in `use-scanned-cards.tsx`.
+
+---
+
+## Item 37 — Local art cache + in-flight dedupe (server)
+
+**Status:** implemented, uncommitted.
+
+### Why
+
+Art requests previously hit the image CDN every time (slow, and useless for a
+local-only build). The sync already downloads every card's image; now that
+work is reused as a disk cache.
+
+### What changed
+
+- `packages/server/src/lib/art-cache.ts` — SHA-256-keyed disk cache under
+  `.cache/art` (image + content-type meta), a best-effort `saveArtToCache`,
+  and `fetchImageWithCache` with in-flight dedupe (concurrent requests for the
+  same URL share one upstream fetch).
+- `routes/card.ts` image proxy now serves from the cache first.
+- `lib/sync-job.ts` warms the cache for every image it downloads for
+  embedding, so after a game sync its art is fully local and instant.
+
+### Behavior notes
+
+- Cache dir is `process.cwd()/.cache/art` (override with `ART_CACHE_DIR`).
+- The bulk catalogs (Scryfall etc.) were already cached on disk; this extends
+  that to individual card art.
+
+### How to revert
+
+1. Delete `lib/art-cache.ts`; restore the image proxy's direct fetch.
+2. Remove the `saveArtToCache` call in `sync-job.ts`.
+
 ---
 
 *Template for future entries:*

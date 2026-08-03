@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -8,13 +9,16 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
 import { gamesQueryOptions } from "@/features/games/api/games";
 import {
   browseLibrary,
   type LibraryCard,
 } from "@/features/library/api/library";
 import { useOrg } from "@/features/companies/api/use-organization";
+import { useScannedCards } from "@/features/scanner/api/use-scanned-cards";
 import { cn, resolveCardImageUrl } from "@/lib/utils";
+import { IconCheck } from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -148,6 +152,8 @@ export default function LibraryPage() {
   const [cards, setCards] = useState<LibraryCard[]>([]);
   const [total, setTotal] = useState(0);
   const [selected, setSelected] = useState<LibraryCard | null>(null);
+  const [completenessMode, setCompletenessMode] = useState(false);
+  const { cards: scannedCards } = useScannedCards();
   const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const { data: games = [] } = useQuery({
@@ -161,18 +167,36 @@ export default function LibraryPage() {
     return rarityField?.options?.map((o) => o.value) ?? [];
   }, [games, gameKey]);
 
+  // Set completeness mode: ids the user has scanned this session.
+  const ownedScryfallIds = useMemo(
+    () => new Set(scannedCards.map((scan) => scan.card.id)),
+    [scannedCards],
+  );
+  const ownedCount = useMemo(
+    () => cards.filter((card) => ownedScryfallIds.has(card.scryfallId)).length,
+    [cards, ownedScryfallIds],
+  );
+
   const query = useQuery({
-    queryKey: ["library", gameKey, search, rarity, setCode, page],
+    queryKey: [
+      "library",
+      gameKey,
+      search,
+      rarity,
+      setCode,
+      page,
+      completenessMode,
+    ],
     queryFn: () =>
       browseLibrary({
         gameKey: gameKey || undefined,
-        search: search || undefined,
-        rarity: rarity || undefined,
+        search: completenessMode ? undefined : search || undefined,
+        rarity: completenessMode ? undefined : rarity || undefined,
         set: setCode || undefined,
         page,
       }),
     staleTime: 30_000,
-    enabled: !!activeOrg,
+    enabled: !!activeOrg && !(completenessMode && !setCode),
   });
 
   useEffect(() => {
@@ -188,7 +212,7 @@ export default function LibraryPage() {
   const resetPage = useCallback(() => setPage(1), []);
   useEffect(() => {
     resetPage();
-  }, [gameKey, search, rarity, setCode, resetPage]);
+  }, [gameKey, search, rarity, setCode, completenessMode, resetPage]);
 
   function handleSearchInput(value: string) {
     setSearchInput(value);
@@ -213,6 +237,7 @@ export default function LibraryPage() {
             placeholder="Search by name..."
             value={searchInput}
             onChange={(e) => handleSearchInput(e.target.value)}
+            disabled={completenessMode}
             className="h-8 text-xs max-w-56"
           />
         </div>
@@ -240,7 +265,11 @@ export default function LibraryPage() {
 
           <div className="flex items-center gap-1.5 ml-auto">
             {rarityOptions.length > 0 && (
-              <Select value={rarity} onValueChange={(v) => setRarity(v ?? "")}>
+              <Select
+                value={rarity}
+                onValueChange={(v) => setRarity(v ?? "")}
+                disabled={completenessMode}
+              >
                 <SelectTrigger className="h-8 text-xs w-40">
                   <SelectValue placeholder="Any rarity" />
                 </SelectTrigger>
@@ -260,88 +289,140 @@ export default function LibraryPage() {
               onChange={(e) => setSetCode(e.target.value)}
               className="h-8 text-xs w-36"
             />
+            <div className="flex items-center gap-1.5 pl-1">
+              <Switch
+                id="set-completeness"
+                checked={completenessMode}
+                onCheckedChange={(checked) => setCompletenessMode(checked)}
+              />
+              <Label htmlFor="set-completeness">Set completeness</Label>
+            </div>
           </div>
         </div>
       </div>
 
       <div className="flex-1 min-h-0 overflow-y-auto px-4 pb-4">
-        {isLoading && page === 1 && (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
-            {Array.from({ length: 12 }).map((_, i) => (
-              <Skeleton key={i} className="aspect-[5/7] rounded-lg" />
-            ))}
+        {completenessMode && (
+          <div className="pb-3">
+            {setCode ? (
+              <p className="text-xs tabular-nums text-muted-foreground">
+                <span className="font-medium text-foreground">
+                  {ownedCount}
+                </span>{" "}
+                / {total} owned
+                {total > 0 && ` (${Math.round((ownedCount / total) * 100)}%)`}
+              </p>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Enter a set code above to see which cards you still need.
+              </p>
+            )}
           </div>
         )}
 
-        {!isLoading && cards.length === 0 && (
-          <p className="text-xs text-muted-foreground text-center py-10">
-            No cards found. Sync a game in Admin to populate the library.
-          </p>
-        )}
-
-        {cards.length > 0 && (
+        {completenessMode && !setCode ? null : (
           <>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
-              {cards.map((card) => {
-                const imageUrl = resolveCardImageUrl(card.imageUrl ?? undefined);
-                return (
-                  <button
-                    key={card.scryfallId}
-                    type="button"
-                    onClick={() => setSelected(card)}
-                    className="group flex flex-col rounded-lg border bg-card overflow-hidden text-left transition-colors hover:border-primary/50 hover:bg-accent/50"
-                  >
-                    <div className="aspect-[5/7] overflow-hidden bg-muted">
-                      {imageUrl ? (
-                        <img
-                          src={imageUrl}
-                          alt={card.name}
-                          loading="lazy"
-                          className="size-full object-cover transition-transform group-hover:scale-[1.03]"
-                        />
-                      ) : (
-                        <div className="size-full grid place-items-center">
-                          <span className="text-[10px] text-muted-foreground">
-                            no art
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                    <div className="p-1.5 flex flex-col gap-0.5 min-w-0">
-                      <p className="text-[11px] font-medium truncate">
-                        {card.name}
-                      </p>
-                      <div className="flex items-center justify-between gap-1">
-                        <span className="text-[10px] font-mono text-muted-foreground truncate">
-                          {card.setCode}
-                        </span>
-                        {card.rarity && (
-                          <span
-                            className={cn(
-                              "shrink-0 rounded px-1 py-px text-[9px] font-semibold uppercase",
-                              rarityBadgeClass(card.rarity),
-                            )}
-                          >
-                            {card.rarity.split(" ")[0]}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-
-            {hasMore && (
-              <div className="flex justify-center py-4">
-                <Button
-                  variant="outline"
-                  disabled={isLoading}
-                  onClick={() => setPage((p) => p + 1)}
-                >
-                  {isLoading ? "Loading..." : "Load more"}
-                </Button>
+            {isLoading && page === 1 && (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+                {Array.from({ length: 12 }).map((_, i) => (
+                  <Skeleton key={i} className="aspect-[5/7] rounded-lg" />
+                ))}
               </div>
+            )}
+
+            {!isLoading && cards.length === 0 && (
+              <p className="text-xs text-muted-foreground text-center py-10">
+                No cards found. Sync a game in Admin to populate the library.
+              </p>
+            )}
+
+            {cards.length > 0 && (
+              <>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+                  {cards.map((card) => {
+                    const imageUrl = resolveCardImageUrl(
+                      card.imageUrl ?? undefined,
+                    );
+                    const owned = ownedScryfallIds.has(card.scryfallId);
+                    return (
+                      <button
+                        key={card.scryfallId}
+                        type="button"
+                        onClick={() => setSelected(card)}
+                        className="group flex flex-col rounded-lg border bg-card overflow-hidden text-left transition-colors hover:border-primary/50 hover:bg-accent/50"
+                      >
+                        <div className="relative aspect-[5/7] overflow-hidden bg-muted">
+                          {imageUrl ? (
+                            <img
+                              src={imageUrl}
+                              alt={card.name}
+                              loading="lazy"
+                              className="size-full object-cover transition-transform group-hover:scale-[1.03]"
+                            />
+                          ) : (
+                            <div className="size-full grid place-items-center">
+                              <span className="text-[10px] text-muted-foreground">
+                                no art
+                              </span>
+                            </div>
+                          )}
+                          {completenessMode && (
+                            <span
+                              className={cn(
+                                "absolute top-1 left-1 z-10 inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide",
+                                owned
+                                  ? "bg-emerald-500/15 text-emerald-400"
+                                  : "bg-muted text-muted-foreground",
+                              )}
+                            >
+                              {owned ? (
+                                <>
+                                  <IconCheck className="size-3" />
+                                  Owned
+                                </>
+                              ) : (
+                                "Missing"
+                              )}
+                            </span>
+                          )}
+                        </div>
+                        <div className="p-1.5 flex flex-col gap-0.5 min-w-0">
+                          <p className="text-[11px] font-medium truncate">
+                            {card.name}
+                          </p>
+                          <div className="flex items-center justify-between gap-1">
+                            <span className="text-[10px] font-mono text-muted-foreground truncate">
+                              {card.setCode}
+                            </span>
+                            {card.rarity && (
+                              <span
+                                className={cn(
+                                  "shrink-0 rounded px-1 py-px text-[9px] font-semibold uppercase",
+                                  rarityBadgeClass(card.rarity),
+                                )}
+                              >
+                                {card.rarity.split(" ")[0]}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {hasMore && (
+                  <div className="flex justify-center py-4">
+                    <Button
+                      variant="outline"
+                      disabled={isLoading}
+                      onClick={() => setPage((p) => p + 1)}
+                    >
+                      {isLoading ? "Loading..." : "Load more"}
+                    </Button>
+                  </div>
+                )}
+              </>
             )}
           </>
         )}

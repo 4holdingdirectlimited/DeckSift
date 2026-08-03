@@ -96,10 +96,11 @@ export async function placeCardInBundle(
   cardId: string,
   rarity: string,
   isFoil?: boolean,
+  priceUsd?: number,
 ): Promise<BundlePlaceResult> {
   const r = await apiPost<Result<BundlePlaceResult>>(
     `/api/bundles/run/${runGuid}/place`,
-    { cardId, rarity, isFoil: isFoil === true },
+    { cardId, rarity, isFoil: isFoil === true, priceUsd: priceUsd ?? undefined },
   );
   if (!r.success) throw new Error(r.message ?? "Failed to place card in bundle");
   return r.data!;

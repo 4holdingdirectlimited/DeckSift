@@ -65,6 +65,7 @@ interface BundlesContextValue {
     cardId: string,
     rarity: string,
     isFoil?: boolean,
+    priceUsd?: number,
   ) => Promise<BundlePlaceResult | null>;
 }
 
@@ -222,11 +223,18 @@ export function BundlesProvider({ children }: { children: React.ReactNode }) {
       cardId: string,
       rarity: string,
       isFoil?: boolean,
+      priceUsd?: number,
     ): Promise<BundlePlaceResult | null> => {
       const run = activeRunRef.current;
       if (!run) return null;
       try {
-        const decision = await placeCardInBundle(run.guid, cardId, rarity, isFoil);
+        const decision = await placeCardInBundle(
+          run.guid,
+          cardId,
+          rarity,
+          isFoil,
+          priceUsd,
+        );
         // Mirror the server state into the cached config so the panel updates
         // without a refetch on every scan.
         queryClient.setQueryData<BundleConfigWithRun[]>(["bundles"], (old) =>
@@ -234,6 +242,7 @@ export function BundlesProvider({ children }: { children: React.ReactNode }) {
             if (cfg.guid !== run.configGuid || !cfg.activeRun) return cfg;
             const counts = { ...cfg.activeRun.counts };
             let placed = cfg.activeRun.placedCardIds;
+            let value = cfg.activeRun.totalValueUsd ?? 0;
             if (decision.accepted) {
               const target = cfg.targets.find((t) => t.rarity === rarity);
               if (target) {
@@ -241,6 +250,7 @@ export function BundlesProvider({ children }: { children: React.ReactNode }) {
                 counts[key] = (counts[key] ?? 0) + 1;
               }
               if (!cfg.allowDuplicates) placed = [...placed, cardId];
+              if (priceUsd && priceUsd > 0) value += priceUsd;
             }
             return {
               ...cfg,
@@ -248,6 +258,7 @@ export function BundlesProvider({ children }: { children: React.ReactNode }) {
                 ...cfg.activeRun,
                 counts,
                 placedCardIds: placed,
+                totalValueUsd: value,
                 status: decision.complete ? "completed" : "active",
                 updatedAt: new Date().toISOString(),
               },

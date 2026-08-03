@@ -3,6 +3,7 @@ import { authenticatedRole, crudPolicy } from "drizzle-orm/neon/rls";
 import {
   boolean,
   customType,
+  doublePrecision,
   index,
   integer,
   jsonb,
@@ -361,6 +362,9 @@ export const bundleRuns = pgTable(
     status: text("status").notNull().default("active"),
     placedCardIds: jsonb("placed_card_ids").notNull().default([]),
     counts: jsonb("counts").notNull().default({}),
+    // Running market value of accepted cards (sum of prices.usd) — lets a
+    // seller see what the assembled bundle is worth.
+    totalValueUsd: doublePrecision("total_value_usd").notNull().default(0),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     completedAt: timestamp("completed_at"),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
@@ -369,6 +373,116 @@ export const bundleRuns = pgTable(
     unique("bundle_runs_guid_idx").on(table.guid),
     // Resume lookup: the latest active run per org.
     index("bundle_runs_config_id_idx").on(table.configId),
+    crudPolicy({
+      role: authenticatedRole,
+      read: orgRls(table.orgId),
+      modify: orgRls(table.orgId),
+    }),
+  ],
+).enableRLS();
+
+// ─── Set-chase mode (complete a set) ──────────────────────────────────────────
+
+// A chase config targets one set: scanned cards that belong to the set and are
+// not already owned (in the collection / already found this run) route to the
+// chase bin; everything else routes to the reject bin.
+export const chaseConfigs = pgTable(
+  "chase_configs",
+  {
+    id: serial().primaryKey(),
+    guid: uuid("guid").defaultRandom(),
+    name: text("name").notNull(),
+    orgId: text("org_id").notNull(),
+    gameKey: text("game_key").notNull(),
+    setCode: text("set_code").notNull(),
+    binNumber: integer("bin_number").notNull(),
+    rejectBinNumber: integer("reject_bin_number").notNull(),
+    // When set, cards already in this collection count as owned (not missing).
+    collectionGuid: text("collection_guid"),
+    isActive: boolean("is_active").notNull().default(false),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => [
+    unique("chase_configs_guid_idx").on(table.guid),
+    crudPolicy({
+      role: authenticatedRole,
+      read: orgRls(table.orgId),
+      modify: orgRls(table.orgId),
+    }),
+  ],
+).enableRLS();
+
+export const chaseRuns = pgTable(
+  "chase_runs",
+  {
+    id: serial().primaryKey(),
+    guid: uuid("guid").defaultRandom(),
+    configId: integer("config_id")
+      .notNull()
+      .references(() => chaseConfigs.id, { onDelete: "cascade" }),
+    orgId: text("org_id").notNull(),
+    status: text("status").notNull().default("active"),
+    // Card ids found this run (the no-duplicates set for the chase).
+    foundCardIds: jsonb("found_card_ids").notNull().default([]),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    completedAt: timestamp("completed_at"),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => [
+    unique("chase_runs_guid_idx").on(table.guid),
+    index("chase_runs_config_id_idx").on(table.configId),
+    crudPolicy({
+      role: authenticatedRole,
+      read: orgRls(table.orgId),
+      modify: orgRls(table.orgId),
+    }),
+  ],
+).enableRLS();
+
+// ─── Wishlist (wanted cards route to a bin) ───────────────────────────────────
+
+export const wishlists = pgTable(
+  "wishlists",
+  {
+    id: serial().primaryKey(),
+    guid: uuid("guid").defaultRandom(),
+    name: text("name").notNull(),
+    orgId: text("org_id").notNull(),
+    gameKey: text("game_key").notNull(),
+    // Cards matching this wishlist route here instead of their rule bin.
+    binNumber: integer("bin_number").notNull(),
+    isActive: boolean("is_active").notNull().default(true),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => [
+    unique("wishlists_guid_idx").on(table.guid),
+    crudPolicy({
+      role: authenticatedRole,
+      read: orgRls(table.orgId),
+      modify: orgRls(table.orgId),
+    }),
+  ],
+).enableRLS();
+
+export const wishlistItems = pgTable(
+  "wishlist_items",
+  {
+    id: serial().primaryKey(),
+    guid: uuid("guid").defaultRandom(),
+    wishlistId: integer("wishlist_id")
+      .notNull()
+      .references(() => wishlists.id, { onDelete: "cascade" }),
+    orgId: text("org_id").notNull(),
+    // Exact card id (scryfallId) and/or a case-insensitive name pattern.
+    cardId: text("card_id"),
+    namePattern: text("name_pattern"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    unique("wishlist_items_guid_idx").on(table.guid),
+    index("wishlist_items_wishlist_id_idx").on(table.wishlistId),
     crudPolicy({
       role: authenticatedRole,
       read: orgRls(table.orgId),
@@ -488,5 +602,30 @@ export const bundleRunsRelations = relations(bundleRuns, ({ one }) => ({
   config: one(bundleConfigs, {
     fields: [bundleRuns.configId],
     references: [bundleConfigs.id],
+  }),
+}));
+
+export const chaseConfigsRelations = relations(
+  chaseConfigs,
+  ({ many }) => ({
+    runs: many(chaseRuns),
+  }),
+);
+
+export const chaseRunsRelations = relations(chaseRuns, ({ one }) => ({
+  config: one(chaseConfigs, {
+    fields: [chaseRuns.configId],
+    references: [chaseConfigs.id],
+  }),
+}));
+
+export const wishlistsRelations = relations(wishlists, ({ many }) => ({
+  items: many(wishlistItems),
+}));
+
+export const wishlistItemsRelations = relations(wishlistItems, ({ one }) => ({
+  wishlist: one(wishlists, {
+    fields: [wishlistItems.wishlistId],
+    references: [wishlists.id],
   }),
 }));

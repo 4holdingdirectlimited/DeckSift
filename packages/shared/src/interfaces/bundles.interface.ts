@@ -60,6 +60,8 @@ export interface BundleRun {
   placedCardIds: string[];
   /** rarity → accepted count. */
   counts: Record<string, number>;
+  /** Running market value of accepted cards (sum of prices.usd). */
+  totalValueUsd: number;
   createdAt: string;
   completedAt?: string | null;
   updatedAt: string;

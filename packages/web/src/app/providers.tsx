@@ -1,6 +1,8 @@
 import { BinConfigsProvider } from "@/features/bins/api/use-bin-configs";
 import { BundlesProvider } from "@/features/bundles/api/use-bundles";
 import { CardFiltersProvider } from "@/features/cards/api/use-card-filters";
+import { ChaseProvider } from "@/features/chase/api/use-chase";
+import { WishlistProvider } from "@/features/wishlist/api/use-wishlist";
 import { FeederConfigProvider } from "@/features/calibration/api/use-feeder-config";
 import { ModuleConfigsProvider } from "@/features/calibration/api/use-module-configs";
 import { CollectionLocksProvider } from "@/features/collections/api/use-collection-locks";
@@ -56,12 +58,16 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
               <ModuleConfigsProvider>
                 <FeederConfigProvider>
                   <BundlesProvider>
-                    <ScannedCardsProvider>
-                      <CardFiltersProvider>
-                        {children}
-                        <DocumentTitleUpdater />
-                      </CardFiltersProvider>
-                    </ScannedCardsProvider>
+                    <ChaseProvider>
+                      <WishlistProvider>
+                        <ScannedCardsProvider>
+                          <CardFiltersProvider>
+                            {children}
+                            <DocumentTitleUpdater />
+                          </CardFiltersProvider>
+                        </ScannedCardsProvider>
+                      </WishlistProvider>
+                    </ChaseProvider>
                   </BundlesProvider>
                 </FeederConfigProvider>
               </ModuleConfigsProvider>

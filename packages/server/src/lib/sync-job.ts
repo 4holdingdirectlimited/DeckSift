@@ -10,6 +10,7 @@ import { digimonConfig, yugiohConfig } from "./card-search/generic-configs";
 import { createSyncSource } from "./card-search/generic";
 import { resolveGameDataSourceUrl } from "./card-search/resolve";
 import { sendDiscordNotification } from "./discord";
+import { saveArtToCache } from "./art-cache";
 import { vectorizeBuffers } from "./vectorize";
 
 export const SYNC_SOURCES: Record<string, SyncSource> = {
@@ -191,7 +192,14 @@ async function runSync(source: SyncSource): Promise<void> {
             signal: AbortSignal.timeout(30_000),
           });
           if (!imageRes.ok) return null;
-          return Buffer.from(await imageRes.arrayBuffer());
+          const buffer = Buffer.from(await imageRes.arrayBuffer());
+          // Warm the art cache (the same URLs the image proxy serves) so
+          // library/scanner art is instant and offline after the sync.
+          const contentType = imageRes.headers.get("content-type") ?? "image/jpeg";
+          if (contentType.startsWith("image/")) {
+            saveArtToCache(card.imageUrl, buffer, contentType);
+          }
+          return buffer;
         } catch {
           return null;
         }

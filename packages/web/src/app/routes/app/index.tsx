@@ -1,7 +1,9 @@
 import { Drawer, DrawerContent, DrawerTrigger } from "@/components/ui/drawer";
 import { PresetSelector } from "@/features/bins/components/preset-selector";
 import { BundlePanel } from "@/features/bundles/components/bundle-panel";
+import { ChasePanel } from "@/features/chase/components/chase-panel";
 import { CardGrid } from "@/features/cards/components/card-grid";
+import { WishlistPanel } from "@/features/wishlist/components/wishlist-panel";
 import { CollectionSwitcher } from "@/features/collections/components/collection-switcher";
 import { orgSettingsQueryOptions } from "@/features/companies/api/org-settings";
 import { useOrg } from "@/features/companies/api/use-organization";
@@ -38,6 +40,8 @@ function MobileScanner() {
               <CollectionSwitcher />
               <PresetSelector readOnly />
               <BundlePanel />
+              <ChasePanel />
+              <WishlistPanel />
               <BinStatus />
             </div>
             <ScanStats />
@@ -72,6 +76,8 @@ export default function App() {
             <CollectionSwitcher />
             <PresetSelector readOnly />
             <BundlePanel />
+            <ChasePanel />
+            <WishlistPanel />
             <BinStatus />
             <ScanStats />
           </div>
@@ -89,6 +95,8 @@ export default function App() {
         <CollectionSwitcher />
         <PresetSelector readOnly />
         <BundlePanel />
+        <ChasePanel />
+        <WishlistPanel />
         <BinStatus />
         <CardScanner className="flex-none" />
         <ScannerDebug />

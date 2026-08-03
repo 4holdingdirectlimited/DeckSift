@@ -29,6 +29,13 @@
       "when": 1785788401995,
       "tag": "0003_bundle_toggles",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1785790210143,
+      "tag": "0004_chase_wishlist_value",
+      "breakpoints": true
     }
   ]
 }

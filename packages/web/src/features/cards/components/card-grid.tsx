@@ -6,6 +6,8 @@ import { useCardFilterSort } from "@/features/cards/api/use-card-filter-sort";
 import { useCardFilters } from "@/features/cards/api/use-card-filters";
 import { CardDetailPanel } from "@/features/cards/components/card-detail-panel";
 import { CardToolbar } from "@/features/cards/components/card-toolbar";
+import { DuplicatesDialog } from "@/features/cards/components/duplicates-dialog";
+import { downloadCollectionCsv } from "@/features/cards/lib/collection-export";
 import { ScannedCardItem } from "@/features/cards/components/scanned-card-item";
 import { SessionSummaryDialog } from "@/features/cards/components/session-summary-dialog";
 import { getCollectionViewers } from "@/features/collections/api/collections";
@@ -17,7 +19,13 @@ import { ScannerControls } from "@/features/scanner/components/scanner-controls"
 import { ScannerDebug } from "@/features/scanner/components/scanner-debug";
 import { computeStats } from "@/features/scanner/lib/compute-stats";
 
-import { IconArrowBarToDown, IconBolt, IconFolders } from "@tabler/icons-react";
+import {
+  IconArrowBarToDown,
+  IconBolt,
+  IconCopy,
+  IconDownload,
+  IconFolders,
+} from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
 import { AnimatePresence } from "framer-motion";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -40,6 +48,7 @@ export function CardGrid() {
     setAutoFeed,
   } = useScannedCards();
   const [summaryOpen, setSummaryOpen] = useState(false);
+  const [duplicatesOpen, setDuplicatesOpen] = useState(false);
   const scanner = useScannerIsland();
   const { locks, currentUserId } = useCollectionLocks();
   const isScanningActive = !!(
@@ -121,6 +130,10 @@ export function CardGrid() {
     // the user's collection settings along with every card.
     clearCards();
   }, [clearCards]);
+
+  const handleExportCsv = useCallback(() => {
+    downloadCollectionCsv(cards);
+  }, [cards]);
 
   if (isLoading) {
     return (
@@ -255,7 +268,7 @@ export function CardGrid() {
 
   return (
     <>
-      <div className="sticky top-0 z-10 bg-background/80 backdrop-blur-2xl p-2 border-b">
+      <div className="sticky top-0 z-10 bg-background/80 backdrop-blur-2xl p-2 border-b flex flex-col gap-2">
         <CardToolbar
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
@@ -275,6 +288,30 @@ export function CardGrid() {
           availableRarities={stats?.rarities}
           availableColors={stats?.colors}
         />
+        <div className="flex flex-row gap-2 items-center">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleExportCsv}
+            disabled={cards.length === 0}
+            className="shrink-0"
+            title="Download the collection as a CSV"
+          >
+            <IconDownload className="size-3.5" />
+            Export CSV
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setDuplicatesOpen(true)}
+            disabled={cards.length === 0}
+            className="shrink-0"
+            title="Show cards scanned more than once"
+          >
+            <IconCopy className="size-3.5" />
+            Duplicates
+          </Button>
+        </div>
       </div>
       {filteredAndSorted.length === 0 && (
         <div className="flex flex-col items-center justify-center py-16 text-muted-foreground flex-1">
@@ -385,6 +422,12 @@ export function CardGrid() {
         elapsedMs={elapsedMs}
         collectionName={activeCollection?.name ?? "collection"}
         onMarkDownloaded={markDownloaded}
+      />
+
+      <DuplicatesDialog
+        open={duplicatesOpen}
+        onOpenChange={setDuplicatesOpen}
+        cards={cards}
       />
 
       <DeleteDialog

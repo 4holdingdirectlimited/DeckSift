@@ -8,6 +8,8 @@ import {
 
 import { useBinConfigs } from "@/features/bins/api/use-bin-configs";
 import { useBundles } from "@/features/bundles/api/use-bundles";
+import { useChase } from "@/features/chase/api/use-chase";
+import { useWishlist } from "@/features/wishlist/api/use-wishlist";
 import {
   addCollectionCard,
   clearCollectionCards,
@@ -72,6 +74,18 @@ export function ScannedCardsProvider({
   useEffect(() => {
     bundleRef.current = bundle;
   }, [bundle]);
+  // Same pattern for set-chase and wishlist routing (priority: bundle > chase
+  // > wishlist > normal rules).
+  const chase = useChase();
+  const chaseRef = useRef(chase);
+  useEffect(() => {
+    chaseRef.current = chase;
+  }, [chase]);
+  const wishlist = useWishlist();
+  const wishlistRef = useRef(wishlist);
+  useEffect(() => {
+    wishlistRef.current = wishlist;
+  }, [wishlist]);
   const serialRef = useRef({
     sendBin,
     sendFeed,
@@ -438,8 +452,14 @@ export function ScannedCardsProvider({
       // ── Bundle mode: the active run decides the bin ──
       const bundle = bundleRef.current;
       if (bundle.isBundleActive && bundle.activeRun) {
+        const priceUsd = parseFloat(card.prices.usd ?? "");
         void bundle
-          .placeCard(card.id, card.rarity.toLowerCase(), isFoil)
+          .placeCard(
+            card.id,
+            card.rarity.toLowerCase(),
+            isFoil,
+            Number.isFinite(priceUsd) ? priceUsd : undefined,
+          )
           .then((decision) => {
             // Safe failure mode: if the server can't be reached, route to the
             // reject bin so the physical card leaves module 1 and no bundle
@@ -511,6 +531,96 @@ export function ScannedCardsProvider({
             }
           },
         );
+        return;
+      }
+
+      // ── Set-chase mode: the active chase decides the bin ──
+      const chase = chaseRef.current;
+      if (chase.isChaseActive && chase.activeRun) {
+        void chase.placeCard(card.id, card.set).then((decision) => {
+          const binNumber =
+            decision?.binNumber ??
+            chase.rejectBinNumber ??
+            getCatchAllBin(binConfigsRef.current)?.binNumber;
+
+          const destCapacity =
+            binConfigsRef.current.find((b) => b.binNumber === binNumber)
+              ?.maxCapacity ?? 0;
+          if (
+            binNumber != null &&
+            destCapacity > 0 &&
+            (binCountsRef.current[binNumber] ?? 0) >= destCapacity
+          ) {
+            pauseForFullBin(binNumber);
+            return;
+          }
+
+          const record: ScannedCard = {
+            scanId: generateScanId(),
+            card,
+            scannedAt: Date.now(),
+            binNumber,
+            capturedImageUrl: effectiveImage,
+            isFoil: isFoil ?? false,
+            alternativeMatches: alternativeMatches?.length
+              ? alternativeMatches
+              : undefined,
+          };
+          commitScan(record, binNumber);
+
+          if (!decision) {
+            toast.error("Set chase routing failed", {
+              description:
+                "Could not reach the server — card sent to the reject bin. Chase state is unchanged.",
+            });
+            return;
+          }
+          if (decision.reason !== "ok") {
+            const reasonText =
+              decision.reason === "not-in-set"
+                ? "not part of this set"
+                : decision.reason === "owned"
+                  ? "already owned"
+                  : "already found this run";
+            toast.info(`Chase reject: ${reasonText}`, {
+              description: `${card.name} → reject bin ${decision.binNumber}.`,
+            });
+          }
+        });
+        return;
+      }
+
+      // ── Wishlist: wanted cards override normal bin rules ──
+      const wishlistBin = wishlistRef.current.matchBin(
+        card,
+        collection.game?.key ?? "",
+      );
+      if (wishlistBin != null) {
+        const destCapacity =
+          binConfigsRef.current.find((b) => b.binNumber === wishlistBin)
+            ?.maxCapacity ?? 0;
+        if (
+          destCapacity > 0 &&
+          (binCountsRef.current[wishlistBin] ?? 0) >= destCapacity
+        ) {
+          pauseForFullBin(wishlistBin);
+          return;
+        }
+        const record: ScannedCard = {
+          scanId: generateScanId(),
+          card,
+          scannedAt: Date.now(),
+          binNumber: wishlistBin,
+          capturedImageUrl: effectiveImage,
+          isFoil: isFoil ?? false,
+          alternativeMatches: alternativeMatches?.length
+            ? alternativeMatches
+            : undefined,
+        };
+        commitScan(record, wishlistBin);
+        toast.success(`Wishlist match: ${card.name}`, {
+          description: `Routed to wishlist bin ${wishlistBin}.`,
+        });
         return;
       }
 

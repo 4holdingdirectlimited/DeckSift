@@ -140,6 +140,47 @@ Binning is fully configurable per bin, including numeric price rules:
 | Yu-Gi-Oh! (YGOPRODeck) | ✅ `card_prices` → `prices.usd`/`eur` (wired) |
 | Gundam / Pokémon / Digimon | ❌ their sources carry no price data — value rules won't fire |
 
+## Set-chase mode (complete a set automatically)
+
+The **Chase** panel sits on the scanner page (left sidebar).
+
+- **Create a chase** — name + game + set code + chase bin + reject bin
+  (optionally bind a collection so cards you already own are skipped).
+- **Start a run** — every scanned card is offered to the chase: if it's part
+  of the set, isn't already found this run, and isn't already owned (when a
+  collection is bound) it routes to the chase bin. Off-set, owned, and
+  duplicate cards route to the reject bin with a reason toast.
+- **Resume** — runs persist in Postgres; reload/restart resumes the active run.
+- Priority when several modes are on: **bundle > chase > wishlist > normal
+  bin rules**. Bin capacity is still enforced — a full chase bin pauses the
+  machine until you empty it.
+
+Set codes are uppercased on the server; enter e.g. `JUSH-EN040` (YGO) or the
+set code shown in the library for the game you're scanning.
+
+## Wishlist routing (specific cards to their own bin)
+
+The **Wishlist** panel sits on the scanner page (left sidebar).
+
+- **Create a wishlist** — name + game + bin. Add items as a specific card id
+  (from the library) or a name pattern (e.g. `Blue-Eyes`).
+- A wishlist only fires when the **active collection's game** matches the
+  wishlist's game. A matched card routes to the wishlist bin before normal bin
+  rules; capacity is still enforced.
+- Name patterns match case-insensitively against the card name.
+
+## Collection tools (scanner page + library)
+
+- **Bundle value** — the bundle panel shows the live $ total of the run
+  (from `prices.usd` when the game has prices; see below).
+- **Export CSV** — toolbar button on the scanner page downloads
+  `collection-<date>.csv` (name, set, rarity, collector #, price, qty, foil,
+  bin) for everything scanned this session.
+- **Duplicates** — toolbar button lists every card scanned more than once, so
+  doubles are easy to spot.
+- **Set completeness** — switch on the library page; enter a set code and see
+  `owned / total` (and %) for cards scanned this session.
+
 ## Known gaps / roadmap (what's not done yet)
 
 - **One Piece / Dragon Ball** — no public API; needs a community dataset via
