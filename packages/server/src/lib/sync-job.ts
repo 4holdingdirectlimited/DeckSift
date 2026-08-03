@@ -246,13 +246,15 @@ async function runSync(source: SyncSource): Promise<void> {
         const msg = err instanceof Error ? err.message : String(err);
         if (/dml|gpu|device|onnxruntime/i.test(msg)) {
           // The DirectML device hung — every further embed will fail the same
-          // way. Stop instead of churning errors; the sync is resumable.
+          // way. Stop instead of churning errors; the sync is resumable, but
+          // the GPU needs a server restart first, so clear the queue instead
+          // of auto-advancing into more guaranteed failures.
           state = { ...state, status: "failed" };
           addLog(
             "Fatal error: GPU embedding failed (DirectML device hung). Restart the server (scripts/start-server.cmd) and re-run the sync — it resumes where it left off.",
           );
           emit("error", { message: msg });
-          advanceQueue();
+          clearSyncQueue();
           return;
         }
         for (const { card } of sub) {
