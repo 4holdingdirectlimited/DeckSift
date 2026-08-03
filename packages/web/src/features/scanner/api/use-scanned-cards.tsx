@@ -84,9 +84,16 @@ export function ScannedCardsProvider({
   const autoFeedRef = useRef(true);
   const cardArrivedHookRef = useRef<(() => void) | null>(null);
   const pauseHookRef = useRef<(() => void) | null>(null);
+  const resumeHookRef = useRef<(() => void) | null>(null);
   // Software bin capacity — with no bin-full sensors we count cards per bin
   // this session and refuse to route into a bin that has reached its max.
+  // binCounts is the renderable mirror of the ref (the UI shows per-bin
+  // status + empty/reset buttons).
+  const [binCounts, setBinCounts] = useState<Record<number, number>>({});
   const binCountsRef = useRef<Record<number, number>>({});
+  // True while the machine is paused because a bin had no space — Empty-ing
+  // any bin clears this and resumes the run automatically.
+  const pausedForBinRef = useRef(false);
   // Captured-image dedupe — reusing the photo of a card already scanned this
   // session avoids storing a fresh base64 JPEG for every duplicate card.
   const capturedImageRef = useRef<Record<string, string>>({});
@@ -118,17 +125,48 @@ export function ScannedCardsProvider({
 
   const resetBinCounts = useCallback(() => {
     binCountsRef.current = {};
+    setBinCounts({});
+    pausedForBinRef.current = false;
   }, []);
 
-  const setAutoFeed = useCallback(
-    (enabled: boolean) => {
-      autoFeedRef.current = enabled;
-      setAutoFeedState(enabled);
-      // Starting a run means the bins were just emptied — restart the count.
-      if (enabled) resetBinCounts();
-    },
-    [resetBinCounts],
-  );
+  const registerResumeHook = useCallback((fn: () => void) => {
+    resumeHookRef.current = fn;
+    return () => {
+      if (resumeHookRef.current === fn) resumeHookRef.current = null;
+    };
+  }, []);
+
+  /** Increment the physical card count for a bin (ref + render state). */
+  const incrementBin = useCallback((bin: number) => {
+    binCountsRef.current[bin] = (binCountsRef.current[bin] ?? 0) + 1;
+    setBinCounts((prev) => ({ ...prev, [bin]: (prev[bin] ?? 0) + 1 }));
+  }, []);
+
+  /**
+   * Pause the run because a card has nowhere to go — the destination bin (and
+   * the fallback) are at capacity. The operator empties a bin and taps Empty
+   * on it; emptyBin() clears pausedForBinRef and resumes auto-feed.
+   */
+  const pauseForFullBin = useCallback((bin: number) => {
+    pausedForBinRef.current = true;
+    autoFeedRef.current = false;
+    setAutoFeedState(false);
+    pauseHookRef.current?.();
+    toast.error(`Bin ${bin} is full`, {
+      description:
+        "No space left for the next card. Empty a bin, then tap Empty on it to resume.",
+      duration: Infinity,
+      dismissible: true,
+    });
+  }, []);
+
+  const setAutoFeed = useCallback((enabled: boolean) => {
+    autoFeedRef.current = enabled;
+    setAutoFeedState(enabled);
+    // Note: enabling auto-feed does NOT reset bin counts — the per-bin Empty
+    // buttons (Bin Status) are the confirmation that a bin was physically
+    // emptied. Auto-resetting here would forget cards still in other bins.
+  }, []);
 
   const registerCardArrivedHook = useCallback((fn: () => void) => {
     cardArrivedHookRef.current = fn;
@@ -210,6 +248,24 @@ export function ScannedCardsProvider({
       cardArrivedHookRef.current?.();
     }
   }, []);
+
+  /** Reset a bin's physical count after the operator empties it. */
+  const emptyBin = useCallback(
+    (bin: number) => {
+      binCountsRef.current[bin] = 0;
+      setBinCounts((prev) => ({ ...prev, [bin]: 0 }));
+      if (pausedForBinRef.current) {
+        pausedForBinRef.current = false;
+        resumeHookRef.current?.();
+        autoFeedRef.current = true;
+        setAutoFeedState(true);
+        // The card that triggered the pause is still at module 1 — feed it
+        // (re-scan) now that a bin has space.
+        void triggerAutoFeed();
+      }
+    },
+    [triggerAutoFeed],
+  );
 
   useEffect(() => {
     const prev = prevCollectionGuidRef.current;
@@ -337,15 +393,14 @@ export function ScannedCardsProvider({
             setAutoFeedState(false);
             return;
           }
-          binCountsRef.current[binNumber] =
-            (binCountsRef.current[binNumber] ?? 0) + 1;
+          incrementBin(binNumber);
           if (autoFeedRef.current) {
             triggerAutoFeed();
           }
         });
       }
     },
-    [triggerAutoFeed],
+    [incrementBin, triggerAutoFeed],
   );
 
   const addCard = useCallback(
@@ -393,6 +448,23 @@ export function ScannedCardsProvider({
               decision?.binNumber ??
               bundle.rejectBinNumber ??
               getCatchAllBin(binConfigsRef.current)?.binNumber;
+
+            // Physical bin capacity — the run decides WHERE the card goes,
+            // but a bin can't hold more than its capacity. If the destination
+            // is full there is nowhere for this card: pause until a bin is
+            // emptied and confirmed.
+            const destCapacity =
+              binConfigsRef.current.find((b) => b.binNumber === binNumber)
+                ?.maxCapacity ?? 0;
+            if (
+              binNumber != null &&
+              destCapacity > 0 &&
+              (binCountsRef.current[binNumber] ?? 0) >= destCapacity
+            ) {
+              pauseForFullBin(binNumber);
+              return;
+            }
+
             const record: ScannedCard = {
               scanId: generateScanId(),
               card,
@@ -463,17 +535,22 @@ export function ScannedCardsProvider({
         ) {
           const catchAll = getCatchAllBin(binConfigsRef.current);
           if (catchAll) {
+            // The catch-all is the last resort — if it is at capacity too,
+            // there is nowhere for this card to go: pause until a bin is
+            // emptied and confirmed.
+            const catchAllCapacity = catchAll.maxCapacity ?? 0;
+            if (
+              catchAllCapacity > 0 &&
+              (binCountsRef.current[catchAll.binNumber] ?? 0) >=
+                catchAllCapacity
+            ) {
+              pauseForFullBin(catchAll.binNumber);
+              return;
+            }
             routeBin = catchAll;
           } else {
             // No catch-all to absorb it: don't persist a card we can't route.
-            toast.error(`Bin ${matchedBin.binNumber} is full`, {
-              description: `Reached its capacity of ${maxCapacity} cards. Empty the bin, then re-enable auto-feed to continue.`,
-              duration: Infinity,
-              dismissible: true,
-            });
-            autoFeedRef.current = false;
-            setAutoFeedState(false);
-            pauseHookRef.current?.();
+            pauseForFullBin(matchedBin.binNumber);
             return;
           }
         }
@@ -495,7 +572,7 @@ export function ScannedCardsProvider({
 
       commitScan(record, routeBin?.binNumber);
     },
-    [commitScan],
+    [commitScan, pauseForFullBin],
   );
 
   const sendCatchAllBin = useCallback(() => {
@@ -510,14 +587,7 @@ export function ScannedCardsProvider({
         maxCapacity > 0 &&
         (binCountsRef.current[catchAll.binNumber] ?? 0) >= maxCapacity
       ) {
-        toast.error(`Catch-all bin ${catchAll.binNumber} is full`, {
-          description: `Reached its capacity of ${maxCapacity} cards. Empty it, then re-enable auto-feed to continue.`,
-          duration: Infinity,
-          dismissible: true,
-        });
-        autoFeedRef.current = false;
-        setAutoFeedState(false);
-        pauseHookRef.current?.();
+        pauseForFullBin(catchAll.binNumber);
         return;
       }
       serialRef.current.sendBin(catchAll.binNumber).then((response) => {
@@ -570,14 +640,13 @@ export function ScannedCardsProvider({
           setAutoFeedState(false);
           return;
         }
-        binCountsRef.current[catchAll.binNumber] =
-          (binCountsRef.current[catchAll.binNumber] ?? 0) + 1;
+        incrementBin(catchAll.binNumber);
         if (autoFeedRef.current) {
           triggerAutoFeed();
         }
       });
     }
-  }, [triggerAutoFeed]);
+  }, [incrementBin, pauseForFullBin, triggerAutoFeed]);
 
   const removeCard = useCallback((scanId: string) => {
     const collection = activeCollectionRef.current;
@@ -673,6 +742,9 @@ export function ScannedCardsProvider({
         setAutoFeed,
         registerCardArrivedHook,
         registerPauseHook,
+        registerResumeHook,
+        binCounts,
+        emptyBin,
         addCard,
         sendCatchAllBin,
         removeCard,

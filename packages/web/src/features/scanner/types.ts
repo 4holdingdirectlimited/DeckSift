@@ -44,6 +44,11 @@ export interface ScannedCardsContextValue {
   sendCatchAllBin: () => void;
   registerCardArrivedHook: (fn: () => void) => () => void;
   registerPauseHook: (fn: () => void) => () => void;
+  registerResumeHook: (fn: () => void) => () => void;
+  /** Physical card count per bin this session (bin number → cards placed). */
+  binCounts: Record<number, number>;
+  /** Reset a bin's count after the operator physically empties it. */
+  emptyBin: (binNumber: number) => void;
   removeCard: (scanId: string) => void;
   removeCards: (scanIds: string[]) => void;
   correctCard: (scanId: string, card: PlayingCard) => void;

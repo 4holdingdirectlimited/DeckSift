@@ -6,6 +6,7 @@ import { CollectionSwitcher } from "@/features/collections/components/collection
 import { orgSettingsQueryOptions } from "@/features/companies/api/org-settings";
 import { useOrg } from "@/features/companies/api/use-organization";
 import { useScannedCards } from "@/features/scanner/api/use-scanned-cards";
+import { BinStatus } from "@/features/scanner/components/bin-status";
 import { CardScanner } from "@/features/scanner/components/card-scanner";
 import { ScanStats } from "@/features/scanner/components/scan-stats";
 import { ScannerDebug } from "@/features/scanner/components/scanner-debug";
@@ -37,6 +38,7 @@ function MobileScanner() {
               <CollectionSwitcher />
               <PresetSelector readOnly />
               <BundlePanel />
+              <BinStatus />
             </div>
             <ScanStats />
             <div className="@container">
@@ -70,6 +72,7 @@ export default function App() {
             <CollectionSwitcher />
             <PresetSelector readOnly />
             <BundlePanel />
+            <BinStatus />
             <ScanStats />
           </div>
         </section>
@@ -86,6 +89,7 @@ export default function App() {
         <CollectionSwitcher />
         <PresetSelector readOnly />
         <BundlePanel />
+        <BinStatus />
         <CardScanner className="flex-none" />
         <ScannerDebug />
         <ScanStats />

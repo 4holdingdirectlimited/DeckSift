@@ -32,6 +32,7 @@ export function CardScanner({ className, compact }: CardScannerProps) {
     setAutoFeed,
     registerCardArrivedHook,
     registerPauseHook,
+    registerResumeHook,
   } = useScannedCards();
   const registerIsland = useRegisterScannerIsland();
   const {
@@ -246,6 +247,10 @@ export function CardScanner({ className, compact }: CardScannerProps) {
   useEffect(() => {
     return registerPauseHook(handlePause);
   }, [registerPauseHook, handlePause]);
+
+  useEffect(() => {
+    return registerResumeHook(handleResume);
+  }, [registerResumeHook, handleResume]);
 
   useEffect(() => {
     registerIsland({

@@ -1378,6 +1378,53 @@ real card thickness to guarantee no overflow.
 1. Drop migration `0003` and the foil logic in `routes/bundles.ts`.
 2. Remove the capacity constants/script and reset `maxCapacity` to 0.
 
+## Item 30 — Sound bin-full logic: per-bin status, empty/reset, pause-on-overflow (web)
+
+**Status:** implemented, committed.
+
+### Why
+
+A seller/collector running long batches needs certainty that a bin can never
+overflow. Previously a full matched bin fell back to the catch-all, but the
+catch-all itself could overflow, and bundle mode ignored physical bin capacity
+entirely — rejects piled into the reject bin with no limit. There was also no
+way to see per-bin fill or tell the machine “this bin is empty now”.
+
+### What changed
+
+- **Per-bin status + Empty/reset** — the scanner page gained a **Bin Status**
+  strip showing every bin's count vs capacity (green/amber/red by fill level,
+  catch-all marked `R`) with a per-bin **Empty** button. Emptying a bin resets
+  its session count — the confirmation that it was physically emptied.
+- **Pause until space exists** — when a card has nowhere to go (matched bin
+  full AND catch-all full; bundle destination bin at capacity; reject bin at
+  capacity), the machine pauses with a clear “Bin N is full — empty a bin,
+  then tap Empty to resume” message and no phantom scan record is saved. The
+  card stays at module 1 and is re-scanned after resume.
+- **Empty resumes the run** — `emptyBin` clears the pause flag, re-enables
+  auto-feed, and feeds the stuck card automatically (a resume hook is wired
+  into the scanner so its state returns to scanning).
+- **No more silent count resets** — toggling auto-feed no longer wipes all bin
+  counts (that would forget cards still sitting in other bins); only the
+  per-bin Empty buttons (or clearing the session) reset them.
+- Bundle mode now checks physical bin capacity before committing, so a bundle
+  whose target count exceeds the bin's physical capacity pauses instead of
+  overflowing (bundle targets should stay within the bin capacities in
+  `custom/SETUP.md`).
+
+### Behavior notes
+
+- Bin counts are session-scoped (reset on browser reload) — consistent with
+  the existing software-capacity model; there are no bin-full sensors.
+- When a bundle run completes exactly as its last bin fills, the leftover card
+  routes to the reject bin after the operator empties and resumes.
+
+### How to revert
+
+1. Remove `bin-status.tsx` and its page placements.
+2. Remove `binCounts`/`emptyBin`/`pauseForFullBin`/resume hook from
+   `use-scanned-cards.tsx` and restore `setAutoFeed`'s count reset.
+
 ---
 
 *Template for future entries:*
