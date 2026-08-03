@@ -1,4 +1,4 @@
-import { DISCORD_URL } from "@/lib/links";
+import { DISCORD_URL, UPSTREAM_URL } from "@/lib/links";
 import { cn } from "@/lib/utils";
 import {
   IconAdjustmentsHorizontal,
@@ -293,6 +293,18 @@ export function BuildAssembly() {
       <p className="mt-3 max-w-2xl text-sm/relaxed text-muted-foreground">
         Eight phases, structural work first. Checkboxes are saved in this
         browser, so you can close the tab mid-build and pick back up later.
+      </p>
+      <p className="mt-2 max-w-2xl text-xs text-muted-foreground/70">
+        Build photos are from the original{" "}
+        <a
+          href={UPSTREAM_URL}
+          target="_blank"
+          rel="noreferrer"
+          className="underline underline-offset-2 hover:text-foreground"
+        >
+          MAULT
+        </a>{" "}
+        project by dishwasher-detergent (MIT).
       </p>
       <p className="mt-2 max-w-2xl text-sm/relaxed text-muted-foreground">
         Stuck on a step?{" "}

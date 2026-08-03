@@ -39,3 +39,4 @@ next-env.d.ts
 
 # local disk caches (sync catalogs, proxied card art)
 packages/server/.cache/
+.mault-orig-bundle.js

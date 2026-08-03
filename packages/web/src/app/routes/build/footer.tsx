@@ -1,3 +1,4 @@
+import { UPSTREAM_URL } from "@/lib/links";
 import { IconPigFilled } from "@tabler/icons-react";
 import { Link } from "react-router-dom";
 
@@ -35,6 +36,18 @@ export function BuildFooter() {
           © {new Date().getFullYear()} Magic Vault
         </p>
       </div>
+      <p className="mx-auto max-w-4xl px-4 pb-6 text-center text-[11px] text-muted-foreground/70">
+        Build photos, parts list, and the 3D model are from the original{" "}
+        <a
+          href={UPSTREAM_URL}
+          target="_blank"
+          rel="noreferrer"
+          className="underline underline-offset-2 transition-colors hover:text-foreground"
+        >
+          MAULT
+        </a>{" "}
+        project by dishwasher-detergent (MIT).
+      </p>
     </footer>
   );
 }

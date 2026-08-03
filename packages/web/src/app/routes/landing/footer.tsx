@@ -1,4 +1,4 @@
-import { DISCORD_URL } from "@/lib/links";
+import { DISCORD_URL, UPSTREAM_URL } from "@/lib/links";
 import { IconBrandDiscord, IconPigFilled } from "@tabler/icons-react";
 import { Link } from "react-router-dom";
 
@@ -57,6 +57,19 @@ export function LandingFooter() {
           </p>
         </div>
       </div>
+      <p className="mx-auto max-w-6xl px-4 pb-6 text-center text-[11px] text-muted-foreground/70">
+        A fork of{" "}
+        <a
+          href={UPSTREAM_URL}
+          target="_blank"
+          rel="noreferrer"
+          className="underline underline-offset-2 transition-colors hover:text-foreground"
+        >
+          MAULT
+        </a>{" "}
+        by dishwasher-detergent (MIT). Build photos and the 3D model come from the
+        original project.
+      </p>
     </footer>
   );
 }

@@ -204,3 +204,16 @@ Brightness: 140
 Contrast: 140
 Saturation: 160
 Sharpness: 130
+
+## Credits
+
+This project is a fork of [MAULT](https://mault.xyz) by
+[dishwasher-detergent](https://github.com/dishwasher-detergent/mault), released
+under the MIT license. The physical sorter design — the 3D model, build photos,
+wiring layout, and the Arduino firmware it started from — all come from the
+original project. Our fork keeps that hardware base and adds a fully-local,
+single-user software stack: no hosted services, no logins, on-device vision,
+and local card storage.
+
+See the LICENSE file for the MIT terms. Build photos on the `/build` page are
+from the original project, used with attribution.

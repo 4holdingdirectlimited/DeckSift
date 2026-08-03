@@ -1,5 +1,10 @@
 import { buttonVariants } from "@/components/ui/button";
-import { DISCORD_URL, MODEL_URL, REPO_URL } from "@/lib/links";
+import {
+  DISCORD_URL,
+  FORK_REPO_URL,
+  MODEL_URL,
+  UPSTREAM_URL,
+} from "@/lib/links";
 import { cn } from "@/lib/utils";
 import {
   IconBrandDiscord,
@@ -35,7 +40,7 @@ export function LandingOpenSource() {
             </p>
           </div>
           <a
-            href={REPO_URL}
+            href={FORK_REPO_URL}
             target="_blank"
             rel="noreferrer"
             className={cn(
@@ -45,6 +50,34 @@ export function LandingOpenSource() {
           >
             <IconBrandGithub size={16} />
             View on GitHub
+          </a>
+        </div>
+
+        <div className="flex flex-col gap-3 rounded-lg border bg-card p-6">
+          <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
+            <IconBrandGithub size={18} />
+          </span>
+          <div>
+            <p className="font-heading text-sm font-semibold">
+              Original project
+            </p>
+            <p className="mt-1 text-xs/relaxed text-muted-foreground">
+              This is a fork of MAULT by dishwasher-detergent, released under
+              the MIT license. The 3D model, build photos, and much of the
+              firmware come from the original — thanks for making it open.
+            </p>
+          </div>
+          <a
+            href={UPSTREAM_URL}
+            target="_blank"
+            rel="noreferrer"
+            className={cn(
+              buttonVariants({ variant: "outline", size: "sm" }),
+              "mt-2 self-start",
+            )}
+          >
+            <IconBrandGithub size={16} />
+            Visit the original
           </a>
         </div>
 
