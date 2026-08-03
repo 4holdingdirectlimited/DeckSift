@@ -1026,6 +1026,46 @@ npx tsx --env-file ../../.env scripts/import-cardset.ts \
 
 1. Delete `scripts/import-cardset.ts`.
 
+## Item 21 — Value-based binning + local runbook (shared + server + docs)
+
+**Status:** implemented, uncommitted.
+
+### Why
+
+Sorting by card value (e.g. "over $2 → reject bin") is a requested sort
+axis. The binning engine already supported numeric rules; what was missing was
+the foil-price field and price data for the generic-config games. Also: the
+machine had never been set up (empty DB, web server not running), so the
+one-time first-run flow needed documenting.
+
+### What changed
+
+- **`price_usd_foil` bin field** added to `FIELD_DEFINITIONS` (path
+  `prices.usd_foil`) so foil-value sorting works alongside the existing
+  `price_usd` field. Price rules (`gt`/`gte`/`lt`/`lte`/`equals`) already
+  existed — a rule like `Price (USD) greater than 2` routes a card to
+  whatever bin (including a dedicated reject bin) the operator configures.
+- **Yu-Gi-Oh! prices wired**: YGOPRODeck `card_prices` → `prices.usd`
+  (tcgplayer) and `prices.eur` (cardmarket) in `yugiohConfig`.
+- **`scripts/start-web.cmd`** — detached launcher for the Vite dev server;
+  the web UI is now running at http://localhost:5173.
+- **`custom/SETUP.md`** — runbook: URLs, start/stop, first-run steps (games →
+  collection → bins → sync), value-sort how-to, price-source table, known gaps.
+
+### Behavior notes
+
+- Price data availability: MTG ✅ (Scryfall bulk), Yu-Gi-Oh! ✅, Gundam /
+  Pokémon / Digimon ❌ (sources carry no prices) — value rules are inert for
+  those games until a price source is added.
+- The `cards` table is empty on this machine: the first MTG sync (Admin page)
+  is required before scanning can match anything.
+
+### How to revert
+
+1. Remove `price_usd_foil` from `FIELD_DEFINITIONS`.
+2. Remove the `card_prices` mapping from `yugiohConfig`.
+3. Delete `scripts/start-web.cmd` and `custom/SETUP.md`.
+
 ---
 
 *Template for future entries:*

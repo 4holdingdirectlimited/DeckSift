@@ -88,6 +88,19 @@ export const FIELD_DEFINITIONS: FieldMeta[] = [
     ],
   },
   {
+    field: "price_usd_foil",
+    label: "Price (USD, Foil)",
+    type: "numeric",
+    path: "prices.usd_foil",
+    operators: [
+      { value: "gt", label: "greater than" },
+      { value: "gte", label: "greater than or equal" },
+      { value: "lt", label: "less than" },
+      { value: "lte", label: "less than or equal" },
+      { value: "equals", label: "equals" },
+    ],
+  },
+  {
     field: "cmc",
     label: "Mana Value",
     type: "numeric",

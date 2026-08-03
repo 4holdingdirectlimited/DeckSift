@@ -60,6 +60,17 @@ export const yugiohConfig: GenericGameConfig = {
     card.set_id = card.set;
     card.set_name = firstSet ? (str(firstSet, "set_name") ?? "") : "";
     card.collector_number = card.set;
+    // YGOPRODeck ships live market prices (tcgplayer/cardmarket) — map them
+    // onto prices.usd/eur so value-based bin rules work.
+    const priceRow = Array.isArray(raw.card_prices)
+      ? (raw.card_prices[0] as Record<string, unknown> | undefined)
+      : undefined;
+    if (priceRow) {
+      const usd = str(priceRow, "tcgplayer_price");
+      const eur = str(priceRow, "cardmarket_price");
+      card.prices.usd = usd && parseFloat(usd) > 0 ? usd : null;
+      card.prices.eur = eur && parseFloat(eur) > 0 ? eur : null;
+    }
     return card;
   },
 };
