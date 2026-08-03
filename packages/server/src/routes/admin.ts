@@ -3,7 +3,7 @@ import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { db } from "../db";
 import { cardImageVectors } from "../db/schema";
-import { cancelSync, getStatus, startSync, subscribeSSE, SYNC_SOURCES } from "../lib/sync-job";
+import { cancelSync, clearSyncQueue, getStatus, getSyncQueue, queueSync, startSync, subscribeSSE, SYNC_SOURCES } from "../lib/sync-job";
 import { resolveGameDataSourceUrl } from "../lib/card-search/resolve";
 import { vectorizeImageFromBuffer } from "../lib/vectorize";
 import {
@@ -69,6 +69,45 @@ router.post("/sync", requireAuth, requireRole("admin"), async (c) => {
 router.delete("/sync", requireAuth, requireRole("admin"), (c) => {
   cancelSync();
   return c.json({ success: true, data: getStatus() });
+});
+
+// GET /admin/sync/queue — what's queued (and the current status)
+router.get("/sync/queue", requireAuth, requireRole("admin"), (c) => {
+  return c.json({
+    success: true,
+    data: { queued: getSyncQueue(), status: getStatus() },
+  });
+});
+
+// POST /admin/sync/queue — queue games to sync one after another (they share
+// the GPU). Body: { gameKeys?: string[] } — omitted = all sync-capable games.
+router.post("/sync/queue", requireAuth, requireRole("admin"), async (c) => {
+  const body = await c.req.json<{ gameKeys?: string[] }>().catch(() => null);
+  const keys = Array.isArray(body?.gameKeys)
+    ? body.gameKeys
+    : Object.keys(SYNC_SOURCES);
+  const valid = keys.filter((k) => SYNC_SOURCES[k]);
+  if (valid.length === 0) {
+    return c.json(
+      { success: false, message: "No valid game keys supplied." },
+      400,
+    );
+  }
+  const result = queueSync(c.req.header("X-Org-Id"), valid);
+  return c.json({
+    success: true,
+    data: {
+      started: result.started,
+      queued: result.queued,
+      status: getStatus(),
+    },
+  });
+});
+
+// DELETE /admin/sync/queue — clear any pending queue
+router.delete("/sync/queue", requireAuth, requireRole("admin"), (c) => {
+  clearSyncQueue();
+  return c.json({ success: true, data: getSyncQueue() });
 });
 
 // GET /admin/cards — paginated card list with optional search

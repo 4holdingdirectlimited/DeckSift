@@ -36,6 +36,45 @@ let state: SyncState = {
 let cancelFlag = false;
 const writers = new Set<SseWriter>();
 
+// Auto-advancing sync queue: game keys run one at a time (they share the
+// GPU). When the current run finishes/cancels/fails, the next queued key
+// starts automatically.
+const queue: string[] = [];
+let queueOrgId: string | undefined;
+
+/**
+ * Replace the queue with the given game keys and start the first one now
+ * (unless a sync is already running — then it runs after). Returns which key
+ * started and what is left queued.
+ */
+export function queueSync(
+  orgId: string | undefined,
+  gameKeys: string[],
+): { started: string | null; queued: string[] } {
+  queueOrgId = orgId;
+  queue.length = 0;
+  queue.push(...gameKeys);
+  if (state.status === "running") {
+    return { started: null, queued: [...queue] };
+  }
+  const next = queue.shift();
+  if (next) startSync(orgId, next);
+  return { started: next ?? null, queued: [...queue] };
+}
+
+export function getSyncQueue(): string[] {
+  return [...queue];
+}
+
+export function clearSyncQueue(): void {
+  queue.length = 0;
+}
+
+function advanceQueue(): void {
+  const next = queue.shift();
+  if (next) startSync(queueOrgId, next);
+}
+
 function addLog(msg: string) {
   state = { ...state, logs: [...state.logs.slice(-199), msg] };
   emit("log", { line: msg });
@@ -99,6 +138,7 @@ export function startSync(orgId: string | undefined, gameKey: string): void {
         timestamp: new Date().toISOString(),
       });
     }
+    advanceQueue();
   });
 }
 
@@ -171,6 +211,7 @@ async function runSync(source: SyncSource): Promise<void> {
         skipped: state.skipped,
         errors: state.errors,
       });
+      advanceQueue();
       return;
     }
 
@@ -211,6 +252,7 @@ async function runSync(source: SyncSource): Promise<void> {
             "Fatal error: GPU embedding failed (DirectML device hung). Restart the server (scripts/start-server.cmd) and re-run the sync — it resumes where it left off.",
           );
           emit("error", { message: msg });
+          advanceQueue();
           return;
         }
         for (const { card } of sub) {
@@ -333,4 +375,5 @@ async function runSync(source: SyncSource): Promise<void> {
     skipped: state.skipped,
     errors: state.errors,
   });
+  advanceQueue();
 }

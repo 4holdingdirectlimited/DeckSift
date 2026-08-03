@@ -25,6 +25,7 @@ import {
   listCardGameKeys,
   listCards,
   listSyncSources,
+  queueSyncs,
   revectorizeCard,
   startSync,
 } from "@/lib/api/admin";
@@ -179,6 +180,7 @@ export default function AdminPage() {
 
   const startSyncMutation = useMutation({ mutationFn: startSync });
   const cancelSyncMutation = useMutation({ mutationFn: cancelSync });
+  const queueSyncMutation = useMutation({ mutationFn: queueSyncs });
   const dumpMutation = useMutation({
     mutationFn: (gameKey?: string) => dumpCards(gameKey),
     onSuccess: (result) => {
@@ -250,14 +252,24 @@ export default function AdminPage() {
                 {cancelSyncMutation.isPending ? "Cancelling..." : "Cancel"}
               </Button>
             ) : (
-              <Button
-                disabled={
-                  isRunning || startSyncMutation.isPending || !syncGameKey
-                }
-                onClick={() => startSyncMutation.mutate(syncGameKey!)}
-              >
-                {startSyncMutation.isPending ? "Starting..." : "Start Sync"}
-              </Button>
+              <>
+                <Button
+                  disabled={isRunning || queueSyncMutation.isPending}
+                  variant="outline"
+                  onClick={() => queueSyncMutation.mutate(undefined)}
+                  title="Queue every sync-capable game to run back-to-back"
+                >
+                  {queueSyncMutation.isPending ? "Queuing..." : "Sync All Games"}
+                </Button>
+                <Button
+                  disabled={
+                    isRunning || startSyncMutation.isPending || !syncGameKey
+                  }
+                  onClick={() => startSyncMutation.mutate(syncGameKey!)}
+                >
+                  {startSyncMutation.isPending ? "Starting..." : "Start Sync"}
+                </Button>
+              </>
             )}
           </div>
         </div>

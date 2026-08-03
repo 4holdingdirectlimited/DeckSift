@@ -36,6 +36,25 @@ export async function startSync(gameKey: string): Promise<{
   return apiPost<{ success: boolean; data: SyncState }>("/api/admin/sync", { gameKey });
 }
 
+export async function queueSyncs(gameKeys?: string[]): Promise<{
+  success: boolean;
+  data: { started: string | null; queued: string[]; status: SyncState };
+}> {
+  return apiPost<{ success: boolean; data: { started: string | null; queued: string[]; status: SyncState } }>(
+    "/api/admin/sync/queue",
+    gameKeys ? { gameKeys } : undefined,
+  );
+}
+
+export async function getSyncQueue(): Promise<{
+  success: boolean;
+  data: { queued: string[]; status: SyncState };
+}> {
+  return apiGet<{ success: boolean; data: { queued: string[]; status: SyncState } }>(
+    "/api/admin/sync/queue",
+  );
+}
+
 export async function cancelSync(): Promise<{
   success: boolean;
   data: SyncState;

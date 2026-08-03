@@ -58,7 +58,7 @@ interface PokemonWeakResist {
   value: string;
 }
 
-interface PokemonCardDetail extends PokemonCardBrief {
+export interface PokemonCardDetail extends PokemonCardBrief {
   category?: string;
   illustrator?: string;
   rarity?: string;
@@ -92,7 +92,7 @@ function assetUrl(image: string, quality: "low" | "high"): string {
   return `/api/cards/image-proxy?url=${encodeURIComponent(`${image}/${quality}.webp`)}`;
 }
 
-function normalizePokemonCard(raw: PokemonCardDetail): PlayingCard {
+export function normalizePokemonCard(raw: PokemonCardDetail): PlayingCard {
   const small = raw.image ? assetUrl(raw.image, "low") : "";
   const large = raw.image ? assetUrl(raw.image, "high") : "";
   const colors = raw.types ?? [];
@@ -191,11 +191,14 @@ function normalizePokemonCard(raw: PokemonCardDetail): PlayingCard {
   };
 }
 
-async function fetchDetail(
+export async function fetchDetail(
   id: string,
   baseUrl: string,
 ): Promise<PokemonCardDetail | null> {
-  const response = await fetch(`${baseUrl}/${id}`, {
+  // TCGdex list ids like "exu-%3F" arrive already percent-encoded; encoding
+  // again lets the server decode once to the real id (exu-%253F → exu-%3F).
+  // Plain ids (swsh3-136) are untouched by encodeURIComponent.
+  const response = await fetch(`${baseUrl}/${encodeURIComponent(id)}`, {
     headers: POKEMON_HEADERS,
   });
   if (!response.ok) return null;

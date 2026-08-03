@@ -1256,6 +1256,46 @@ from the UI even though the firmware supports it.
 1. Remove `<ServoDiagnostics />` from `calibrate.tsx` and delete the component.
 2. Remove the Scan Light button from `led-controls.tsx` and the 5th LED state.
 
+## Item 27 — Pokémon sync fix + auto-advancing sync queue (server + web)
+
+**Status:** implemented, committed.
+
+### Why
+
+Two things: (1) the Pokémon sync silently did nothing — TCGdex's list endpoint
+only returns `{id, localId, name}`, no image, so every card was skipped as
+“no imageUrl” and the DB would never get a single Pokémon card; (2) syncing
+five games one at a time meant babysitting the Admin page for hours, clicking
+“Start Sync” again after each finished.
+
+### What changed
+
+- **Pokémon sync** (`pokemon/sync.ts`) — `fetchCards` now enriches every list
+  entry with a detail fetch (bounded concurrency 16), which provides the real
+  image URL, rarity, and set. The normalized PlayingCard is stored as
+  `cardData`, so Pokémon gets rarity binning, bundle recipes, and offline
+  hydration like every other game. `fetchDetail` double-encodes ids so the
+  punctuation-variant cards (`exu-%3F` Unown, etc.) resolve too.
+- **Sync queue** (`sync-job.ts` + `admin.ts`) — `POST /api/admin/sync/queue`
+  queues game keys that run one at a time (they share the GPU); when a run
+  completes, cancels, or fails, the next key starts automatically. `GET`/
+  `DELETE` endpoints expose/clear the queue. The Admin page gained a **Sync
+  All Games** button that queues every sync-capable game.
+
+### Behavior notes
+
+- Current queue on this machine: Pokémon → Yu-Gi-Oh! → Digimon → Gundam
+  (~8 h total at ~0.6 s/card on the GPU).
+- Pokémon's detail enrichment adds ~5–10 min of catalog fetching before the
+  embedding phase starts.
+
+### How to revert
+
+1. Remove the enrichment loop from `pokemon/sync.ts` and the encode fix in
+   `fetchDetail`.
+2. Remove the queue functions from `sync-job.ts`, the queue endpoints from
+   `admin.ts`, and the Sync All button.
+
 ---
 
 *Template for future entries:*
