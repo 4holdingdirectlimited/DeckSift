@@ -1213,6 +1213,49 @@ throttles per-connection.
 1. Restore `download_uri` parsing and `res.json()` in `scryfall/sync.ts`.
 2. Remove `vectorizeBuffers` and the parallel/pipelined loop in `sync-job.ts`.
 
+## Item 26 — Hardware diagnostics: servo wiggle test + scan light control (web)
+
+**Status:** implemented, committed.
+
+### Why
+
+Before trusting any routing, a freshly built machine needs to prove each servo
+is wired to the right channel and each bin route fires the right mechanism.
+The calibration page already had per-servo jog controls (±1/±10 raw PWM) and
+“Set” buttons for calibration points, but nothing that guides an operator
+through verifying the hardware, and the scan light (LED 5) couldn't be toggled
+from the UI even though the firmware supports it.
+
+### What changed
+
+- **`servo-diagnostics.tsx`** (new, on `/app/calibrate`) — a commissioning
+  panel that lists all 9 servos (3 modules × bottom/paddle/pusher) with their
+  job (“trapdoor — drops the card to the next module”, “gate — holds the card
+  while the pusher ejects it”, “pusher — ejects left/right”), which bins each
+  one participates in, and a **Wiggle** button that cycles the servo between
+  its two calibrated extremes (2×) and back to rest so the operator can watch
+  the physical part and confirm the wiring. “Wiggle all” runs a module's three
+  servos in sequence.
+- **Bin route map** — a table of bins 1–7 → the exact mechanical sequence each
+  route runs (mirrors `routeCard()` in `main.ino`), so testing a bin shows what
+  should be moving.
+- **`led-controls.tsx`** — added the **Scan Light** toggle (LED 5, firmware
+  channel 14) alongside LEDs 1–4; the page hook now tracks five LED states.
+
+### Behavior notes
+
+- Wiggling uses the calibrated pulse values (falls back to defaults when a
+  module is unconfigured) and returns each servo to its resting position
+  (closed for bottom/paddle, neutral for pusher).
+- Combine with the existing tools on the page: ±1/±10 jog to find the exact
+  start/end pulses, “Set” to save them as calibration points, then “Run Test”
+  for the full sweep and the bin test panel for a complete sample run.
+
+### How to revert
+
+1. Remove `<ServoDiagnostics />` from `calibrate.tsx` and delete the component.
+2. Remove the Scan Light button from `led-controls.tsx` and the 5th LED state.
+
 ---
 
 *Template for future entries:*
