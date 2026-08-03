@@ -1,5 +1,5 @@
 import type { SyncState, SyncStatus } from "@magic-vault/shared";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "../db";
 import { cardImageVectors } from "../db/schema";
 import { gundamSyncSource } from "./gundam/sync";
@@ -113,10 +113,19 @@ async function runSync(source: SyncSource): Promise<void> {
   addLog(`Loading existing ${source.label} cards from DB...`);
 
   const existing = await db
-    .select({ id: cardImageVectors.scryfallId })
+    .select({
+      id: cardImageVectors.scryfallId,
+      cardData: cardImageVectors.cardData,
+    })
     .from(cardImageVectors)
     .where(eq(cardImageVectors.gameKey, source.gameKey));
   const existingSet = new Set(existing.map((r) => r.id));
+  const existingByScryfallId = new Map(existing.map((r) => [r.id, r]));
+
+  // One-time backfill: rows synced before cards.card_data existed have no
+  // card data. Collect them while scanning the catalog, then batch-update at
+  // the end so hydration can go fully local.
+  const backfill: { id: string; cardData: unknown }[] = [];
 
   addLog(
     `Found ${existingSet.size} existing ${source.label} cards in DB. Starting vectorization...`,
@@ -136,6 +145,12 @@ async function runSync(source: SyncSource): Promise<void> {
     }
 
     if (!card.imageUrl || existingSet.has(card.id)) {
+      if (existingSet.has(card.id) && card.cardData) {
+        const row = existingByScryfallId.get(card.id);
+        if (row && row.cardData == null) {
+          backfill.push({ id: card.id, cardData: card.cardData });
+        }
+      }
       state = { ...state, skipped: state.skipped + 1 };
       emit("progress", {
         processed: state.processed,
@@ -166,6 +181,7 @@ async function runSync(source: SyncSource): Promise<void> {
           name: card.name,
           setCode: card.setCode,
           embedding,
+          cardData: card.cardData ?? null,
         })
         .onConflictDoNothing();
 
@@ -193,6 +209,29 @@ async function runSync(source: SyncSource): Promise<void> {
         currentCard: card.name,
       });
     }
+  }
+
+  // Batch-persist card data for rows that predate the card_data column.
+  if (backfill.length > 0) {
+    addLog(`Backfilling card data for ${backfill.length} existing cards...`);
+    const CHUNK = 500;
+    for (let i = 0; i < backfill.length; i += CHUNK) {
+      const chunk = backfill.slice(i, i + CHUNK);
+      await Promise.all(
+        chunk.map(({ id, cardData }) =>
+          db
+            .update(cardImageVectors)
+            .set({ cardData, updatedAt: new Date() })
+            .where(
+              and(
+                eq(cardImageVectors.gameKey, source.gameKey),
+                eq(cardImageVectors.scryfallId, id),
+              ),
+            ),
+        ),
+      );
+    }
+    addLog(`Backfilled card data for ${backfill.length} cards.`);
   }
 
   state = { ...state, status: "completed" };

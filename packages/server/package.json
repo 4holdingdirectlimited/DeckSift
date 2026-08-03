@@ -10,7 +10,8 @@
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
-    "db:prune-images": "tsx src/lib/prune-images.ts"
+    "db:prune-images": "tsx src/lib/prune-images.ts",
+    "bench:vectorize": "tsx scripts/bench-vectorize.ts"
   },
   "dependencies": {
     "@hono/node-server": "^1.19.9",

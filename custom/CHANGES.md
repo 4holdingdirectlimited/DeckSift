@@ -758,6 +758,69 @@ had changed upstream.
 
 ---
 
+## Item 15 — Local card hydration + SigLIP benchmark (server)
+
+**Status:** implemented, uncommitted.
+
+### Why
+
+Scanning re-fetched full card details from the remote card API on every
+first encounter of a card (1-hour in-memory cache only). That put 0.5–1.5 s of
+variable network latency in the scan path and made scanning depend on the
+internet. The card data is already in the bulk sync — it was being thrown away.
+
+### What changed
+
+- **DB — `cards.card_data`.** New `card_data jsonb` column (migration
+  `drizzle/0001_pale_jack_murdock.sql`). Stores the complete card object.
+- **Sync — populate card data.** `SyncSourceCard` gained `cardData`; the
+  Scryfall sync now keeps the full card object from `unique_artwork` instead of
+  discarding it. `sync-job.ts` stores it on insert and backfills rows that
+  predate the column (batched, next sync run). Gundam/Pokémon bulk lists don't
+  carry full card objects, so those games populate on first scan instead.
+- **Hydration — DB first, network last.** `resolveCardDetails` now takes
+  `gameKey` and serves from the in-memory cache → local DB → remote adapter.
+  A remote fetch is persisted back into `cards.card_data` (update-only, never
+  inserts junk rows), so each card is fetched from the network at most once
+  ever. Verified end-to-end with a smoke test (fetch → persist → local hit).
+- **Benchmark — `pnpm bench:vectorize`.** `packages/server/scripts/bench-
+  vectorize.ts` times the real scan-path embed (JPEG decode + preprocess +
+  model) and reports min/p50/mean/p95 + cards/sec.
+
+### Benchmark results (this machine, SigLIP base 512 q8, CPU)
+
+- Full scan-path embed: **~703 ms** (p95 714 ms)
+- Model forward only: **~648 ms** (decode/preprocess is only ~55 ms)
+- Throughput ceiling ≈ **1.4 cards/sec** of pure compute
+
+With the search overlapping the physical sort, the 2 s/card target is roughly
+achievable on shallow bins (1–4); deep bins (5–6) and any search slower than
+the sort push it over. Margin requires a smaller model (e.g. 224 px — cheaper
+but needs a re-sync) or faster hardware.
+
+### Behavior notes
+
+- After the next MTG sync, card details are served entirely from Postgres —
+  no network in the scan path for synced cards.
+- New cards printed after a sync still hydrate once from the API, then stay
+  local.
+- The `cards` table is currently empty on this machine — **no sync has been
+  run yet**. The first sync (admin UI) is required before scanning can match
+  anything; it downloads the catalog once and embeds ~25k MTG cards (hours,
+  one time).
+
+### How to revert
+
+1. Drop `card_data` from `schema.ts` and generate a migration; or delete
+   migration `0001_pale_jack_murdock.sql` and `ALTER TABLE cards DROP COLUMN
+   card_data`.
+2. Restore `card-cache.ts` to the remote-only version and the old
+   `resolveCardDetails` signature in `routes/card.ts`.
+3. Remove the `cardData` plumbing from `sync-types.ts`, `scryfall/sync.ts`,
+   and `sync-job.ts`.
+
+---
+
 *Template for future entries:*
 
 ## Item N — <short title> (area)

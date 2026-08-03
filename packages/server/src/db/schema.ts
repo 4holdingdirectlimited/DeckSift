@@ -48,6 +48,11 @@ export const cardImageVectors = pgTable(
     name: text("name").notNull(),
     setCode: text("set_code").notNull(),
     embedding: vector("embedding").notNull(),
+    // Full card object (Scryfall card JSON / normalized PlayingCard shape).
+    // Populated at sync time from bulk sources that carry it (Scryfall) or on
+    // first scan via hydration fallback. Lets hydration serve card details
+    // from the local DB instead of a remote API — no network in the scan path.
+    cardData: jsonb("card_data"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },

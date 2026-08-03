@@ -3,6 +3,12 @@ export interface SyncSourceCard {
   name: string;
   setCode: string;
   imageUrl: string | undefined;
+  /**
+   * Full card object (raw Scryfall card JSON, or the normalized PlayingCard
+   * shape for other games) when the bulk source carries it. Stored in
+   * cards.card_data at sync time so hydration never needs the network.
+   */
+  cardData?: unknown;
 }
 
 export interface SyncSourceCardDetail {

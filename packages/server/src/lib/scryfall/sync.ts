@@ -83,6 +83,9 @@ async function fetchCards(
     name: c.name,
     setCode: c.set,
     imageUrl: cardImageUrl(c),
+    // unique_artwork entries are complete Scryfall card objects — exactly the
+    // shape searchById returns — so we can persist them for local hydration.
+    cardData: c as unknown,
   }));
   saveCachedCatalog(GAME_KEY, version, mapped);
   return mapped;

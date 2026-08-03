@@ -110,7 +110,12 @@ router.post("/", requireAuth, async (c) => {
       data = await Promise.all(
         closeMatches.map(async (m) => ({
           ...m,
-          card: await resolveCardDetails(adapter, baseUrl, m.scryfallId),
+          card: await resolveCardDetails(
+            gameKey,
+            adapter,
+            baseUrl,
+            m.scryfallId,
+          ),
         })),
       );
     }
