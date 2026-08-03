@@ -1332,6 +1332,52 @@ sync work, so it should be browsable like a collection.
 2. Delete `packages/web/src/app/routes/app/library.tsx`, the library feature
    folder, the route entry, and the nav item.
 
+## Item 29 — Bundle holo/duplicate toggles + physical bin capacity limits (shared + server + web)
+
+**Status:** implemented, committed.
+
+### Why
+
+Two needs from the operator: (1) bundles shouldn't always care about holo — a
+plain common bundle is fine with a holo common mixed in, and some bundles need
+to allow repeated copies of the same card; (2) the machine's bins have fixed
+physical heights (155 mm at module 1 nearest the feeder, 110 mm module 2,
+65 mm module 3, 60 mm reject), so each bin needs a card limit computed from
+real card thickness to guarantee no overflow.
+
+### What changed
+
+- **Bundle toggles**: `bundle_configs` gained `allow_duplicates` and
+  `holo_detection` (migration `0003_bundle_toggles`). Each rarity target also
+  carries an optional `foil` filter (`any` / `foil` / `nonfoil`). When holo
+  detection is off, the scan's foil signal is ignored — a holo common and a
+  plain common are both just “common”. When on, targets can be split by foil
+  (e.g. “common non-foil ×15 → bin 1” and “common foil ×1 → bin 2”), and a
+  card whose foil status matches no same-rarity target rejects with
+  `foil-mismatch`. `allowDuplicates` skips the no-duplicates check. The
+  bundle editor (Bundle Mode panel) exposes both toggles and the per-target
+  foil selector; the scan path passes the two-frame foil verdict into the
+  bundle decision.
+- **Bin capacities**: shared constants `BIN_HEIGHTS_MM` (1–2: 155, 3–4: 110,
+  5–6: 65, 7: 60), `CARD_THICKNESS_MM = 0.3`, and
+  `maxCapacity = floor((height / 0.3) × 0.9)` (10 % headroom so a full stack
+  never jams against the mechanism). Applied to the default bin set by
+  `scripts/apply-bin-capacities.ts` (bins 1–2: 465, 3–4: 330, 5–6: 195,
+  reject: 180) and by the seeder for fresh installs. The existing per-bin
+  “max capacity” routing check (overflow → catch-all) enforces the limits.
+
+### Behavior notes
+
+- Counts are now keyed by target (`rarity[:foil]`), so two same-rarity targets
+  split by foil each track independently.
+- When duplicates are allowed, placed-card ids don't accumulate, so progress
+  is summed from per-target counts.
+
+### How to revert
+
+1. Drop migration `0003` and the foil logic in `routes/bundles.ts`.
+2. Remove the capacity constants/script and reset `maxCapacity` to 0.
+
 ---
 
 *Template for future entries:*

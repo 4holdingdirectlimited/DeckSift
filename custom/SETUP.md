@@ -86,6 +86,40 @@ MTG uses `common/uncommon/rare/mythic`; Yu-Gi-Oh! uses
 `common/uncommon/rare/super rare/secret rare`. Edit the rarity strings in the
 bundle editor to match the game you're scanning.
 
+### Bundle options
+
+- **Allow duplicates** — when off (default), the same card id can only be
+  placed once per bundle run; repeats route to the reject bin. When on, copies
+  of the same card all count.
+- **Holo detection** — when off (default), the scan light/foil verdict is
+  ignored: a holo common and a plain common are both just “common”. When on,
+  each rarity target gains a foil filter (**Any / Non-foil / Foil**), so you
+  can build e.g. a non-holo common bundle (holo commons go to the reject bin)
+  or a foil-chase bundle.
+
+## Bin capacity limits (overflow protection)
+
+The physical bins are 155 mm (module 1, nearest the feeder), 110 mm (module
+2), 65 mm (module 3), and 60 mm for the reject/catch-all channel. The app sets
+a per-bin max card count so a run can never overflow:
+
+```
+maxCapacity = floor((binHeightMm / 0.3 mm average card thickness) × 0.9)
+```
+
+| Bins | Height | Max cards |
+| --- | --- | --- |
+| 1–2 (module 1) | 155 mm | 465 |
+| 3–4 (module 2) | 110 mm | 330 |
+| 5–6 (module 3) | 65 mm | 195 |
+| 7 (reject) | 60 mm | 180 |
+
+When a bin hits its limit the app routes overflow to the catch-all bin and
+pauses auto-feed. The 10 % headroom keeps the top of a full stack clear of the
+mechanism above. The values live in `BIN_HEIGHTS_MM` / `CARD_THICKNESS_MM` in
+the shared package; `node scripts/apply-bin-capacities.ts` (from
+`packages/server`) re-applies them to the active bin set after a change.
+
 ## Sorting by value (e.g. "over $2 → reject bin")
 
 Binning is fully configurable per bin, including numeric price rules:

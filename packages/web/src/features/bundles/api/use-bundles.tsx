@@ -1,3 +1,4 @@
+import { bundleTargetKey } from "@magic-vault/shared";
 import type {
   BundlePlaceResult,
   BundleRun,
@@ -38,6 +39,8 @@ interface BundlesContextValue {
     name: string;
     targets: BundleTarget[];
     rejectBinNumber: number;
+    allowDuplicates?: boolean;
+    holoDetection?: boolean;
   }) => Promise<void>;
   updateConfig: (
     guid: string,
@@ -45,6 +48,8 @@ interface BundlesContextValue {
       name: string;
       targets: BundleTarget[];
       rejectBinNumber: number;
+      allowDuplicates: boolean;
+      holoDetection: boolean;
     }>,
   ) => Promise<void>;
   deleteConfig: (guid: string) => Promise<void>;
@@ -56,7 +61,11 @@ interface BundlesContextValue {
    * no run is active / the call failed. Callers treat null as "route to the
    * reject bin" (safe failure mode — never pollutes a bundle bin).
    */
-  placeCard: (cardId: string, rarity: string) => Promise<BundlePlaceResult | null>;
+  placeCard: (
+    cardId: string,
+    rarity: string,
+    isFoil?: boolean,
+  ) => Promise<BundlePlaceResult | null>;
 }
 
 const BundlesContext = createContext<BundlesContextValue | null>(null);
@@ -103,6 +112,8 @@ export function BundlesProvider({ children }: { children: React.ReactNode }) {
       name: string;
       targets: BundleTarget[];
       rejectBinNumber: number;
+      allowDuplicates?: boolean;
+      holoDetection?: boolean;
     }) => {
       try {
         await createBundle(input);
@@ -124,6 +135,8 @@ export function BundlesProvider({ children }: { children: React.ReactNode }) {
         name: string;
         targets: BundleTarget[];
         rejectBinNumber: number;
+        allowDuplicates: boolean;
+        holoDetection: boolean;
       }>,
     ) => {
       try {
@@ -205,11 +218,15 @@ export function BundlesProvider({ children }: { children: React.ReactNode }) {
   );
 
   const placeCard = useCallback(
-    async (cardId: string, rarity: string): Promise<BundlePlaceResult | null> => {
+    async (
+      cardId: string,
+      rarity: string,
+      isFoil?: boolean,
+    ): Promise<BundlePlaceResult | null> => {
       const run = activeRunRef.current;
       if (!run) return null;
       try {
-        const decision = await placeCardInBundle(run.guid, cardId, rarity);
+        const decision = await placeCardInBundle(run.guid, cardId, rarity, isFoil);
         // Mirror the server state into the cached config so the panel updates
         // without a refetch on every scan.
         queryClient.setQueryData<BundleConfigWithRun[]>(["bundles"], (old) =>
@@ -219,8 +236,11 @@ export function BundlesProvider({ children }: { children: React.ReactNode }) {
             let placed = cfg.activeRun.placedCardIds;
             if (decision.accepted) {
               const target = cfg.targets.find((t) => t.rarity === rarity);
-              if (target) counts[target.rarity] = (counts[target.rarity] ?? 0) + 1;
-              placed = [...placed, cardId];
+              if (target) {
+                const key = bundleTargetKey(target);
+                counts[key] = (counts[key] ?? 0) + 1;
+              }
+              if (!cfg.allowDuplicates) placed = [...placed, cardId];
             }
             return {
               ...cfg,

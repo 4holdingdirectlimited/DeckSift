@@ -22,6 +22,7 @@ import {
 } from "../src/db/schema";
 import {
   BIN_COUNT,
+  computeAllBinCapacities,
   createDefaultCatchAllOnlyBins,
   FIELD_DEFINITIONS,
   type BundleTarget,
@@ -190,6 +191,7 @@ async function seedBinSet(): Promise<void> {
     .where(eq(games.key, "mtg"))
     .limit(1);
   const defaultBins = createDefaultCatchAllOnlyBins();
+  const capacities = computeAllBinCapacities();
   const [set] = await db
     .insert(binSets)
     .values({
@@ -204,13 +206,15 @@ async function seedBinSet(): Promise<void> {
       binNumber: b.binNumber,
       rules: b.rules,
       isCatchAll: b.isCatchAll,
-      maxCapacity: b.maxCapacity ?? 0,
+      // Overflow protection: capacity derived from the physical bin heights
+      // (155/110/65/60 mm) and average card thickness (0.3 mm).
+      maxCapacity: capacities[b.binNumber] ?? 0,
       binSet: set.id,
       orgId: LOCAL_ORG_ID,
     })),
   );
   console.log(
-    `  bin set created: id=${set.id} with ${BIN_COUNT} bins (bin ${BIN_COUNT} = catch-all)`,
+    `  bin set created: id=${set.id} with ${BIN_COUNT} bins (bin ${BIN_COUNT} = catch-all), capacities=${JSON.stringify(capacities)}`,
   );
 }
 

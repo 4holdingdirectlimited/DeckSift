@@ -383,8 +383,9 @@ export function ScannedCardsProvider({
       // ── Bundle mode: the active run decides the bin ──
       const bundle = bundleRef.current;
       if (bundle.isBundleActive && bundle.activeRun) {
-        void bundle.placeCard(card.id, card.rarity.toLowerCase()).then(
-          (decision) => {
+        void bundle
+          .placeCard(card.id, card.rarity.toLowerCase(), isFoil)
+          .then((decision) => {
             // Safe failure mode: if the server can't be reached, route to the
             // reject bin so the physical card leaves module 1 and no bundle
             // bin is ever polluted by an unknown card.
@@ -418,7 +419,9 @@ export function ScannedCardsProvider({
                   ? "already in this bundle"
                   : decision.reason === "target-full"
                     ? "that rarity slot is full"
-                    : "rarity is not part of this bundle";
+                    : decision.reason === "foil-mismatch"
+                      ? "foil status doesn't match this target"
+                      : "rarity is not part of this bundle";
               toast.info(`Rejected: ${reasonText}`, {
                 description: `${card.name} → reject bin ${decision.binNumber}.`,
               });

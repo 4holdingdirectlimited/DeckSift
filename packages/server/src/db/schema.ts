@@ -316,7 +316,7 @@ export const orgSettings = pgTable(
 // ─── Bundle mode (recipe-based sorting) ────────────────────────────────────────
 
 // A recipe: which rarities go into a bundle, how many of each, and which
-// physical bin each rarity routes to. Targets is [{ rarity, count, binNumber }].
+// physical bin each rarity routes to. Targets is [{ rarity, count, binNumber, foil? }].
 export const bundleConfigs = pgTable(
   "bundle_configs",
   {
@@ -327,6 +327,12 @@ export const bundleConfigs = pgTable(
     targets: jsonb("targets").notNull(),
     // Duplicates / unmatched rarities / full targets route here.
     rejectBinNumber: integer("reject_bin_number").notNull(),
+    // When true, the same card id may be placed more than once in a run.
+    allowDuplicates: boolean("allow_duplicates").notNull().default(false),
+    // When false, the scan's foil signal is ignored entirely (a holo common
+    // and a plain common are both just "common"). When true, per-target foil
+    // filters in `targets` apply.
+    holoDetection: boolean("holo_detection").notNull().default(false),
     isActive: boolean("is_active").notNull().default(false),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),

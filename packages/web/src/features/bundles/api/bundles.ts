@@ -28,6 +28,8 @@ export async function createBundle(input: {
   name: string;
   targets: BundleTarget[];
   rejectBinNumber: number;
+  allowDuplicates?: boolean;
+  holoDetection?: boolean;
 }): Promise<BundleConfigWithRun[]> {
   const r = await apiPost<Result<BundleConfigWithRun[]>>("/api/bundles", input);
   if (!r.success) throw new Error(r.message ?? "Failed to create bundle");
@@ -40,6 +42,8 @@ export async function updateBundle(
     name: string;
     targets: BundleTarget[];
     rejectBinNumber: number;
+    allowDuplicates: boolean;
+    holoDetection: boolean;
   }>,
 ): Promise<BundleConfigWithRun[]> {
   const r = await apiPut<Result<BundleConfigWithRun[]>>(
@@ -91,10 +95,11 @@ export async function placeCardInBundle(
   runGuid: string,
   cardId: string,
   rarity: string,
+  isFoil?: boolean,
 ): Promise<BundlePlaceResult> {
   const r = await apiPost<Result<BundlePlaceResult>>(
     `/api/bundles/run/${runGuid}/place`,
-    { cardId, rarity },
+    { cardId, rarity, isFoil: isFoil === true },
   );
   if (!r.success) throw new Error(r.message ?? "Failed to place card in bundle");
   return r.data!;

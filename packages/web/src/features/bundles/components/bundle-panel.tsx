@@ -6,10 +6,22 @@ import {
   useDialogClose,
 } from "@/components/ui/responsive-dialog";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
+import {
   useBundles,
 } from "@/features/bundles/api/use-bundles";
 import type { BundleConfigWithRun } from "@/features/bundles/api/bundles";
-import type { BundleTarget } from "@magic-vault/shared";
+import {
+  bundleTargetKey,
+  type BundleTarget,
+  type FoilFilter,
+} from "@magic-vault/shared";
 import { cn } from "@/lib/utils";
 import {
   IconEdit,
@@ -55,6 +67,12 @@ function BundleConfigDialog({
   const [rejectBinNumber, setRejectBinNumber] = useState(
     config?.rejectBinNumber ?? 7,
   );
+  const [allowDuplicates, setAllowDuplicates] = useState(
+    config?.allowDuplicates ?? false,
+  );
+  const [holoDetection, setHoloDetection] = useState(
+    config?.holoDetection ?? false,
+  );
   const [saving, setSaving] = useState(false);
   const close = useDialogClose();
 
@@ -65,6 +83,8 @@ function BundleConfigDialog({
       setName(config?.name ?? "");
       setTargets(config?.targets?.length ? config.targets : DEFAULT_TARGETS);
       setRejectBinNumber(config?.rejectBinNumber ?? 7);
+      setAllowDuplicates(config?.allowDuplicates ?? false);
+      setHoloDetection(config?.holoDetection ?? false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
@@ -84,24 +104,24 @@ function BundleConfigDialog({
         rarity: t.rarity.trim().toLowerCase(),
         count: Math.max(1, Math.floor(t.count)),
         binNumber: Math.max(1, Math.floor(t.binNumber)),
+        ...(t.foil && t.foil !== "any" ? { foil: t.foil } : {}),
       }));
     if (cleaned.length === 0) {
       toast.error("Add at least one rarity target");
       return;
     }
     setSaving(true);
+    const payload = {
+      name: name.trim(),
+      targets: cleaned,
+      rejectBinNumber: Math.max(1, Math.floor(rejectBinNumber)),
+      allowDuplicates,
+      holoDetection,
+    };
     if (config) {
-      await updateConfig(config.guid, {
-        name: name.trim(),
-        targets: cleaned,
-        rejectBinNumber: Math.max(1, Math.floor(rejectBinNumber)),
-      });
+      await updateConfig(config.guid, payload);
     } else {
-      await createConfig({
-        name: name.trim(),
-        targets: cleaned,
-        rejectBinNumber: Math.max(1, Math.floor(rejectBinNumber)),
-      });
+      await createConfig(payload);
     }
     setSaving(false);
     close();
@@ -112,7 +132,7 @@ function BundleConfigDialog({
       open={open}
       onOpenChange={onOpenChange}
       title={config ? "Edit bundle" : "New bundle"}
-      description="Each rarity target fills one bin. Duplicates, unmatched rarities, and full slots go to the reject bin."
+      description="Each rarity target fills one bin. Rejects (duplicates, full slots, foil mismatches) go to the reject bin."
       className="sm:max-w-xl"
       footer={
         <>
@@ -135,10 +155,45 @@ function BundleConfigDialog({
         />
       </Field>
 
+      <div className="grid grid-cols-2 gap-3">
+        <div className="flex items-center justify-between rounded-lg border px-3 py-2">
+          <div className="flex flex-col">
+            <span className="text-xs font-medium">Allow duplicates</span>
+            <span className="text-[11px] text-muted-foreground">
+              Same card can be placed more than once
+            </span>
+          </div>
+          <Switch
+            checked={allowDuplicates}
+            onCheckedChange={setAllowDuplicates}
+          />
+        </div>
+        <div className="flex items-center justify-between rounded-lg border px-3 py-2">
+          <div className="flex flex-col">
+            <span className="text-xs font-medium">Holo detection</span>
+            <span className="text-[11px] text-muted-foreground">
+              Use the scan light to filter foil cards
+            </span>
+          </div>
+          <Switch
+            checked={holoDetection}
+            onCheckedChange={setHoloDetection}
+          />
+        </div>
+      </div>
+
       <div className="flex flex-col gap-2">
         <FieldLabel>Rarity targets</FieldLabel>
-        <div className="grid grid-cols-[1fr_4rem_4rem_2rem] gap-2 items-center text-xs text-muted-foreground px-1">
+        <div
+          className={cn(
+            "grid gap-2 items-center text-xs text-muted-foreground px-1",
+            holoDetection
+              ? "grid-cols-[1fr_6rem_4rem_4rem_2rem]"
+              : "grid-cols-[1fr_4rem_4rem_2rem]",
+          )}
+        >
           <span>Rarity</span>
+          <span className="text-center">Foil</span>
           <span className="text-center">Count</span>
           <span className="text-center">Bin</span>
           <span />
@@ -146,13 +201,35 @@ function BundleConfigDialog({
         {targets.map((target, i) => (
           <div
             key={i}
-            className="grid grid-cols-[1fr_4rem_4rem_2rem] gap-2 items-center"
+            className={cn(
+              "grid gap-2 items-center",
+              holoDetection
+                ? "grid-cols-[1fr_6rem_4rem_4rem_2rem]"
+                : "grid-cols-[1fr_4rem_4rem_2rem]",
+            )}
           >
             <Input
               value={target.rarity}
               onChange={(e) => updateTarget(i, { rarity: e.target.value })}
               placeholder="common"
             />
+            {holoDetection && (
+              <Select
+                value={target.foil ?? "any"}
+                onValueChange={(v) =>
+                  updateTarget(i, { foil: (v ?? "any") as FoilFilter })
+                }
+              >
+                <SelectTrigger className="h-8 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="any">Any</SelectItem>
+                  <SelectItem value="nonfoil">Non-foil</SelectItem>
+                  <SelectItem value="foil">Foil</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
             <Input
               type="number"
               min={1}
@@ -190,7 +267,12 @@ function BundleConfigDialog({
           onClick={() =>
             setTargets((prev) => [
               ...prev,
-              { rarity: "", count: 5, binNumber: Math.min(7, prev.length + 1) },
+              {
+                rarity: "",
+                count: 5,
+                binNumber: Math.min(7, prev.length + 1),
+                ...(holoDetection ? { foil: "any" as FoilFilter } : {}),
+              },
             ])
           }
         >
@@ -224,7 +306,13 @@ function BundleProgress() {
   if (!activeRun || !config) return null;
 
   const totalTarget = config.targets.reduce((n, t) => n + t.count, 0);
-  const totalPlaced = Math.min(activeRun.placedCardIds.length, totalTarget);
+  const totalPlaced = Math.min(
+    config.targets.reduce(
+      (n, t) => n + (activeRun.counts[bundleTargetKey(t)] ?? 0),
+      0,
+    ),
+    totalTarget,
+  );
 
   return (
     <div className="flex flex-col gap-2 rounded-lg border p-2">
@@ -244,11 +332,11 @@ function BundleProgress() {
       </div>
       <div className="flex flex-col gap-1">
         {config.targets.map((target) => {
-          const count = activeRun.counts[target.rarity] ?? 0;
+          const count = activeRun.counts[bundleTargetKey(target)] ?? 0;
           const done = count >= target.count;
           return (
             <div
-              key={target.rarity}
+              key={bundleTargetKey(target)}
               className="flex items-center justify-between text-xs"
             >
               <span className="flex items-center gap-1.5 min-w-0">
@@ -259,6 +347,11 @@ function BundleProgress() {
                   )}
                 />
                 <span className="truncate">{titleCase(target.rarity)}</span>
+                {target.foil && target.foil !== "any" && (
+                  <span className="text-[10px] text-muted-foreground">
+                    {target.foil === "foil" ? "(foil)" : "(non-foil)"}
+                  </span>
+                )}
                 <span className="text-muted-foreground">
                   → bin {target.binNumber}
                 </span>

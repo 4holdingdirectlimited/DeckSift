@@ -6,6 +6,43 @@ import { FieldMeta } from "../interfaces/sort-bins.interface";
 
 export const BIN_COUNT = 7;
 
+// ─── Physical bin capacity (overflow protection) ─────────────────────────────
+// The machine has three bin depths: 155 mm (module 1, nearest the feeder),
+// 110 mm (module 2), 65 mm (module 3), and a 60 mm reject/catch-all channel.
+// These are the total usable card heights in millimetres. The per-bin card
+// limit is derived so a run can never overflow a bin:
+//
+//   maxCapacity = floor((binHeightMm / cardThicknessMm) * headroom)
+//
+// with a 10% headroom so the top cards never jam against the mechanism above
+// the stack. Average unsleeved trading-card thickness is ~0.3 mm.
+export const CARD_THICKNESS_MM = 0.3;
+export const BIN_HEADROOM_FACTOR = 0.9;
+/** Bin number → usable card height in mm. */
+export const BIN_HEIGHTS_MM: Record<number, number> = {
+  1: 155,
+  2: 155,
+  3: 110,
+  4: 110,
+  5: 65,
+  6: 65,
+  7: 60,
+};
+
+export function computeBinCapacity(binNumber: number): number {
+  const height = BIN_HEIGHTS_MM[binNumber];
+  if (!height) return 0;
+  return Math.floor((height / CARD_THICKNESS_MM) * BIN_HEADROOM_FACTOR);
+}
+
+export function computeAllBinCapacities(): Record<number, number> {
+  const result: Record<number, number> = {};
+  for (let bin = 1; bin <= BIN_COUNT; bin++) {
+    result[bin] = computeBinCapacity(bin);
+  }
+  return result;
+}
+
 export const SET_NAME_MAX_LENGTH = 50;
 export const CONDITION_STRING_MAX_LENGTH = 200;
 export const CONDITION_NUMERIC_MAX = 100_000;

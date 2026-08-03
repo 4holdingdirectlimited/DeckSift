@@ -3,6 +3,8 @@ import {
   type BundlePlaceResult,
   type BundleRun,
   type BundleTarget,
+  bundleTargetKey,
+  type FoilFilter,
 } from "@magic-vault/shared";
 import { and, desc, eq } from "drizzle-orm";
 import { Hono } from "hono";
@@ -22,10 +24,18 @@ function toConfig(row: ConfigRow): BundleConfig {
     name: row.name,
     targets: row.targets as BundleTarget[],
     rejectBinNumber: row.rejectBinNumber,
+    allowDuplicates: row.allowDuplicates,
+    holoDetection: row.holoDetection,
     isActive: row.isActive,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
+}
+
+function sanitizeFoil(value: unknown): FoilFilter | undefined {
+  return value === "foil" || value === "nonfoil" || value === "any"
+    ? value
+    : undefined;
 }
 
 function toRun(row: RunRow, configName: string, configGuid: string): BundleRun {
@@ -103,7 +113,13 @@ router.get("/", requireAuth, requireOrg, async (c) => {
 router.post("/", requireAuth, requireOrg, async (c) => {
   const orgId = c.get("orgId");
   const body = await c.req
-    .json<{ name: string; targets: BundleTarget[]; rejectBinNumber: number }>()
+    .json<{
+      name: string;
+      targets: BundleTarget[];
+      rejectBinNumber: number;
+      allowDuplicates?: boolean;
+      holoDetection?: boolean;
+    }>()
     .catch(() => null);
   if (!body || !body.name?.trim()) {
     return c.json(
@@ -118,6 +134,7 @@ router.post("/", requireAuth, requireOrg, async (c) => {
           rarity: String(t.rarity).toLowerCase(),
           count: Math.max(0, Math.floor(t.count)),
           binNumber: Math.floor(t.binNumber),
+          ...(sanitizeFoil(t.foil) ? { foil: sanitizeFoil(t.foil) } : {}),
         }))
     : [];
   const rejectBinNumber = Number.isFinite(body.rejectBinNumber)
@@ -133,6 +150,8 @@ router.post("/", requireAuth, requireOrg, async (c) => {
         name: body.name.trim(),
         targets,
         rejectBinNumber,
+        allowDuplicates: body.allowDuplicates ?? false,
+        holoDetection: body.holoDetection ?? false,
         isActive: true,
         orgId,
       });
@@ -150,7 +169,13 @@ router.put("/:guid", requireAuth, requireOrg, async (c) => {
   const orgId = c.get("orgId");
   const guid = c.req.param("guid");
   const body = await c.req
-    .json<{ name?: string; targets?: BundleTarget[]; rejectBinNumber?: number }>()
+    .json<{
+      name?: string;
+      targets?: BundleTarget[];
+      rejectBinNumber?: number;
+      allowDuplicates?: boolean;
+      holoDetection?: boolean;
+    }>()
     .catch(() => null);
   try {
     const data = await authQuery(c.get("jwtClaims"), async (tx) => {
@@ -173,10 +198,17 @@ router.put("/:guid", requireAuth, requireOrg, async (c) => {
             rarity: String(t.rarity).toLowerCase(),
             count: Math.max(0, Math.floor(t.count)),
             binNumber: Math.floor(t.binNumber),
+            ...(sanitizeFoil(t.foil) ? { foil: sanitizeFoil(t.foil) } : {}),
           }));
       }
       if (body && Number.isFinite(body.rejectBinNumber)) {
         updates.rejectBinNumber = Math.floor(body.rejectBinNumber!);
+      }
+      if (body && typeof body.allowDuplicates === "boolean") {
+        updates.allowDuplicates = body.allowDuplicates;
+      }
+      if (body && typeof body.holoDetection === "boolean") {
+        updates.holoDetection = body.holoDetection;
       }
       await tx
         .update(bundleConfigs)
@@ -337,13 +369,14 @@ router.post("/run/:guid/place", requireAuth, requireOrg, async (c) => {
   const orgId = c.get("orgId");
   const guid = c.req.param("guid");
   const body = await c.req
-    .json<{ cardId?: string; rarity?: string }>()
+    .json<{ cardId?: string; rarity?: string; isFoil?: boolean }>()
     .catch(() => null);
   const cardId = body?.cardId;
   if (!cardId) {
     return c.json({ success: false, message: "cardId is required." }, 400);
   }
   const rarity = (body?.rarity ?? "").toLowerCase();
+  const isFoil = body?.isFoil === true;
   try {
     const result = await authQuery(c.get("jwtClaims"), async (tx) => {
       const run = await tx.query.bundleRuns.findFirst({
@@ -363,9 +396,45 @@ router.post("/run/:guid/place", requireAuth, requireOrg, async (c) => {
       const placed: string[] = (run.placedCardIds as string[]) ?? [];
       const counts: Record<string, number> =
         (run.counts as Record<string, number>) ?? {};
+      const useHolo = config.holoDetection === true;
+      const allowDuplicates = config.allowDuplicates === true;
+
+      // Resolve the target by rarity AND (when holo detection is on) the
+      // card's foil status — a config may have two targets for the same
+      // rarity split by foil (e.g. "common non-foil" and "common foil").
+      const candidates = targets.filter((t) => t.rarity === rarity);
+      let target: BundleTarget | undefined;
+      let foilMismatch = false;
+      if (candidates.length === 0) {
+        target = undefined;
+      } else if (!useHolo) {
+        target = candidates[0];
+      } else {
+        const cardFoil = isFoil ? "foil" : "nonfoil";
+        target = candidates.find(
+          (t) => t.foil === "any" || t.foil === cardFoil,
+        );
+        // A same-rarity target exists, but none accepts this card's foil
+        // status — report it as a foil mismatch, not an unknown rarity.
+        if (!target) foilMismatch = true;
+      }
 
       let decision: BundlePlaceResult;
-      if (placed.includes(cardId)) {
+      if (!target && !foilMismatch) {
+        decision = {
+          accepted: false,
+          binNumber: config.rejectBinNumber,
+          complete: false,
+          reason: "unmatched-rarity",
+        };
+      } else if (foilMismatch) {
+        decision = {
+          accepted: false,
+          binNumber: config.rejectBinNumber,
+          complete: false,
+          reason: "foil-mismatch",
+        };
+      } else if (!allowDuplicates && placed.includes(cardId)) {
         decision = {
           accepted: false,
           binNumber: config.rejectBinNumber,
@@ -373,15 +442,9 @@ router.post("/run/:guid/place", requireAuth, requireOrg, async (c) => {
           reason: "duplicate",
         };
       } else {
-        const target = targets.find((t) => t.rarity === rarity);
-        if (!target) {
-          decision = {
-            accepted: false,
-            binNumber: config.rejectBinNumber,
-            complete: false,
-            reason: "unmatched-rarity",
-          };
-        } else if ((counts[target.rarity] ?? 0) >= target.count) {
+        const t = target!; // guaranteed: the earlier branches returned
+        const countKey = bundleTargetKey(t);
+        if ((counts[countKey] ?? 0) >= t.count) {
           decision = {
             accepted: false,
             binNumber: config.rejectBinNumber,
@@ -391,11 +454,13 @@ router.post("/run/:guid/place", requireAuth, requireOrg, async (c) => {
         } else {
           const nextCounts = {
             ...counts,
-            [target.rarity]: (counts[target.rarity] ?? 0) + 1,
+            [countKey]: (counts[countKey] ?? 0) + 1,
           };
-          const nextPlaced = [...placed, cardId];
+          const nextPlaced = allowDuplicates
+            ? placed
+            : [...placed, cardId];
           const complete = targets.every(
-            (t) => (nextCounts[t.rarity] ?? 0) >= t.count,
+            (t) => (nextCounts[bundleTargetKey(t)] ?? 0) >= t.count,
           );
           await tx
             .update(bundleRuns)
@@ -409,7 +474,7 @@ router.post("/run/:guid/place", requireAuth, requireOrg, async (c) => {
             .where(eq(bundleRuns.id, run.id));
           decision = {
             accepted: true,
-            binNumber: target.binNumber,
+            binNumber: t.binNumber,
             complete,
             reason: "ok",
           };

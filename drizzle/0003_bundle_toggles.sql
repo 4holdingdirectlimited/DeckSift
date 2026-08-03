@@ -1,0 +1,2 @@
+ALTER TABLE "bundle_configs" ADD COLUMN "allow_duplicates" boolean DEFAULT false NOT NULL;--> statement-breakpoint
+ALTER TABLE "bundle_configs" ADD COLUMN "holo_detection" boolean DEFAULT false NOT NULL;
