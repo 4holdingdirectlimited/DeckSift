@@ -325,7 +325,7 @@ export default function LibraryPage() {
             {isLoading && page === 1 && (
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
                 {Array.from({ length: 12 }).map((_, i) => (
-                  <Skeleton key={i} className="aspect-[5/7] rounded-lg" />
+                  <Skeleton key={i} className="aspect-5/7 rounded-lg" />
                 ))}
               </div>
             )}
@@ -351,7 +351,7 @@ export default function LibraryPage() {
                         onClick={() => setSelected(card)}
                         className="group flex flex-col rounded-lg border bg-card overflow-hidden text-left transition-colors hover:border-primary/50 hover:bg-accent/50"
                       >
-                        <div className="relative aspect-[5/7] overflow-hidden bg-muted">
+                        <div className="relative aspect-5/7 overflow-hidden bg-muted">
                           {imageUrl ? (
                             <img
                               src={imageUrl}
