@@ -1,1 +1,0 @@
-import{S as e}from"./use-collections-B6Xg1Uti.js";import{o as a,s as m}from"./zod-ZkEHX5n2.js";const r=m().trim().min(1,"Name is required").max(e,`Name must be ${e} characters or less`),t=a({name:r,gameGuid:m().min(1,"Game is required")}),c=a({name:r});export{t as c,c as r};

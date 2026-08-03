@@ -1,1 +1,0 @@
-import{t as s,y as t,z as n,x as i,q as r}from"./use-organization-CC7ONF5Y.js";async function u(){return r("/api/games")}const p=i({queryKey:["games"],queryFn:()=>u().then(a=>a.data??[]),staleTime:1/0});async function c(a){return s("/api/games",a)}async function o(a,e){return t(`/api/games/${a}`,e)}async function y(a){return n(`/api/games/${a}`)}export{c,y as d,p as g,o as u};
