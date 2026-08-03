@@ -7,6 +7,7 @@ import {
 } from "@magic-vault/shared";
 
 import { useBinConfigs } from "@/features/bins/api/use-bin-configs";
+import { useBundles } from "@/features/bundles/api/use-bundles";
 import {
   addCollectionCard,
   clearCollectionCards,
@@ -63,6 +64,14 @@ export function ScannedCardsProvider({
 
   const binConfigsRef = useRef(binConfigs);
   const fieldDefinitionsRef = useRef(fieldDefinitions);
+  // Bundle-mode routing state. Kept in a ref because addCard is memoized — the
+  // ref always points at the latest bundle context while the callback closure
+  // stays stable.
+  const bundle = useBundles();
+  const bundleRef = useRef(bundle);
+  useEffect(() => {
+    bundleRef.current = bundle;
+  }, [bundle]);
   const serialRef = useRef({
     sendBin,
     sendFeed,
@@ -250,6 +259,95 @@ export function ScannedCardsProvider({
     };
   }, [activeCollection?.guid]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Persist a scanned card and physically route it to a bin. Shared by the
+  // normal routing path and bundle mode so both record scans the same way.
+  const commitScan = useCallback(
+    (record: ScannedCard, binNumber: number | undefined) => {
+      const collection = activeCollectionRef.current;
+      if (!collection) return;
+      setCards((prev) => [record, ...prev]);
+      setTimerTrigger(record.scannedAt);
+      addCollectionCard(collection.guid, record)
+        .then((result) => {
+          if (!result.success) {
+            setCards((prev) => prev.filter((c) => c.scanId !== record.scanId));
+            toast.error("Collection locked", {
+              description:
+                "Another org member is currently scanning into this collection.",
+            });
+          }
+        })
+        .catch((err) => console.error("Failed to persist card:", err));
+
+      if (
+        binNumber != null &&
+        serialRef.current.isConnected &&
+        serialRef.current.isReady
+      ) {
+        serialRef.current.sendBin(binNumber).then((response) => {
+          if (!response) {
+            toast.error("Routing failed", {
+              description: `No response from sorter for bin ${binNumber}.`,
+            });
+            void reportSerialEvent({
+              command: "bin",
+              sent: true,
+              response: null,
+              cardName: record.card.name,
+              binNumber,
+            });
+            autoFeedRef.current = false;
+            setAutoFeedState(false);
+            return;
+          }
+          const res = response as Record<string, unknown>;
+          if (res.empty) {
+            toast.error("Feeder empty", {
+              description:
+                "No cards remaining in the hopper. Add more cards to continue.",
+              duration: Infinity,
+              dismissible: true,
+            });
+            void reportSerialEvent({
+              command: "bin",
+              sent: true,
+              response: res,
+              cardName: record.card.name,
+              binNumber,
+            });
+            autoFeedRef.current = false;
+            setAutoFeedState(false);
+            pauseHookRef.current?.();
+            return;
+          }
+          if (res.error) {
+            toast.error("Sorter error", {
+              description: String(res.error),
+              duration: Infinity,
+              dismissible: true,
+            });
+            void reportSerialEvent({
+              command: "bin",
+              sent: true,
+              response: res,
+              cardName: record.card.name,
+              binNumber,
+            });
+            autoFeedRef.current = false;
+            setAutoFeedState(false);
+            return;
+          }
+          binCountsRef.current[binNumber] =
+            (binCountsRef.current[binNumber] ?? 0) + 1;
+          if (autoFeedRef.current) {
+            triggerAutoFeed();
+          }
+        });
+      }
+    },
+    [triggerAutoFeed],
+  );
+
   const addCard = useCallback(
     (
       card: PlayingCardWithDistance,
@@ -274,6 +372,74 @@ export function ScannedCardsProvider({
         return;
       }
 
+      // Reuse the first capture of this card this session (dedupe) so repeated
+      // copies don't each store a full base64 JPEG.
+      let effectiveImage = capturedImageRef.current[card.id];
+      if (!effectiveImage && capturedImageUrl) {
+        effectiveImage = capturedImageUrl;
+        capturedImageRef.current[card.id] = effectiveImage;
+      }
+
+      // ── Bundle mode: the active run decides the bin ──
+      const bundle = bundleRef.current;
+      if (bundle.isBundleActive && bundle.activeRun) {
+        void bundle.placeCard(card.id, card.rarity.toLowerCase()).then(
+          (decision) => {
+            // Safe failure mode: if the server can't be reached, route to the
+            // reject bin so the physical card leaves module 1 and no bundle
+            // bin is ever polluted by an unknown card.
+            const binNumber =
+              decision?.binNumber ??
+              bundle.rejectBinNumber ??
+              getCatchAllBin(binConfigsRef.current)?.binNumber;
+            const record: ScannedCard = {
+              scanId: generateScanId(),
+              card,
+              scannedAt: Date.now(),
+              binNumber,
+              capturedImageUrl: effectiveImage,
+              isFoil: isFoil ?? false,
+              alternativeMatches: alternativeMatches?.length
+                ? alternativeMatches
+                : undefined,
+            };
+            commitScan(record, binNumber);
+
+            if (!decision) {
+              toast.error("Bundle routing failed", {
+                description:
+                  "Could not reach the server — card sent to the reject bin. Bundle state is unchanged.",
+              });
+              return;
+            }
+            if (decision.reason !== "ok") {
+              const reasonText =
+                decision.reason === "duplicate"
+                  ? "already in this bundle"
+                  : decision.reason === "target-full"
+                    ? "that rarity slot is full"
+                    : "rarity is not part of this bundle";
+              toast.info(`Rejected: ${reasonText}`, {
+                description: `${card.name} → reject bin ${decision.binNumber}.`,
+              });
+            }
+            if (decision.complete) {
+              toast.success("Bundle complete! 🎉", {
+                description:
+                  "All target counts are met. Auto-feed paused — empty the bins and start the next bundle.",
+                duration: Infinity,
+                dismissible: true,
+              });
+              autoFeedRef.current = false;
+              setAutoFeedState(false);
+              pauseHookRef.current?.();
+            }
+          },
+        );
+        return;
+      }
+
+      // ── Normal mode: evaluate bin rules ──
       const matchedBin = evaluateCardBin(
         card,
         binConfigsRef.current,
@@ -310,13 +476,6 @@ export function ScannedCardsProvider({
         }
       }
 
-      // Reuse the first capture of this card this session (dedupe) so repeated
-      // copies don't each store a full base64 JPEG.
-      let effectiveImage = capturedImageRef.current[card.id];
-      if (!effectiveImage && capturedImageUrl) {
-        effectiveImage = capturedImageUrl;
-        capturedImageRef.current[card.id] = effectiveImage;
-      }
       const record: ScannedCard = {
         scanId: generateScanId(),
         card,
@@ -331,87 +490,9 @@ export function ScannedCardsProvider({
           : undefined,
       };
 
-      setCards((prev) => [record, ...prev]);
-      setTimerTrigger(record.scannedAt);
-      addCollectionCard(collection.guid, record)
-        .then((result) => {
-          if (!result.success) {
-            setCards((prev) => prev.filter((c) => c.scanId !== record.scanId));
-            toast.error("Collection locked", {
-              description:
-                "Another org member is currently scanning into this collection.",
-            });
-          }
-        })
-        .catch((err) => console.error("Failed to persist card:", err));
-
-      if (
-        routeBin &&
-        serialRef.current.isConnected &&
-        serialRef.current.isReady
-      ) {
-        serialRef.current.sendBin(routeBin.binNumber).then((response) => {
-          if (!response) {
-            toast.error("Routing failed", {
-              description: `No response from sorter for bin ${routeBin!.binNumber}.`,
-            });
-            void reportSerialEvent({
-              command: "bin",
-              sent: true,
-              response: null,
-              cardName: card.name,
-              binNumber: routeBin!.binNumber,
-            });
-            autoFeedRef.current = false;
-            setAutoFeedState(false);
-            return;
-          }
-          const res = response as Record<string, unknown>;
-          if (res.empty) {
-            toast.error("Feeder empty", {
-              description:
-                "No cards remaining in the hopper. Add more cards to continue.",
-              duration: Infinity,
-              dismissible: true,
-            });
-            void reportSerialEvent({
-              command: "bin",
-              sent: true,
-              response: res,
-              cardName: card.name,
-              binNumber: routeBin!.binNumber,
-            });
-            autoFeedRef.current = false;
-            setAutoFeedState(false);
-            pauseHookRef.current?.();
-            return;
-          }
-          if (res.error) {
-            toast.error("Sorter error", {
-              description: String(res.error),
-              duration: Infinity,
-              dismissible: true,
-            });
-            void reportSerialEvent({
-              command: "bin",
-              sent: true,
-              response: res,
-              cardName: card.name,
-              binNumber: routeBin!.binNumber,
-            });
-            autoFeedRef.current = false;
-            setAutoFeedState(false);
-            return;
-          }
-          binCountsRef.current[routeBin!.binNumber] =
-            (binCountsRef.current[routeBin!.binNumber] ?? 0) + 1;
-          if (autoFeedRef.current) {
-            triggerAutoFeed();
-          }
-        });
-      }
+      commitScan(record, routeBin?.binNumber);
     },
-    [triggerAutoFeed],
+    [commitScan],
   );
 
   const sendCatchAllBin = useCallback(() => {

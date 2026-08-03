@@ -1066,6 +1066,108 @@ one-time first-run flow needed documenting.
 2. Remove the `card_prices` mapping from `yugiohConfig`.
 3. Delete `scripts/start-web.cmd` and `custom/SETUP.md`.
 
+## Item 22 — First-run setup executed: seed script + default data (server + web)
+
+**Status:** implemented, committed.
+
+### Why
+
+The machine had never been set up — the DB was completely empty (0 games, 0
+collections, 0 bin sets), so the app was unusable until the operator clicked
+through Settings → Games, Collections, and Bins by hand. The task was to make
+the first-run path one command and to run it.
+
+### What changed
+
+- **`packages/server/scripts/seed-local.ts`** — idempotent seeder: upserts the
+  five sync-capable game rows (`mtg`, `yugioh`, `digimon`, `gundam`, `pokemon`)
+  with their real data-source URLs and per-game rarity field definitions;
+  creates a default active collection (`My Collection`, MTG); creates an active
+  7-bin set (bin 7 = catch-all); creates a ready-made `Standard Bundle
+  (15/15/5/5)` config. Safe to re-run.
+- **Default data created on this machine** via the script (verified through the
+  API): 5 games, 1 collection, 1 bin set, 1 bundle config.
+- **`custom/SETUP.md`** updated: first-run is now `npx tsx
+  scripts/seed-local.ts` + one card sync in Admin (still required — the `cards`
+  table stays empty until sync embeds a catalog).
+
+### How to revert
+
+1. Delete the seeded rows (`DELETE FROM bundle_configs/bins/bin_sets/collections/games`).
+2. Remove `scripts/seed-local.ts` and the SETUP.md first-run section.
+
+## Item 23 — Yu-Gi-Oh! / Digimon search adapters registered (server)
+
+**Status:** implemented, committed.
+
+### Why
+
+Item 19 wired YGO/Digimon into the **sync** path (`SYNC_SOURCES`) but never into
+`ADAPTERS_BY_GAME_KEY` in `resolve.ts` — the search adapter map only had
+mtg/gundam/pokemon. Scanning cards for a Yu-Gi-Oh! or Digimon collection would
+fail at search time (`resolveCardSearch` returns null), and the dataset
+importer's per-card hydration uses the same resolution.
+
+### What changed
+
+- `packages/server/src/lib/card-search/resolve.ts` now includes
+  `yugioh: createSearchAdapter(yugiohConfig)` and
+  `digimon: createSearchAdapter(digimonConfig)`.
+
+### How to revert
+
+1. Remove the two entries from `ADAPTERS_BY_GAME_KEY`.
+
+## Item 24 — Bundle mode: fixed-composition runs with no duplicates (full stack)
+
+**Status:** implemented, committed.
+
+### Why
+
+The machine's primary job is assembling card bundles (e.g. 15 common / 15
+uncommon / 5 rare / 5 super-rare, operator-selectable). That needs: per-rarity
+target counts with per-bin routing, a no-duplicates rule across the whole run,
+a reject bin for duplicates/overflow/unmatched rarities, and resume support so
+a restart doesn't lose the run.
+
+### What changed
+
+- **DB** — migration `0002_bundle_mode`: `bundle_configs` (name, targets jsonb
+  `[{rarity, count, binNumber}]`, reject_bin_number, is_active) and
+  `bundle_runs` (config FK cascade, status active/completed/aborted,
+  placed_card_ids jsonb, counts jsonb), org-RLS like every other table.
+- **Server** — `packages/server/src/routes/bundles.ts` (mounted at
+  `/api/bundles`): CRUD for configs; start/abort/complete a run; `GET
+  /run/active` (resume lookup); `POST /run/:guid/place` is the authoritative
+  decision point — duplicate / unmatched-rarity / target-full → reject bin,
+  else accept into the target bin, persist counts + placed ids, auto-complete
+  when all targets are met.
+- **Shared** — `bundles.interface.ts` types (`BundleTarget`, `BundleConfig`,
+  `BundleRun`, `BundlePlaceResult`).
+- **Web** — `BundlesProvider` (configs + active run + optimistic mirror of
+  placements) and a `BundlePanel` on the scanner page: live progress (per-rarity
+  count/target bars), start/abort, and a config editor (name, rarity/count/bin
+  rows, reject bin). `use-scanned-cards.tsx` `addCard` routes through the active
+  run when one exists — the run decides the bin, the scan record is still
+  persisted as normal, bundle-complete pauses auto-feed.
+
+### Behavior notes
+
+- Duplicate rule uses the card id (`card.id`). Foil prints that are a different
+  product id (DBZ/One Piece) count as distinct cards; MTG foils share the id and
+  a second copy is rejected — exactly the "no 2 the same" behaviour.
+- Bundle configs are org-global (no game binding) — target rarities must match
+  the cards being scanned (e.g. YGO "super rare" ≠ MTG "mythic").
+- If the API is unreachable mid-run, a card routes to the reject bin (safe
+  failure — a bundle bin is never polluted) and bundle state is unchanged.
+
+### How to revert
+
+1. Drop migration `0002_bundle_mode` (tables + policies).
+2. Remove `bundlesRouter` mount, the bundles route file, the provider/panel,
+   and the bundle branch in `addCard`.
+3. Remove `bundles.interface.ts` + its index export.
+
 ---
 
 *Template for future entries:*

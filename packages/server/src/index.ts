@@ -4,6 +4,7 @@ import { cors } from "hono/cors";
 import type { AppEnv } from "./middleware/auth";
 import { adminRouter } from "./routes/admin";
 import { sortBinsRouter } from "./routes/bins";
+import { bundlesRouter } from "./routes/bundles";
 import { cardRouter } from "./routes/card";
 import { collectionsRouter } from "./routes/collections";
 import { feederRouter } from "./routes/feeder";
@@ -29,6 +30,7 @@ app.use(
 // in dev and in production.
 app.route("/api/cards", cardRouter);
 app.route("/api/bins", sortBinsRouter);
+app.route("/api/bundles", bundlesRouter);
 app.route("/api/collections", collectionsRouter);
 app.route("/api/modules", moduleConfigsRouter);
 app.route("/api/feeder", feederRouter);

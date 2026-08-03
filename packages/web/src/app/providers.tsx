@@ -1,4 +1,5 @@
 import { BinConfigsProvider } from "@/features/bins/api/use-bin-configs";
+import { BundlesProvider } from "@/features/bundles/api/use-bundles";
 import { CardFiltersProvider } from "@/features/cards/api/use-card-filters";
 import { FeederConfigProvider } from "@/features/calibration/api/use-feeder-config";
 import { ModuleConfigsProvider } from "@/features/calibration/api/use-module-configs";
@@ -54,12 +55,14 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
               <CollectionLocksProvider>
               <ModuleConfigsProvider>
                 <FeederConfigProvider>
-                  <ScannedCardsProvider>
-                    <CardFiltersProvider>
-                      {children}
-                      <DocumentTitleUpdater />
-                    </CardFiltersProvider>
-                  </ScannedCardsProvider>
+                  <BundlesProvider>
+                    <ScannedCardsProvider>
+                      <CardFiltersProvider>
+                        {children}
+                        <DocumentTitleUpdater />
+                      </CardFiltersProvider>
+                    </ScannedCardsProvider>
+                  </BundlesProvider>
                 </FeederConfigProvider>
               </ModuleConfigsProvider>
               </CollectionLocksProvider>

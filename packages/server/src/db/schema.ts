@@ -313,6 +313,64 @@ export const orgSettings = pgTable(
   ],
 ).enableRLS();
 
+// ─── Bundle mode (recipe-based sorting) ────────────────────────────────────────
+
+// A recipe: which rarities go into a bundle, how many of each, and which
+// physical bin each rarity routes to. Targets is [{ rarity, count, binNumber }].
+export const bundleConfigs = pgTable(
+  "bundle_configs",
+  {
+    id: serial().primaryKey(),
+    guid: uuid("guid").defaultRandom(),
+    name: text("name").notNull(),
+    orgId: text("org_id").notNull(),
+    targets: jsonb("targets").notNull(),
+    // Duplicates / unmatched rarities / full targets route here.
+    rejectBinNumber: integer("reject_bin_number").notNull(),
+    isActive: boolean("is_active").notNull().default(false),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => [
+    unique("bundle_configs_guid_idx").on(table.guid),
+    crudPolicy({
+      role: authenticatedRole,
+      read: orgRls(table.orgId),
+      modify: orgRls(table.orgId),
+    }),
+  ],
+).enableRLS();
+
+// Live state of one bundle assembly. Persisted so a restart resumes the run
+// (placed_card_ids is the no-duplicates set, counts is rarity → accepted).
+export const bundleRuns = pgTable(
+  "bundle_runs",
+  {
+    id: serial().primaryKey(),
+    guid: uuid("guid").defaultRandom(),
+    configId: integer("config_id")
+      .notNull()
+      .references(() => bundleConfigs.id, { onDelete: "cascade" }),
+    orgId: text("org_id").notNull(),
+    status: text("status").notNull().default("active"),
+    placedCardIds: jsonb("placed_card_ids").notNull().default([]),
+    counts: jsonb("counts").notNull().default({}),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    completedAt: timestamp("completed_at"),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => [
+    unique("bundle_runs_guid_idx").on(table.guid),
+    // Resume lookup: the latest active run per org.
+    index("bundle_runs_config_id_idx").on(table.configId),
+    crudPolicy({
+      role: authenticatedRole,
+      read: orgRls(table.orgId),
+      modify: orgRls(table.orgId),
+    }),
+  ],
+).enableRLS();
+
 // ─── Audit tables (org-scoped, no FK — audit records are permanent) ───────────
 
 export const binSetAudit = pgTable(
@@ -412,3 +470,17 @@ export const collectionCardsRelations = relations(
     }),
   }),
 );
+
+export const bundleConfigsRelations = relations(
+  bundleConfigs,
+  ({ many }) => ({
+    runs: many(bundleRuns),
+  }),
+);
+
+export const bundleRunsRelations = relations(bundleRuns, ({ one }) => ({
+  config: one(bundleConfigs, {
+    fields: [bundleRuns.configId],
+    references: [bundleConfigs.id],
+  }),
+}));

@@ -141,9 +141,12 @@ problem. Software pre-reqs are noted inline.
    - Then implement the non-blocking state machine + pipeline feed (next card
      fed + scanned while the previous is being sorted). Target per-card
      ≈ scan + sort ≈ 1.7–2.2 s on shallow bins.
-4. **Bundle workflow** (needs the bundle software):
-   - 4-rarity bundle on bins 1–4; counts reach targets; duplicates → reject
-     bin; bundle-complete pause; resume after restart.
+4. **Bundle workflow** (software now built — `custom/SETUP.md`):
+   - 4-rarity bundle on bins 1–4 (or any rarity/bin mapping you set in the
+     Bundle Mode panel); counts reach targets; duplicates → reject bin;
+     bundle-complete pause; resume after restart. Remaining work is purely
+     physical: verify the reject bin (catch-all bin 7) is where you expect and
+     that bin routing lines up with the machine.
 5. **Holo detection** (classifier thresholds need calibration):
    - The two-frame scan light is built (firmware LED 5 / PCA9685 ch14,
      smart skip if clearly matte). Wire the LED (see BUILD.md) and calibrate

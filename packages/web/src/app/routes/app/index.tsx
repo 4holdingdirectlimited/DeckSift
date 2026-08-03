@@ -1,5 +1,6 @@
 import { Drawer, DrawerContent, DrawerTrigger } from "@/components/ui/drawer";
 import { PresetSelector } from "@/features/bins/components/preset-selector";
+import { BundlePanel } from "@/features/bundles/components/bundle-panel";
 import { CardGrid } from "@/features/cards/components/card-grid";
 import { CollectionSwitcher } from "@/features/collections/components/collection-switcher";
 import { orgSettingsQueryOptions } from "@/features/companies/api/org-settings";
@@ -35,6 +36,7 @@ function MobileScanner() {
             <div className="flex flex-col gap-2">
               <CollectionSwitcher />
               <PresetSelector readOnly />
+              <BundlePanel />
             </div>
             <ScanStats />
             <div className="@container">
@@ -67,6 +69,7 @@ export default function App() {
           <div className="flex flex-col gap-2 w-52 shrink-0 overflow-y-auto">
             <CollectionSwitcher />
             <PresetSelector readOnly />
+            <BundlePanel />
             <ScanStats />
           </div>
         </section>
@@ -82,6 +85,7 @@ export default function App() {
       <section className="col-span-4 lg:col-span-3 xl:col-span-4 2xl:col-span-2 overflow-hidden flex flex-col h-full p-2 border-r gap-2 bg-sidebar/70">
         <CollectionSwitcher />
         <PresetSelector readOnly />
+        <BundlePanel />
         <CardScanner className="flex-none" />
         <ScannerDebug />
         <ScanStats />
