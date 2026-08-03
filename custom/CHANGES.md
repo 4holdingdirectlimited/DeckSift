@@ -990,6 +990,42 @@ mapping differ.
    `sync-job.ts`, and the allowlist in `routes/card.ts`.
 2. Delete `generic-configs.ts` and `generic.ts`.
 
+## Item 20 — Dataset importer for no-API TCGs (server)
+
+**Status:** implemented, uncommitted.
+
+### Why
+
+Research (2026-08) found One Piece and Dragon Ball Super/Fusion World have
+**no clean, hosted, public JSON API** — optcgdb's API gateway rejects direct
+access, the official sites have no API, dbscards.com is a static site, and
+fabdb.net is unreachable from this machine. Community sources distribute those
+games' data as files, so a file importer completes the architecture.
+
+### What changed
+
+- **`packages/server/scripts/import-cardset.ts`** — ingests a JSON array of
+  card objects: field-mapping file (dotted paths; `imageUrl` or
+  `imageTemplate` with `{id}`), embeds art with the local SigLIP model, stores
+  rows in `cards` (embedding + normalized `card_data`). Works offline after
+  the one-time import. Verified end-to-end with a real YGOPRODeck export
+  (2 cards embedded, rarity preserved, cleaned up after).
+
+```bash
+cd packages/server
+npx tsx --env-file ../../.env scripts/import-cardset.ts \
+  <gameKey> <cards.json> [--map mapping.json] [--limit N]
+```
+
+### Behavior notes
+
+- Onboarding One Piece/DBZ = obtain a trusted dataset file, write the ~5-line
+  mapping, run once. `custom/TCGS.md` has the updated source status matrix.
+
+### How to revert
+
+1. Delete `scripts/import-cardset.ts`.
+
 ---
 
 *Template for future entries:*

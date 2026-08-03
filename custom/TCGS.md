@@ -28,6 +28,30 @@ differences live entirely in the **card data adapters**.
 For a new game: create the game row (key must match the config's `key`:
 `yugioh`, `digimon`, …), then run its sync once (bulk embed, one-time).
 
+## No-API games: dataset import path
+
+One Piece, Dragon Ball Super/Fusion World, and Flesh and Blood currently have
+**no clean, hosted, public JSON API** (verified 2026-08 — optcgdb's API gateway
+rejects direct access, official sites have no API, dbscards is a static site,
+fabdb unreachable). Community sources distribute these games' card lists as
+**data files** instead. The dataset importer bridges that gap:
+
+```bash
+cd packages/server
+npx tsx --env-file ../../.env scripts/import-cardset.ts \
+  <gameKey> <path/to/cards.json> [--map mapping.json] [--limit N]
+```
+
+Each card is normalized via a small field-mapping file (or common field-name
+defaults), embedded with the local SigLIP model, and stored in `cards` with
+full card data — search, binning, and bundles then work offline exactly like
+the synced games. Verified end-to-end with a real YGOPRODeck export.
+
+To onboard One Piece or DBZ: obtain a trustworthy dataset file (the community
+sources are in flux — ask your local card community which one they trust, or
+I can research a specific candidate on request), write the ~5-line mapping,
+run the importer once.
+
 ## Top 20 TCGs and their data-source status
 
 Ranked roughly by 2025–26 market presence; exact order shifts quarterly and
@@ -39,10 +63,10 @@ each of these a small, independent addition.
 | 1 | Pokémon | TCGdex | ✅ done |
 | 2 | Magic: The Gathering | Scryfall | ✅ done |
 | 3 | Yu-Gi-Oh! | YGOPRODeck | ✅ done |
-| 4 | One Piece Card Game | community JSON (GitHub datasets); no official API | source research needed |
-| 5 | Dragon Ball Super / Super Fusion World | community sites (dbscards); no official API | source research needed |
+| 4 | One Piece Card Game | community JSON (GitHub datasets); no official API | dataset import (see above) |
+| 5 | Dragon Ball Super / Super Fusion World | community sites (dbscards); no official API | dataset import (see above) |
 | 6 | Disney Lorcana | community APIs (lorcana-focused); none official | source research needed |
-| 7 | Flesh and Blood | fabdb.net API | verify endpoint, then config (~30 min) |
+| 7 | Flesh and Blood | fabdb.net API (unreachable from this machine 2026-08) | re-verify / dataset import |
 | 8 | Digimon | digimoncard.io | ✅ done |
 | 9 | Star Wars Unlimited | swudb.com (site is a SPA — API unconfirmed) | verify endpoint |
 | 10 | Cardfight!! Vanguard | no reliable public API | source research needed |
