@@ -38,6 +38,8 @@ export interface ScannedCardsContextValue {
     card: PlayingCardWithDistance,
     capturedImageUrl?: string,
     alternativeMatches?: PlayingCardWithDistance[],
+    /** Heuristic foil estimate — pre-fills the toggle so the operator can correct it. */
+    isFoil?: boolean,
   ) => void;
   sendCatchAllBin: () => void;
   registerCardArrivedHook: (fn: () => void) => () => void;

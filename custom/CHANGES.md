@@ -863,6 +863,51 @@ faster (hours saved on the one-time MTG run).
 1. Remove `VECTORIZE_DEVICE` from `.env` / `.env.example`.
 2. Revert `lib/vectorize.ts` to the q8-only load.
 
+## Item 17 — Holo/foil detection v1 (heuristic, web)
+
+**Status:** implemented, uncommitted.
+
+### Why
+
+Holo vs non-holo was a purely manual toggle. Long-term this feeds card
+identity for DBZ/One Piece (foil is a different product there), and even for
+MTG it saves the operator a correction per foil card.
+
+### What changed
+
+- **`packages/web/src/features/scanner/lib/foil-detect.ts`** — heuristic that
+  scores the warped scan crop (the same canvas that gets uploaded, so no
+  extra decode or round trip). Features: circular hue variance (rainbow),
+  saturation variance (iridescence), value variance + bright coverage
+  (specular highlights), and edge energy (sparkle). Returns a 0..1 score;
+  `FOIL_SCORE_THRESHOLD = 0.5` is a calibration starting point.
+- **Wired through the scan path**: `searchCardImage` computes the score on
+  the crop, `onSearchResults` carries `isFoil`, and `addCard` pre-fills the
+  card's `isFoil` flag. The detail-panel toggle still lets the operator
+  correct it — corrections persist to `collection_cards.is_foil` alongside
+  `captured_image_data_url`, which **automatically collects labeled training
+  data** for the v2 classifier.
+- Pixel core is exported for testing; synthetic smoke test: matte 0.001 vs
+  rainbow 0.379.
+
+### Behavior notes
+
+- Heuristic thresholds MUST be calibrated against real captures once the rig
+  is built (`custom/PLAN.md` commissioning checklist item 5). Until then it
+  may over- or under-detect; corrections are expected and are exactly what
+  trains v2.
+- v2 = small classifier on the SigLIP embedding or crop, trained on the
+  accumulated labeled scans. No extra model download at scan time.
+- Hardware assist (angled second light, two captures) remains a future
+  near-perfect option.
+
+### How to revert
+
+1. Delete `lib/foil-detect.ts`.
+2. Remove the `isFoil` threading from `use-card-scanner.ts`,
+   `card-scanner.tsx`, `use-scanned-cards.tsx`, and the `onSearchResults`/
+   `addCard` signatures.
+
 ---
 
 *Template for future entries:*

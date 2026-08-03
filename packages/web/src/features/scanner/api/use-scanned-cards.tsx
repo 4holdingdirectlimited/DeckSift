@@ -255,6 +255,7 @@ export function ScannedCardsProvider({
       card: PlayingCardWithDistance,
       capturedImageUrl?: string,
       alternativeMatches?: PlayingCardWithDistance[],
+      isFoil?: boolean,
     ) => {
       const collection = activeCollectionRef.current;
       if (!collection) {
@@ -322,6 +323,9 @@ export function ScannedCardsProvider({
         scannedAt: Date.now(),
         binNumber: routeBin?.binNumber,
         capturedImageUrl: effectiveImage,
+        // Pre-fill from the heuristic so the operator can correct the toggle
+        // — corrections are persisted and become labeled training data.
+        isFoil: isFoil ?? false,
         alternativeMatches: alternativeMatches?.length
           ? alternativeMatches
           : undefined,

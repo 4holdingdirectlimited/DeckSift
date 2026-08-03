@@ -45,6 +45,8 @@ export interface CardScannerProps {
   onSearchResults?: (
     matches: PlayingCardWithDistance[],
     capturedImageUrl?: string,
+    /** Heuristic foil estimate for the scanned crop (true = likely foil). */
+    isFoil?: boolean,
   ) => void;
   onNoMatch?: () => void;
   onManualAdd?: () => void;

@@ -13,6 +13,7 @@ import {
   extractCardImage,
   getDefaultCardContour,
 } from "@/features/scanner/lib/card-detection";
+import { computeFoilScore, isFoilByScore } from "@/features/scanner/lib/foil-detect";
 import {
   DEFAULT_SCAN_REGION,
   type CardContour,
@@ -74,8 +75,13 @@ async function searchCardImage(
   card: PlayingCardWithDistance | null;
   alternativeMatches: PlayingCardWithDistance[];
   debugImageUrl: string;
+  isFoil: boolean;
 }> {
   const warpedCanvas = contour ? extractCardImage(canvas, contour) : canvas;
+  // Foil heuristic runs on the exact crop that gets uploaded — no extra
+  // decode or round trip. The estimate pre-fills the toggle so the operator
+  // can correct it, and the correction is stored as labeled training data.
+  const isFoil = isFoilByScore(computeFoilScore(warpedCanvas));
   // Encode once: the upload blob and the debug image share the same JPEG,
   // so we don't run two full canvas encodes per scan.
   const blob = await canvasToBlob(warpedCanvas);
@@ -86,7 +92,7 @@ async function searchCardImage(
 
   const { data } = await searchByImage(formData);
   if (!data || data.length === 0)
-    return { card: null, alternativeMatches: [], debugImageUrl };
+    return { card: null, alternativeMatches: [], debugImageUrl, isFoil };
 
   // Matches are hydrated server-side — close matches already carry full card
   // data, so no follow-up per-match requests are needed.
@@ -94,10 +100,10 @@ async function searchCardImage(
     .map((m) => (m.card ? { ...m.card, distance: m.distance } : null))
     .filter((c): c is PlayingCardWithDistance => c !== null);
   if (cards.length === 0)
-    return { card: null, alternativeMatches: [], debugImageUrl };
+    return { card: null, alternativeMatches: [], debugImageUrl, isFoil };
 
   const [card, ...alternativeMatches] = cards;
-  return { card, alternativeMatches, debugImageUrl };
+  return { card, alternativeMatches, debugImageUrl, isFoil };
 }
 
 export function useCardScanner({
@@ -215,7 +221,7 @@ export function useCardScanner({
       const generation = streamGenerationRef.current;
 
       try {
-        const { card, alternativeMatches, debugImageUrl } =
+        const { card, alternativeMatches, debugImageUrl, isFoil } =
           await searchCardImage(
             canvas,
             contour,
@@ -241,6 +247,7 @@ export function useCardScanner({
             onSearchResultsRef.current?.(
               [card, ...alternativeMatches],
               debugImageUrl,
+              isFoil,
             );
             updateStatus("scanning");
           }
