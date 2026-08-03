@@ -160,3 +160,58 @@ problem. Software pre-reqs are noted inline.
 - `custom/TCGS.md` — top-20 TCG plan, data-source status, adding games.
 - `arduino/main/SERIAL_PROTOCOL.md` — current JSON contract (will grow: cancel, save/reset config, per-module jam timeouts).
 - `arduino/main/BUILD.md` — wiring/BOM notes (PSU, capacitance, scan light).
+
+## v2 machine — faster & more accurate sorting
+
+Ideas for a second build (or a major refit of this one). Goals: shorter
+per-card time, fewer stripped parts, and sensor-confirmed motion instead of
+blind timing.
+
+### Servo upgrade: SG90 → MG90S
+
+- **Why** — SG90 plastic gears strip under sustained pushing (the #1 field
+  failure). MG90S has **metal gears + ~2.2 kg·cm torque** (vs ~1.8) at similar
+  speed (~0.1 s/60°), so routes stay fast and repeatable for much longer.
+- **Wiring** — pin-compatible drop-in (same PWM, 4.8–6 V). The higher stall
+  current (~700 mA vs ~250 mA each) needs the servo rail's bulk capacitance
+  bumped (2200 µF, see Power notes above) and the 5 V PSU sized for peak
+  current, not steady state.
+- **Consider also** — the R4 Minima's timers can drive up to ~12 servos
+  natively; dropping the PCA9685 for direct timer PWM removes a driver stage
+  and lets each servo run at its own calibration. (Keep PCA9685 for the LEDs
+  + scan light.) Only worth it if the state-machine timing demands tighter
+  control than the PCA9685's 1.6 kHz update gives.
+
+### Card detection: faster, more reliable
+
+Current: IR through-beam sensors polled every ~5 ms inside `interruptibleDelay`
+while the feeder pulses — the card is only caught when a poll happens to see it,
+and a full `delay()` cycle can be missed. Options for v2, best-first:
+
+1. **Interrupt-driven edges** — `attachInterrupt` on the module-1 + hopper
+   sensors (both already on interrupt-capable pins D2–D5). Stop the feeder the
+   instant the beam is crossed; no polling, no missed edges. This is the
+   single biggest speed win (feeder can run continuously instead of pulsed).
+2. **Comparator front-end** — a Schmitt-trigger/op-amp stage (e.g. LM393)
+   turns the analog sensor into a clean digital edge, eliminating the slow
+   analog-transition zone where a card can sit half-detected. Cheap, bulletproof.
+3. **Optical encoder on the feeder roller** — a slotted wheel + IR pair
+   measures actual feed distance, so “card at module 1” is confirmed by
+   distance *and* beam, not a fixed pulse time. Enables precise stop position
+   and double-feed detection (encoder continues moving while the beam is
+   already broken).
+4. **Camera as feedback** — the scan camera already sees the card; a motion
+   check in the capture region can confirm “arrived + settled” without extra
+   hardware. Useful as a cross-check, not a primary sensor (slower loop).
+
+### What stays (already in the roadmap above)
+
+- Non-blocking state machine (section 1) — prerequisite for interrupt feeding.
+- Per-phase watchdog budgets (section 7) — with faster motion, a missed edge
+  must still abort safely.
+- Pipelined feed (Speed items) — next card feeds while the previous routes.
+
+### Target
+
+With interrupt feeding + MG90S + pipelining: **~1.5–2 s/card** on shallow
+bins (vs the current ~3 s baseline) with sensor-confirmed, jam-safe motion.

@@ -33,7 +33,7 @@ const NOT_LEGAL: PlayingCard["legalities"] = {
   predh: "not_legal",
 };
 
-interface GundamCard {
+export interface GundamCard {
   product_id: string;
   card_number: string;
   name: string;
@@ -55,7 +55,7 @@ function proxiedImageUrl(url: string): string {
   return `/api/cards/image-proxy?url=${encodeURIComponent(url)}`;
 }
 
-function normalizeGundamCard(raw: GundamCard): PlayingCard {
+export function normalizeGundamCard(raw: GundamCard): PlayingCard {
   const id = String(raw.product_id ?? raw.card_number ?? "");
   const image = raw.image_url ? proxiedImageUrl(raw.image_url) : "";
   const setCode = raw.set_code ?? "";

@@ -9,6 +9,7 @@ import * as schema from "./schema";
 // driver-side.
 const pool = new Pool({ connectionString: process.env.DATABASE_URL! });
 export const db = drizzle(pool, { schema });
+export { pool };
 
 export type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 

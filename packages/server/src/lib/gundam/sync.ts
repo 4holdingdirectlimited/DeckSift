@@ -1,13 +1,10 @@
 import type { SyncSource, SyncSourceCard } from "../card-search/sync-types";
-import { GUNDAM_DEFAULT_URL, GUNDAM_HEADERS } from "./search";
-
-interface GundamListCard {
-  product_id: string;
-  card_number: string;
-  name: string;
-  set_code: string;
-  image_url: string;
-}
+import {
+  GUNDAM_DEFAULT_URL,
+  GUNDAM_HEADERS,
+  normalizeGundamCard,
+  type GundamCard as GundamListCard,
+} from "./search";
 
 const PAGE_LIMIT = 250;
 
@@ -45,6 +42,7 @@ async function fetchCards(
     name: c.name,
     setCode: c.set_code,
     imageUrl: c.image_url,
+    cardData: normalizeGundamCard(c),
   }));
 }
 

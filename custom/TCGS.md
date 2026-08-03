@@ -19,11 +19,14 @@ differences live entirely in the **card data adapters**.
 
 | Game | Source | Status |
 | --- | --- | --- |
-| MTG | Scryfall | ✅ built-in adapter, synced |
-| Gundam | gundam-gcg.com | ✅ built-in adapter |
-| Pokémon | TCGdex | ✅ built-in adapter |
-| **Yu-Gi-Oh!** | YGOPRODeck (`db.ygoprodeck.com/api/v7`) | ✅ generic config, endpoints verified (search + byId + images) |
-| **Digimon** | digimoncard.io (`search.php`) | ✅ generic config, endpoints verified (search + bulk + images) |
+| MTG | Scryfall | ✅ built-in adapter, synced (54,009 rows, full card data) |
+| Gundam | gundam-gcg.com | ✅ built-in adapter, synced (1,816 rows — card data backfilled 2026-08) |
+| Pokémon | TCGdex | ✅ built-in adapter, synced (21,756 rows, full card data) |
+| **Yu-Gi-Oh!** | YGOPRODeck (`db.ygoprodeck.com/api/v7`) | ✅ generic config, endpoints verified (search + byId + images) — synced (14,477 rows) |
+| **Digimon** | digimoncard.io (`search.php`) | ✅ generic config, endpoints verified (search + bulk + images) — synced (4,373 rows with images; the rest of the ~9k catalog lacks usable artwork) |
+
+All five games' `card_data` is populated, so library browsing, detail
+hydration, and bundle/chase CSV exports work fully offline.
 
 For a new game: create the game row (key must match the config's `key`:
 `yugioh`, `digimon`, …), then run its sync once (bulk embed, one-time).

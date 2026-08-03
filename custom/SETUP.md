@@ -21,12 +21,15 @@ browser + set completeness) · `/app/bins` · `/app/calibrate` ·
 node scripts/local-db.mjs status      # is it running?
 node scripts/local-db.mjs start|stop
 
-# API server (detached)
+# API server (detached; output appends to server.log at the repo root)
 powershell Start-Process -FilePath "C:\Mault Revised\mault\scripts\start-server.cmd" -WindowStyle Hidden
 
 # Web UI (detached)
 powershell Start-Process -FilePath "C:\Mault Revised\mault\scripts\start-web.cmd" -WindowStyle Hidden
 ```
+
+The API has a health check — `curl http://localhost:3001/api/health` returns
+`{"success":true,"status":"ok",...}` (503 when the database is down).
 
 ## First-run setup (done once — already executed on this machine)
 

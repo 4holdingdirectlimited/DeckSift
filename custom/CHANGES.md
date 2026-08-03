@@ -1807,6 +1807,47 @@ that went into it, and a CSV record for disputes/claims.
 2. Remove the SKU/inventory endpoints + panel additions and the
    `ThemeProvider` wrap in `main.tsx`.
 
+## Item 42 — Gundam card-data fix + backend production hardening (server)
+
+**Status:** implemented, uncommitted.
+
+### Why
+
+(a) The Gundam sync adapter stored cards + embeddings but never populated
+`card_data` (its `fetchCards` only kept id/name/set/image), so library,
+detail hydration, and bundle CSV exports showed empty data for Gundam — the
+only game with that gap. (b) The server had no health endpoint, logged into
+the void (hidden window), returned no JSON for 404s/500s, and had no graceful
+shutdown or fail-fast config check.
+
+### What changed
+
+- **Gundam** — `lib/gundam/sync.ts` now maps each row through
+  `normalizeGundamCard()` so `card_data` is stored; re-running the sync
+  backfilled all 1,816 existing rows (the sync's existing backfill path).
+  DB now has full card_data for all five games.
+- **`src/index.ts`** — production hardening:
+  - `GET /api/health` — liveness + DB reachability (`SELECT 1`), returns
+    `{ success, status, uptime, timestamp }` or 503.
+  - `app.notFound` / `app.onError` — JSON 404 / 500 for every route (the web
+    client always parses JSON).
+  - Fail-fast `DATABASE_URL` check on boot with a clear message.
+  - Graceful shutdown on SIGINT/SIGTERM (close DB pool, exit cleanly).
+  - `uncaughtException` / `unhandledRejection` handlers that log then exit(1)
+    so a crash is visible in the log.
+- **`scripts/start-server.cmd`** — server output now appends to
+  `C:\Mault Revised\mault\server.log` instead of vanishing.
+- **`custom/PLAN.md`** — new “v2 machine” section: MG90S servo upgrade,
+  interrupt-driven / comparator / encoder card detection options, and the
+  ~1.5–2 s/card target.
+- **`custom/TCGS.md`** — per-game sync completeness table updated.
+
+### How to revert
+
+1. Revert `lib/gundam/sync.ts` to the minimal mapping (rows keep null
+   card_data).
+2. Restore the previous `src/index.ts` and `scripts/start-server.cmd` from git.
+
 ---
 
 *Template for future entries:*
