@@ -7,18 +7,30 @@ import {
 
 const MODEL_NAME = "Xenova/siglip-base-patch16-512";
 
+// Execution backend for embeddings.
+//   VECTORIZE_DEVICE=cpu   → q8 model on CPU (default, no GPU needed)
+//   VECTORIZE_DEVICE=dml   → fp32 model via DirectML (Windows; onnxruntime-node
+//                            bundles DirectML.dll). Measured ~1.9x faster than
+//                            CPU q8 on this machine (703ms → 375ms).
+// The q8 model crashes natively on the DirectML EP, so dtype is forced to
+// fp32 whenever DML is selected.
+const DEVICE: "cpu" | "dml" =
+  process.env.VECTORIZE_DEVICE === "dml" ? "dml" : "cpu";
+const DTYPE: "fp32" | "q8" = DEVICE === "dml" ? "fp32" : "q8";
+
 let modelPromise: Promise<SiglipVisionModel> | null = null;
 let processorPromise: Promise<Processor> | null = null;
 
 async function getModel(): Promise<SiglipVisionModel> {
   if (!modelPromise) {
-    console.log("[vectorize] Loading SigLIP model...");
+    console.log(`[vectorize] Loading SigLIP model (${DTYPE}) on ${DEVICE}...`);
     modelPromise = SiglipVisionModel.from_pretrained(MODEL_NAME, {
-      dtype: "q8",
+      dtype: DTYPE,
+      device: DEVICE,
     });
     await modelPromise;
     console.log(
-      "[vectorize] SigLIP model loaded successfully (768 dimensions)",
+      `[vectorize] SigLIP model loaded successfully (768 dimensions, device=${DEVICE}, dtype=${DTYPE})`,
     );
   }
   return modelPromise;

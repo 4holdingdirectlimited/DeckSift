@@ -819,6 +819,50 @@ but needs a re-sync) or faster hardware.
 3. Remove the `cardData` plumbing from `sync-types.ts`, `scryfall/sync.ts`,
    and `sync-job.ts`.
 
+## Item 16 — GPU (DirectML) acceleration for vision embeddings (server)
+
+**Status:** implemented, uncommitted.
+
+### Why
+
+SigLIP embeddings (the per-scan compute) took ~703 ms on CPU. The machine
+has a Quadro M4000; onnxruntime-node already bundles DirectML.dll on Windows,
+so the GPU path needed no installs — just a device switch.
+
+### What changed
+
+- **`VECTORIZE_DEVICE` env var** (`cpu` default, `dml` for GPU).
+  `lib/vectorize.ts` picks the device + dtype and logs both at load.
+- **q8 + DirectML crashes natively** (access violation, confirmed) — so dtype
+  is forced to fp32 whenever DML is selected; the q8 model stays the CPU path.
+- `.env` on this machine sets `VECTORIZE_DEVICE=dml`; `.env.example` documents
+  both options.
+
+### Benchmarks (this machine)
+
+| Path | Device | Embed time | Throughput ceiling |
+|---|---|---|---|
+| q8 | CPU | ~703 ms | 1.42 cards/sec |
+| fp32 | DirectML (M4000) | ~375 ms | 2.67 cards/sec |
+
+≈**1.9× faster**. With the search now ~380 ms (+300 ms settle + encode), it
+overlaps shallow-bin sorts with comfortable margin, putting the 2 s/card
+target under budget instead of right at it. The bulk sync also embeds ~1.9×
+faster (hours saved on the one-time MTG run).
+
+### Behavior notes
+
+- First model load on dml downloads the fp32 weights once (374 MB, cached in
+  the transformers.js cache dir); later loads are ~1 s.
+- First embed after a server start includes one-time session init (~1.1 s),
+  then steady state. On a cold machine with uncached weights, first boot
+  takes a few minutes.
+
+### How to revert
+
+1. Remove `VECTORIZE_DEVICE` from `.env` / `.env.example`.
+2. Revert `lib/vectorize.ts` to the q8-only load.
+
 ---
 
 *Template for future entries:*

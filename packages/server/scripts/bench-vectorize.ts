@@ -18,6 +18,10 @@ import { join } from "node:path";
 
 const MODEL_NAME = "Xenova/siglip-base-patch16-512";
 const SAMPLE_PATH = join(process.cwd(), ".cache", "bench-card.jpg");
+// BENCH_DEVICE=cpu|dml — "dml" uses the DirectML execution provider
+// (onnxruntime-node bundles DirectML.dll on Windows).
+const DEVICE: string = process.env.BENCH_DEVICE ?? "cpu";
+const DTYPE: string = process.env.BENCH_DTYPE ?? "q8";
 
 function stats(label: string, times: number[]): void {
   const sorted = [...times].sort((a, b) => a - b);
@@ -64,11 +68,22 @@ async function main(): Promise<void> {
   const buffer = readFileSync(SAMPLE_PATH);
   const bytesKb = (buffer.length / 1024).toFixed(0);
 
-  console.log(`Loading ${MODEL_NAME} (q8)...`);
+  console.log(`Loading ${MODEL_NAME} (${DTYPE}) on device="${DEVICE}"...`);
   const t0 = performance.now();
-  const model = await SiglipVisionModel.from_pretrained(MODEL_NAME, { dtype: "q8" });
+  const model = await SiglipVisionModel.from_pretrained(MODEL_NAME, {
+    dtype: DTYPE,
+    device: DEVICE,
+  });
   const processor = await AutoProcessor.from_pretrained(MODEL_NAME);
   console.log(`Model loaded in ${(performance.now() - t0).toFixed(0)} ms`);
+  // model.session may not be directly accessible across versions — that's fine.
+  try {
+    console.log(
+      `Execution provider: ${(model.session as { ort?: unknown })?.ort?.env?.release ?? "n/a"}`,
+    );
+  } catch {
+    /* ignore */
+  }
 
   // Full pipeline: decode JPEG → preprocess → model forward.
   const fullEmbed = async (): Promise<number> => {
