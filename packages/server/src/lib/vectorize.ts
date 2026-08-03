@@ -58,6 +58,36 @@ async function vectorizeBuffer(buffer: Buffer): Promise<number[]> {
   return embedding;
 }
 
+/**
+ * Batch embedding — one processor pass + one model forward for many images.
+ * The GPU forward pass amortizes launch overhead, so N images cost less than
+ * N single-image passes (measured ~1.4x faster at batch 8 on this machine).
+ * Used by the bulk card sync; the scan path stays single-image.
+ */
+export async function vectorizeBuffers(buffers: Buffer[]): Promise<number[][]> {
+  if (buffers.length === 0) return [];
+  if (buffers.length === 1) return [await vectorizeBuffer(buffers[0])];
+
+  const [model, processor] = await Promise.all([getModel(), getProcessor()]);
+  const images = await Promise.all(
+    buffers.map((b) => RawImage.fromBlob(new Blob([new Uint8Array(b)]))),
+  );
+  const image_inputs = await processor(images);
+  const { pooler_output } = await model(image_inputs);
+
+  const data = pooler_output.data as Float32Array;
+  const dims = pooler_output.dims;
+  const n = dims && dims.length >= 2 ? dims[0] : buffers.length;
+  const d = dims && dims.length >= 2 ? dims[1] : data.length / Math.max(1, n);
+
+  const result: number[][] = [];
+  for (let i = 0; i < n; i++) {
+    result.push(Array.from(data.subarray(i * d, (i + 1) * d)));
+  }
+  console.log(`[vectorize] Generated ${n}x${d} SigLIP embeddings (batched)`);
+  return result;
+}
+
 export async function vectorizeImageFromUrl(url: string): Promise<number[]> {
   const response = await fetch(url);
   if (!response.ok) {

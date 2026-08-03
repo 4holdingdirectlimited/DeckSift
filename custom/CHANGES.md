@@ -1168,6 +1168,51 @@ a restart doesn't lose the run.
    and the bundle branch in `addCard`.
 3. Remove `bundles.interface.ts` + its index export.
 
+## Item 25 — Fix MTG card sync: Scryfall JSONL format + parallel fetch/batch embed (server)
+
+**Status:** implemented, committed.
+
+### Why
+
+Clicking the Admin sync for Magic: The Gathering died immediately with `Fatal
+error: Failed to parse URL from undefined`. Scryfall changed their bulk-data API:
+entries no longer carry `download_uri` — the catalog now points at a gzipped
+**JSONL** file via `jsonl_download_uri`, and the sync tried to `fetch(undefined)`
+and then `res.json()` a JSONL payload it couldn't parse. Separately, once the
+parse was fixed the sync ran at ~6s/card (a full 54k-card catalog would have
+taken ~90 hours) because images were fetched one at a time from a host that
+throttles per-connection.
+
+### What changed
+
+- **`scryfall/sync.ts`** — resolves `jsonl_download_uri` (with `download_uri`
+  fallback), gunzips the bulk file when gzipped, and parses both formats
+  (JSONL lines and the legacy JSON array). A single malformed line is skipped
+  rather than failing the whole download. Fetches the `large` (JPG) size — same
+  pixel dimensions as PNG but 5-7x fewer bytes, and the connection-throttled
+  host makes transfer size the bottleneck.
+- **`sync-job.ts`** — images are fetched in **parallel batches of 16** (the CDN
+  allows parallel connections; measured 16 in the same wall time as 1) and
+  **pipelined** (next chunk fetches while the current chunk embeds). Embeddings
+  use a new **`vectorizeBuffers`** batch path (`vectorize.ts`) that runs N
+  images in one model forward (~1.4x faster than N singles).
+- **GPU safety**: batch-16 embeddings crashed the DirectML device on the Quadro
+  M4000 (`DXGI_ERROR_DEVICE_HUNG`), so fetch batch (16) and embed batch (8)
+  are decoupled. A GPU-hang guard aborts the sync with a clear “restart the
+  server” message instead of churning per-card errors.
+
+### Behavior notes
+
+- Measured on this machine: **~0.6s/card, 0 errors** sustained (was 6s/card).
+  The full 54k-card MTG catalog is a one-time ~9-10 hour run; the sync is
+  resumable (skips cards already in the DB) and the bulk catalog is cached to
+  disk keyed by Scryfall's `updated_at`.
+
+### How to revert
+
+1. Restore `download_uri` parsing and `res.json()` in `scryfall/sync.ts`.
+2. Remove `vectorizeBuffers` and the parallel/pipelined loop in `sync-job.ts`.
+
 ---
 
 *Template for future entries:*

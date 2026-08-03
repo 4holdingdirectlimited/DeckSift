@@ -50,9 +50,12 @@ This creates:
 Then run the card sync for each game you'll actually use:
 
 1. Open **http://localhost:5173**.
-2. **Admin** → run the **sync** for each game. The first MTG sync downloads
-   the catalog and embeds ~25k cards (hours on this machine, one-time,
-   resumable — it skips finished cards; the GPU makes it ~2× faster).
+2. **Admin** → run the **sync** for each game. The first MTG sync downloads the
+   Scryfall catalog (~54k unique-artwork cards) and embeds each with the local
+   SigLIP model — roughly **9-10 hours** on this machine's GPU, one-time and
+   resumable (it skips cards already embedded, and the catalog itself is cached
+   on disk so re-runs skip the download). The sync log shows live progress
+   (`[N/53952] Card Name (SET)`); it can be cancelled and restarted safely.
 3. Back to the scanner, select the collection, connect the sorter + camera,
    and scan.
 

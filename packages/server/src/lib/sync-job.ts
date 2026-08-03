@@ -5,12 +5,12 @@ import { cardImageVectors } from "../db/schema";
 import { gundamSyncSource } from "./gundam/sync";
 import { pokemonSyncSource } from "./pokemon/sync";
 import { scryfallSyncSource } from "./scryfall/sync";
-import type { SyncSource } from "./card-search/sync-types";
+import type { SyncSource, SyncSourceCard } from "./card-search/sync-types";
 import { digimonConfig, yugiohConfig } from "./card-search/generic-configs";
 import { createSyncSource } from "./card-search/generic";
 import { resolveGameDataSourceUrl } from "./card-search/resolve";
 import { sendDiscordNotification } from "./discord";
-import { vectorizeImageFromBuffer } from "./vectorize";
+import { vectorizeBuffers } from "./vectorize";
 
 export const SYNC_SOURCES: Record<string, SyncSource> = {
   mtg: scryfallSyncSource,
@@ -102,10 +102,6 @@ export function startSync(orgId: string | undefined, gameKey: string): void {
   });
 }
 
-async function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 async function runSync(source: SyncSource): Promise<void> {
   const baseUrl = await resolveGameDataSourceUrl(source.gameKey, source.defaultUrl);
   addLog(`Using data source: ${baseUrl}`);
@@ -135,7 +131,37 @@ async function runSync(source: SyncSource): Promise<void> {
     `Found ${existingSet.size} existing ${source.label} cards in DB. Starting vectorization...`,
   );
 
-  for (const card of cards) {
+  // cards.scryfall.io throttles per-connection (measured ~200-400 KB/s per
+  // connection, but 16 parallel connections all finish in the same wall time as
+  // one). Fetching images in parallel batches turns a ~4s-per-card fetch into
+  // ~0.1-0.5s-per-card.
+  const FETCH_BATCH = 16;
+  // GPU-safe embedding batch. Batch-16 crashed the DirectML device on this
+  // machine's Quadro M4000 (DXGI_ERROR_DEVICE_HUNG); batch-8 is proven stable
+  // under sustained load, so the two are deliberately decoupled.
+  const EMBED_BATCH = 8;
+
+  const fetchBatch = async (batch: SyncSourceCard[]): Promise<(Buffer | null)[]> =>
+    Promise.all(
+      batch.map(async (card) => {
+        if (!card.imageUrl || existingSet.has(card.id)) return null;
+        try {
+          const imageRes = await fetch(card.imageUrl, {
+            headers: source.fetchHeaders,
+            signal: AbortSignal.timeout(30_000),
+          });
+          if (!imageRes.ok) return null;
+          return Buffer.from(await imageRes.arrayBuffer());
+        } catch {
+          return null;
+        }
+      }),
+    );
+
+  // In-flight fetch for the next chunk (pipelining — see the main loop).
+  let pendingFetch: Promise<(Buffer | null)[]> | null = null;
+
+  for (let i = 0; i < cards.length; i += FETCH_BATCH) {
     if (cancelFlag) {
       state = { ...state, status: "cancelled" };
       addLog("Sync cancelled by user.");
@@ -148,70 +174,129 @@ async function runSync(source: SyncSource): Promise<void> {
       return;
     }
 
-    if (!card.imageUrl || existingSet.has(card.id)) {
-      if (existingSet.has(card.id) && card.cardData) {
-        const row = existingByScryfallId.get(card.id);
-        if (row && row.cardData == null) {
-          backfill.push({ id: card.id, cardData: card.cardData });
+    const chunk = cards.slice(i, i + FETCH_BATCH);
+    // Pipeline: kick off the next chunk's image fetch while this chunk is
+    // being embedded/inserted, so fetch latency hides behind GPU work.
+    const nextChunk = cards.slice(i + FETCH_BATCH, i + 2 * FETCH_BATCH);
+    const pendingNext = nextChunk.length > 0 ? fetchBatch(nextChunk) : null;
+    const buffers = (await pendingFetch) ?? (await fetchBatch(chunk));
+    pendingFetch = pendingNext;
+
+    // Collect the successfully fetched, not-yet-in-DB cards with their chunk
+    // index, then embed them in GPU-safe sub-batches (one model forward each).
+    const toEmbed: { index: number; card: SyncSourceCard; buffer: Buffer }[] =
+      [];
+    for (let j = 0; j < chunk.length; j++) {
+      const card = chunk[j];
+      const buffer = buffers[j];
+      if (card.imageUrl && !existingSet.has(card.id) && buffer) {
+        toEmbed.push({ index: j, card, buffer });
+      }
+    }
+    const embeddingByIndex = new Map<number, number[]>();
+    for (let k = 0; k < toEmbed.length; k += EMBED_BATCH) {
+      const sub = toEmbed.slice(k, k + EMBED_BATCH);
+      try {
+        const embs = await vectorizeBuffers(sub.map((e) => e.buffer));
+        for (let m = 0; m < sub.length; m++) {
+          embeddingByIndex.set(sub[m].index, embs[m]);
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (/dml|gpu|device|onnxruntime/i.test(msg)) {
+          // The DirectML device hung — every further embed will fail the same
+          // way. Stop instead of churning errors; the sync is resumable.
+          state = { ...state, status: "failed" };
+          addLog(
+            "Fatal error: GPU embedding failed (DirectML device hung). Restart the server (scripts/start-server.cmd) and re-run the sync — it resumes where it left off.",
+          );
+          emit("error", { message: msg });
+          return;
+        }
+        for (const { card } of sub) {
+          state = { ...state, errors: state.errors + 1 };
+          addLog(`Error: ${card.name}: ${msg}`);
+          emit("progress", {
+            processed: state.processed,
+            skipped: state.skipped,
+            errors: state.errors,
+            currentCard: card.name,
+          });
         }
       }
-      state = { ...state, skipped: state.skipped + 1 };
-      emit("progress", {
-        processed: state.processed,
-        skipped: state.skipped,
-        errors: state.errors,
-        currentCard: card.name,
-      });
-      continue;
     }
 
-    try {
-      // Bounded fetch so a hung image host can't stall the whole sync job
-      // (cancel is only checked between cards, so an in-flight fetch must not
-      // be allowed to block forever).
-      const imageRes = await fetch(card.imageUrl, {
-        headers: source.fetchHeaders,
-        signal: AbortSignal.timeout(30_000),
-      });
-      if (!imageRes.ok) throw new Error(`Image fetch failed: ${imageRes.status}`);
-      const buffer = Buffer.from(await imageRes.arrayBuffer());
-      const embedding = await vectorizeImageFromBuffer(buffer);
+    for (let j = 0; j < chunk.length; j++) {
+      const card = chunk[j];
+      const buffer = buffers[j];
 
-      await db
-        .insert(cardImageVectors)
-        .values({
-          scryfallId: card.id,
-          gameKey: source.gameKey,
-          name: card.name,
-          setCode: card.setCode,
-          embedding,
-          cardData: card.cardData ?? null,
-        })
-        .onConflictDoNothing();
+      if (!card.imageUrl || existingSet.has(card.id)) {
+        if (existingSet.has(card.id) && card.cardData) {
+          const row = existingByScryfallId.get(card.id);
+          if (row && row.cardData == null) {
+            backfill.push({ id: card.id, cardData: card.cardData });
+          }
+        }
+        state = { ...state, skipped: state.skipped + 1 };
+        emit("progress", {
+          processed: state.processed,
+          skipped: state.skipped,
+          errors: state.errors,
+          currentCard: card.name,
+        });
+        continue;
+      }
 
-      existingSet.add(card.id);
-      state = { ...state, processed: state.processed + 1 };
-      addLog(
-        `[${state.processed + state.skipped}/${state.total}] ${card.name} (${card.setCode})`,
-      );
-      emit("progress", {
-        processed: state.processed,
-        skipped: state.skipped,
-        errors: state.errors,
-        currentCard: card.name,
-      });
+      if (!buffer) {
+        state = { ...state, errors: state.errors + 1 };
+        addLog(`Error: ${card.name}: image fetch failed`);
+        emit("progress", {
+          processed: state.processed,
+          skipped: state.skipped,
+          errors: state.errors,
+          currentCard: card.name,
+        });
+        continue;
+      }
 
-      await sleep(100);
-    } catch (err) {
-      state = { ...state, errors: state.errors + 1 };
-      const msg = err instanceof Error ? err.message : String(err);
-      addLog(`Error: ${card.name}: ${msg}`);
-      emit("progress", {
-        processed: state.processed,
-        skipped: state.skipped,
-        errors: state.errors,
-        currentCard: card.name,
-      });
+      const embedding = embeddingByIndex.get(j);
+      if (!embedding) continue; // embed failed — already counted above
+
+      try {
+        await db
+          .insert(cardImageVectors)
+          .values({
+            scryfallId: card.id,
+            gameKey: source.gameKey,
+            name: card.name,
+            setCode: card.setCode,
+            embedding,
+            cardData: card.cardData ?? null,
+          })
+          .onConflictDoNothing();
+
+        existingSet.add(card.id);
+        state = { ...state, processed: state.processed + 1 };
+        addLog(
+          `[${state.processed + state.skipped}/${state.total}] ${card.name} (${card.setCode})`,
+        );
+        emit("progress", {
+          processed: state.processed,
+          skipped: state.skipped,
+          errors: state.errors,
+          currentCard: card.name,
+        });
+      } catch (err) {
+        state = { ...state, errors: state.errors + 1 };
+        const msg = err instanceof Error ? err.message : String(err);
+        addLog(`Error: ${card.name}: ${msg}`);
+        emit("progress", {
+          processed: state.processed,
+          skipped: state.skipped,
+          errors: state.errors,
+          currentCard: card.name,
+        });
+      }
     }
   }
 
