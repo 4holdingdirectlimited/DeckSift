@@ -118,6 +118,37 @@ loop-level supervisor is the practical option).
 5. Watchdog budgets per phase (7), full jam coverage (6).
 6. Concurrent/pipelined motions — last, once the machine is deterministic.
 
+## Machine build commissioning checklist
+
+For when the physical sorter is assembled. Verify each link independently before
+end-to-end tuning so a timing problem isn't mistaken for a vision or routing
+problem. Software pre-reqs are noted inline.
+
+1. **Camera / vision** (EMEET C60E 4K replacing the Logitech):
+   - 4K stream at the capture crop; contour/perspective warp clean on a real
+     card in the rig; no glare zone.
+   - Time one full scan in the browser (capture → embed → match → UI). Compare
+     with `pnpm bench:vectorize` (~380 ms DML on this machine).
+   - RTX 3080 later: `VECTORIZE_DEVICE=dml` already works on NVIDIA; optional
+     fp16 dtype; re-run the bench to confirm.
+2. **Firmware timing** (measure, don't guess):
+   - Actual feed time (hopper → module 1 IR) at the configured feeder speed.
+   - Stopwatch each bin's sort path, then shrink `DELAY_*` constants safely.
+   - Tune feeder speed/settle; verify no double-feed (two cards tripping IR).
+3. **Pipeline** (the 2 s/card target):
+   - Confirm the current serial flow is feed → scan → sort with NO overlap
+     (verified in code, ~2.9–3.5 s/card) and time it on hardware.
+   - Then implement the non-blocking state machine + pipeline feed (next card
+     fed + scanned while the previous is being sorted). Target per-card
+     ≈ scan + sort ≈ 1.7–2.2 s on shallow bins.
+4. **Bundle workflow** (needs the bundle software):
+   - 4-rarity bundle on bins 1–4; counts reach targets; duplicates → reject
+     bin; bundle-complete pause; resume after restart.
+5. **Holo detection** (needs the classifier):
+   - Collect labeled scans (manual foil toggle) during early runs; train the
+     embedding classifier; verify on DBZ/One Piece foils — foil is a different
+     product ID there, so detection feeds card identity, not just a badge.
+
 ## Related docs
 
 - `arduino/main/SERIAL_PROTOCOL.md` — current JSON contract (will grow: cancel, save/reset config, per-module jam timeouts).
