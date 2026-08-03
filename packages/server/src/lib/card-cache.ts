@@ -11,13 +11,32 @@ const MAX_ENTRIES = 500;
 
 const cache = new Map<string, { data: PlayingCard; expiresAt: number }>();
 
+function cacheKey(baseUrl: string, scryfallId: string): string {
+  return `${baseUrl}::${scryfallId}`;
+}
+
 export async function resolveCardDetails(
   adapter: CardSearchAdapter,
   baseUrl: string,
   scryfallId: string,
 ): Promise<PlayingCard | null> {
-  const hit = cache.get(scryfallId);
-  if (hit && hit.expiresAt > Date.now()) return hit.data;
+  const key = cacheKey(baseUrl, scryfallId);
+  const hit = cache.get(key);
+  if (hit && hit.expiresAt > Date.now()) {
+    // Refresh LRU position so hot cards aren't evicted ahead of cold ones.
+    cache.delete(key);
+    cache.set(key, hit);
+    return hit.data;
+  }
+  // Opportunistically drop expired entries so stale data can't linger past
+  // TTL (previously an expired entry was only removed when the map hit
+  // MAX_ENTRIES, and then by insertion order, not expiry).
+  if (cache.size > 0) {
+    const now = Date.now();
+    for (const [k, entry] of cache) {
+      if (entry.expiresAt <= now) cache.delete(k);
+    }
+  }
 
   const result = await adapter.searchById(scryfallId, baseUrl);
   if (!result.success || !result.data) return null;
@@ -26,6 +45,6 @@ export async function resolveCardDetails(
     const oldest = cache.keys().next().value;
     if (oldest !== undefined) cache.delete(oldest);
   }
-  cache.set(scryfallId, { data: result.data, expiresAt: Date.now() + TTL_MS });
+  cache.set(key, { data: result.data, expiresAt: Date.now() + TTL_MS });
   return result.data;
 }

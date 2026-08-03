@@ -1,33 +1,28 @@
-import AccountPage from "@/app/routes/app/account";
-import AdminPage from "@/app/routes/app/admin";
-import BinsPage from "@/app/routes/app/bins";
-import CalibratePage from "@/app/routes/app/calibrate";
-import CollectionsPage from "@/app/routes/app/collections";
-import ScannerPage from "@/app/routes/app/index";
-import AppLayout from "@/app/routes/app/layout";
-import MonitorPage from "@/app/routes/app/monitor";
-import MonitorSessionsPage from "@/app/routes/app/monitor-sessions";
-import SettingsPage from "@/app/routes/app/settings";
-import VerifyEmailPage from "@/app/routes/app/verify-email";
-import AuthPage from "@/app/routes/auth";
-import BuildGuidePage from "@/app/routes/build";
-import LandingPage from "@/app/routes/index";
+import { lazy, Suspense } from "react";
 import { useIsMobile } from "@/hooks/use-is-mobile";
 import { useRole } from "@/hooks/use-role";
-import { RedirectToSignIn, SignedIn } from "@neondatabase/neon-js/auth/react";
-import { createBrowserRouter, Navigate, Outlet } from "react-router-dom";
+import { Navigate, Outlet, createBrowserRouter } from "react-router-dom";
 
-function AuthGuard() {
-  return (
-    <>
-      <SignedIn>
-        <Outlet />
-      </SignedIn>
-      <RedirectToSignIn />
-    </>
-  );
+// Route-level code splitting: each page loads on first visit instead of being
+// bundled into one 1.9 MB entry chunk. Layouts/guards stay eager.
+const LandingPage = lazy(() => import("@/app/routes/index"));
+const BuildGuidePage = lazy(() => import("@/app/routes/build"));
+const AppLayout = lazy(() => import("@/app/routes/app/layout"));
+const ScannerPage = lazy(() => import("@/app/routes/app/index"));
+const CollectionsPage = lazy(() => import("@/app/routes/app/collections"));
+const BinsPage = lazy(() => import("@/app/routes/app/bins"));
+const CalibratePage = lazy(() => import("@/app/routes/app/calibrate"));
+const SettingsPage = lazy(() => import("@/app/routes/app/settings"));
+const AdminPage = lazy(() => import("@/app/routes/app/admin"));
+const MonitorSessionsPage = lazy(() => import("@/app/routes/app/monitor-sessions"));
+const MonitorPage = lazy(() => import("@/app/routes/app/monitor"));
+
+function PageSuspense({ children }: { children: React.ReactNode }) {
+  return <Suspense fallback={<div className="min-h-screen" />}>{children}</Suspense>;
 }
 
+// Fully-local single-user build: no sign-in gate — anyone on the local network
+// can open the app.
 function AdminGuard() {
   const { isAdmin, isPending } = useRole();
   if (isPending) return null;
@@ -44,73 +39,100 @@ function DesktopOnlyGuard() {
 export const router = createBrowserRouter([
   {
     path: "/",
-    element: <LandingPage />,
+    element: (
+      <PageSuspense>
+        <LandingPage />
+      </PageSuspense>
+    ),
   },
   {
     path: "/build",
-    element: <BuildGuidePage />,
+    element: (
+      <PageSuspense>
+        <BuildGuidePage />
+      </PageSuspense>
+    ),
   },
   {
-    path: "/auth/:path",
-    element: <AuthPage />,
-  },
-  {
-    element: <AuthGuard />,
+    element: (
+      <PageSuspense>
+        <AppLayout />
+      </PageSuspense>
+    ),
     children: [
       {
-        path: "/app/verify-email",
-        element: <VerifyEmailPage />,
-      },
-      {
-        element: <AppLayout />,
+        element: <DesktopOnlyGuard />,
         children: [
           {
-            element: <DesktopOnlyGuard />,
+            path: "/app",
+            element: (
+              <PageSuspense>
+                <ScannerPage />
+              </PageSuspense>
+            ),
+          },
+          {
+            path: "/app/collections",
+            element: (
+              <PageSuspense>
+                <CollectionsPage />
+              </PageSuspense>
+            ),
+          },
+          {
+            path: "/app/collections/:collectionGuid/bins",
+            element: (
+              <PageSuspense>
+                <BinsPage />
+              </PageSuspense>
+            ),
+          },
+          {
+            path: "/app/calibrate",
+            element: (
+              <PageSuspense>
+                <CalibratePage />
+              </PageSuspense>
+            ),
+          },
+          {
+            path: "/app/settings",
+            element: (
+              <PageSuspense>
+                <SettingsPage />
+              </PageSuspense>
+            ),
+          },
+          {
+            element: <AdminGuard />,
             children: [
               {
-                path: "/app",
-                element: <ScannerPage />,
-              },
-              {
-                path: "/app/collections",
-                element: <CollectionsPage />,
-              },
-              {
-                path: "/app/collections/:collectionGuid/bins",
-                element: <BinsPage />,
-              },
-              {
-                path: "/app/calibrate",
-                element: <CalibratePage />,
-              },
-              {
-                path: "/app/settings",
-                element: <SettingsPage />,
-              },
-              {
-                element: <AdminGuard />,
-                children: [
-                  {
-                    path: "/app/admin",
-                    element: <AdminPage />,
-                  },
-                ],
-              },
-              {
-                path: "/app/account/:path",
-                element: <AccountPage />,
+                path: "/app/admin",
+                element: (
+                  <PageSuspense>
+                    <AdminPage />
+                  </PageSuspense>
+                ),
               },
             ],
           },
-          {
-            path: "/app/monitor",
-            element: <MonitorSessionsPage />,
-          },
-          {
-            path: "/app/monitor/:collectionGuid",
-            element: <MonitorPage />,
-          },
         ],
+      },
+      {
+        path: "/app/monitor",
+        element: (
+          <PageSuspense>
+            <MonitorSessionsPage />
+          </PageSuspense>
+        ),
+      },
+      {
+        path: "/app/monitor/:collectionGuid",
+        element: (
+          <PageSuspense>
+            <MonitorPage />
+          </PageSuspense>
+        ),
       },
     ],
   },

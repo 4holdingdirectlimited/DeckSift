@@ -26,8 +26,8 @@ export function BuildFooter() {
           >
             Report an issue
           </a>
-          <Link to="/auth/sign-in" className="transition-colors hover:text-foreground">
-            Sign in
+          <Link to="/app" className="transition-colors hover:text-foreground">
+            Open app
           </Link>
         </nav>
 

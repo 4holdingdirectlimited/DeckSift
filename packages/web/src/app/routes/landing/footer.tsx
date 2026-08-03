@@ -37,11 +37,8 @@ export function LandingFooter() {
           <Link to="/build" className="transition-colors hover:text-foreground">
             Build
           </Link>
-          <Link
-            to="/auth/sign-in"
-            className="transition-colors hover:text-foreground"
-          >
-            Sign in
+          <Link to="/app" className="transition-colors hover:text-foreground">
+            Open app
           </Link>
         </nav>
 

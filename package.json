@@ -7,6 +7,9 @@
     "build": "turbo build",
     "lint": "turbo lint",
     "typecheck": "turbo typecheck",
+    "db:start": "node scripts/local-db.mjs start",
+    "db:stop": "node scripts/local-db.mjs stop",
+    "db:status": "node scripts/local-db.mjs status",
     "version:patch": "node scripts/version-bump.mjs patch",
     "version:minor": "node scripts/version-bump.mjs minor",
     "version:major": "node scripts/version-bump.mjs major"

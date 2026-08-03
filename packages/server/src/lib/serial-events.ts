@@ -67,6 +67,20 @@ export function classifySerialEvent(
     };
   }
 
+  // The standalone {"feeder": true} command replies status:"ok" +
+  // detected:false on a timeout (no card tripped module 1's IR within the
+  // feed window). That's the most common failure mode and must be surfaced,
+  // not treated as a success.
+  if (res.detected === false) {
+    return {
+      title: "Feeder Timeout",
+      description: [
+        ...lines,
+        "The feeder ran without a card reaching the scanner. Check the hopper and feeder.",
+      ].join("\n"),
+    };
+  }
+
   if (res.error) {
     return {
       title: `${label} Error`,

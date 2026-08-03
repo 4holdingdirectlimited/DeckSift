@@ -15,7 +15,7 @@ import { BinLocationDiagram } from "@/features/bins/components/bin-location-diag
 import { searchCards } from "@/features/cards/api/card-search";
 import { useCollections } from "@/features/collections/api/use-collections";
 import { useScannedCards } from "@/features/scanner/api/use-scanned-cards";
-import { cn } from "@/lib/utils";
+import { cn, resolveCardImageUrl } from "@/lib/utils";
 import {
   getCardFaceName,
   getCardImageUris,
@@ -285,9 +285,10 @@ export function CardDetailPanel({
                           >
                             <img
                               src={
-                                getCardImageUris(c)?.normal ||
-                                getCardImageUris(c)?.small ||
-                                ""
+                                resolveCardImageUrl(
+                                  getCardImageUris(c)?.normal ||
+                                    getCardImageUris(c)?.small,
+                                ) || ""
                               }
                               alt={c.name}
                               className="w-full h-full object-cover"
@@ -532,7 +533,10 @@ export function CardDetailPanel({
                       >
                         {getCardImageUris(card)?.small ? (
                           <img
-                            src={getCardImageUris(card)!.small}
+                            src={
+                              resolveCardImageUrl(getCardImageUris(card)!.small) ||
+                              ""
+                            }
                             alt={card.name}
                             className="w-full h-full object-cover"
                           />

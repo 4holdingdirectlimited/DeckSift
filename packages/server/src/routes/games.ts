@@ -15,8 +15,8 @@ function toGame(row: typeof games.$inferSelect): Game {
     dataSourceUrl: row.dataSourceUrl,
     isActive: row.isActive,
     fieldDefinitions: row.fieldDefinitions as FieldMeta[],
-    createdAt: row.createdAt,
-    updatedAt: row.updatedAt,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
   };
 }
 
@@ -58,7 +58,9 @@ router.post("/", requireAuth, requireRole("admin"), async (c) => {
         key: key.trim(),
         name: name.trim(),
         dataSourceUrl: dataSourceUrl.trim(),
-        fieldDefinitions,
+        // fieldDefinitions is NOT NULL in the schema; default to an empty list
+        // when omitted so a minimal game creation doesn't 500.
+        fieldDefinitions: fieldDefinitions ?? [],
         isActive: isActive ?? true,
       })
       .returning();

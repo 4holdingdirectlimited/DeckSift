@@ -1,14 +1,11 @@
 import { ThemeToggle } from "@/components/theme-toggle";
 import { buttonVariants } from "@/components/ui/button";
-import { neon } from "@/lib/auth/client";
 import { DISCORD_URL } from "@/lib/links";
 import { cn } from "@/lib/utils";
 import { IconBrandDiscord, IconPigFilled } from "@tabler/icons-react";
 import { Link } from "react-router-dom";
 
 export function BuildNav() {
-  const { data, isPending } = neon.auth.useSession();
-  const isSignedIn = !isPending && !!data?.user;
 
   return (
     <header className="sticky top-0 z-20 border-b bg-background/80 backdrop-blur-sm">
@@ -59,21 +56,12 @@ export function BuildNav() {
             <IconBrandDiscord size={18} />
           </a>
           <ThemeToggle />
-          {isSignedIn ? (
-            <Link
-              to="/app"
-              className={cn(buttonVariants({ variant: "default", size: "lg" }))}
-            >
-              Open app
-            </Link>
-          ) : (
-            <Link
-              to="/auth/sign-up"
-              className={cn(buttonVariants({ variant: "default", size: "lg" }))}
-            >
-              Get started
-            </Link>
-          )}
+          <Link
+            to="/app"
+            className={cn(buttonVariants({ variant: "default", size: "lg" }))}
+          >
+            Open app
+          </Link>
         </div>
       </div>
     </header>

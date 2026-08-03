@@ -77,8 +77,14 @@ export function useCardFilterSort(
     if (filters.colors.length > 0) {
       result = result.filter((entry) => {
         const identity = entry.card.color_identity ?? [];
-        if (filters.colors.includes("C") && identity.length === 0) return true;
-        return filters.colors.some((c) => c !== "C" && identity.includes(c));
+        // Scryfall marks colorless cards as ["C"] (or [] for cards with no
+        // color identity) — both must count as colorless.
+        const isColorless =
+          identity.length === 0 || identity.every((c) => c === "C");
+        if (filters.colors.includes("C") && isColorless) return true;
+        return filters.colors.some(
+          (c) => c !== "C" && identity.includes(c),
+        );
       });
     }
 

@@ -3,6 +3,7 @@ import { authenticatedRole, crudPolicy } from "drizzle-orm/neon/rls";
 import {
   boolean,
   customType,
+  index,
   integer,
   jsonb,
   pgTable,
@@ -26,12 +27,11 @@ const vector = customType<{ data: number[]; driverData: string }>({
   },
 });
 
-// org_id is a text column referencing neon_auth.organization.id (managed by Neon Auth).
-// Checks the org_id claim injected into request.jwt.claims by the app (see
-// requireOrg in middleware/auth.ts) against auth_is_org_member(), a
-// SECURITY DEFINER SQL function created directly in Postgres (not modeled
-// here) that re-verifies membership via neon_auth.member - so a forged/stale
-// org_id claim alone can't grant access.
+// org_id scopes every row to the single local org (LOCAL_ORG_ID in
+// middleware/auth.ts — this is a fully-local, single-user build with no
+// logins). requireOrg injects the org_id claim into request.jwt.claims, which
+// the orgRls policies check against auth_is_org_member(), a SECURITY DEFINER
+// SQL function created by packages/server/sql/local-neon-bootstrap.sql.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const orgRls = (orgId: any) =>
   sql`(${orgId} = (current_setting('request.jwt.claims', true)::json ->> 'org_id')) AND auth_is_org_member(${orgId})`;
@@ -52,7 +52,19 @@ export const cardImageVectors = pgTable(
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
   (table) => [
-    unique("card_image_vectors_scryfall_face_idx").on(table.scryfallId),
+    // Per-game uniqueness: sync jobs run per game key, and the same scryfall
+    // id could theoretically exist under another game's namespace. A global
+    // unique on scryfall_id alone would silently swallow per-game conflicts
+    // (sync-job uses onConflictDoNothing and would report them as processed).
+    unique("cards_game_key_scryfall_id_idx").on(table.gameKey, table.scryfallId),
+    // Vector search in routes/card.ts does `WHERE game_key = ... AND
+    // embedding <=> ? < 0.3 ORDER BY embedding <=> ?` over the whole table —
+    // a sequential scan per scan request without these.
+    index("cards_game_key_idx").on(table.gameKey),
+    index("cards_embedding_idx").using(
+      "hnsw",
+      table.embedding.op("vector_cosine_ops"),
+    ),
     crudPolicy({
       role: authenticatedRole,
       read: true,
@@ -127,6 +139,8 @@ export const bins = pgTable(
   },
   (table) => [
     unique("bins_guid_idx").on(table.guid),
+    // FK lookups: _snapshotBinSet and delete/update paths filter by bin_set.
+    index("bins_bin_set_idx").on(table.binSet),
     crudPolicy({
       role: authenticatedRole,
       read: orgRls(table.orgId),
@@ -142,13 +156,17 @@ export const moduleConfigs = pgTable(
     guid: uuid("guid").defaultRandom(),
     moduleNumber: integer("module_number").notNull(),
     orgId: text("org_id").notNull(),
-    bottomClosed: integer("bottom_closed").notNull().default(102),
-    bottomOpen: integer("bottom_open").notNull().default(307),
-    paddleClosed: integer("paddle_closed").notNull().default(150),
-    paddleOpen: integer("paddle_open").notNull().default(307),
+    // Defaults mirror DEFAULT_CALIBRATION in @magic-vault/shared so a row
+    // inserted without an explicit payload matches what the UI/firmware expect
+    // (previously the DB defaults disagreed with the shared constants and
+    // would drive the sorter to wrong positions).
+    bottomClosed: integer("bottom_closed").notNull().default(400),
+    bottomOpen: integer("bottom_open").notNull().default(150),
+    paddleClosed: integer("paddle_closed").notNull().default(420),
+    paddleOpen: integer("paddle_open").notNull().default(150),
     pusherLeft: integer("pusher_left").notNull().default(150),
-    pusherNeutral: integer("pusher_neutral").notNull().default(307),
-    pusherRight: integer("pusher_right").notNull().default(460),
+    pusherNeutral: integer("pusher_neutral").notNull().default(230),
+    pusherRight: integer("pusher_right").notNull().default(300),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
@@ -168,11 +186,12 @@ export const feederConfigs = pgTable(
     id: serial().primaryKey(),
     guid: uuid("guid").defaultRandom(),
     orgId: text("org_id").notNull(),
-    speed: integer("speed").notNull().default(400),
+    // Defaults mirror DEFAULT_FEEDER_CALIBRATION in @magic-vault/shared.
+    speed: integer("speed").notNull().default(250),
     duration: integer("duration").notNull().default(3000),
     pulseDuration: integer("pulse_duration").notNull().default(80),
-    pauseDuration: integer("pause_duration").notNull().default(50),
-    settleDuration: integer("settle_duration").notNull().default(150),
+    pauseDuration: integer("pause_duration").notNull().default(0),
+    settleDuration: integer("settle_duration").notNull().default(500),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
@@ -229,6 +248,10 @@ export const collectionCards = pgTable(
   },
   (table) => [
     unique("collection_cards_guid_idx").on(table.guid),
+    // Per-collection card list + cascade deletes filter by collection_id on
+    // every scan session load and clear.
+    index("collection_cards_collection_id_idx").on(table.collectionId),
+    index("collection_cards_scryfall_id_idx").on(table.scryfallId),
     crudPolicy({
       role: authenticatedRole,
       read: orgRls(table.orgId),

@@ -52,10 +52,10 @@ export function LandingHero() {
         </p>
         <div className="flex flex-wrap items-center gap-3 pt-2">
           <Link
-            to="/auth/sign-up"
+            to="/app"
             className={cn(buttonVariants({ variant: "default", size: "lg" }))}
           >
-            Get started free
+            Open the app
             <IconArrowRight size={16} />
           </Link>
           <a

@@ -41,6 +41,8 @@ export function useSessionMonitor(collectionGuid: string | undefined): SessionMo
     if (!collectionGuid) return;
 
     let cancelled = false;
+    let gotInit = false;
+    let errorCount = 0;
     setStatus("connecting");
     setCards([]);
     setCollection(null);
@@ -52,6 +54,8 @@ export function useSessionMonitor(collectionGuid: string | undefined): SessionMo
       esRef.current = es;
 
       es.addEventListener("session_init", (e) => {
+        gotInit = true;
+        errorCount = 0;
         const { collection, cards, viewers: initViewers } = JSON.parse((e as MessageEvent).data) as {
           collection: Collection;
           cards: ScannedCard[];
@@ -109,11 +113,30 @@ export function useSessionMonitor(collectionGuid: string | undefined): SessionMo
       });
 
       es.onerror = () => {
-        setStatus("error");
-        pushError("Connection to session lost.");
+        if (cancelled) return;
+        // EventSource auto-reconnects on any failure. If we never received
+        // session_init (e.g. 401/403 from an expired token), the connection
+        // will never succeed - close it instead of retrying forever.
+        errorCount += 1;
+        if (!gotInit) {
+          if (errorCount >= 2) {
+            es.close();
+            setStatus("error");
+            pushError(
+              "Could not connect to the session. Your session may have expired - refresh the page.",
+            );
+          }
+          return;
+        }
+        // Transient blip after a healthy connection: surface once per streak,
+        // don't grow the errors panel unboundedly.
+        if (errorCount === 1) {
+          pushError("Connection to session lost.");
+        }
       };
 
       es.onopen = () => {
+        errorCount = 0;
         setStatus("connected");
       };
     }).catch(() => {

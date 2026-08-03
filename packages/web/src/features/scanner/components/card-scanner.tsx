@@ -170,6 +170,23 @@ export function CardScanner({ className, compact }: CardScannerProps) {
           sent: true,
           response: parsed,
         });
+      } else if (parsed.detected === false) {
+        // Firmware replies status:"ok", detected:false, empty:false when the
+        // feeder ran its full duration without a card tripping module 1's IR -
+        // a timeout, not a successful feed. Capturing here would search an
+        // empty frame and can save garbage matches.
+        handlePause();
+        toast.error("Feeder timeout", {
+          description:
+            "No card reached the scanner. Check the hopper and the feeder, then try again.",
+          duration: Infinity,
+          dismissible: true,
+        });
+        void reportSerialEvent({
+          command: "feeder",
+          sent: true,
+          response: parsed,
+        });
       } else {
         // Feeder confirmed a card reached module 1 - capture it now.
         captureCard();

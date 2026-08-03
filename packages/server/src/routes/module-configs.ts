@@ -58,7 +58,17 @@ router.get("/", requireAuth, requireOrg, async (c) => {
 // PUT /modules/:moduleNumber
 router.put("/:moduleNumber", requireAuth, requireOrg, async (c) => {
   const orgId = c.get("orgId");
-  const moduleNumber = parseInt(c.req.param("moduleNumber")) as 1 | 2 | 3;
+  const moduleNumber = Number(c.req.param("moduleNumber"));
+  // The sorter has exactly three modules; the shared ModuleConfig type and
+  // buildConfigs() only model 1-3. Reject anything else so out-of-range rows
+  // can't be persisted (and then silently hidden) or collide with the unique
+  // (org_id, module_number) index.
+  if (!Number.isInteger(moduleNumber) || moduleNumber < 1 || moduleNumber > 3) {
+    return c.json(
+      { success: false, message: "moduleNumber must be 1, 2, or 3." },
+      400,
+    );
+  }
   const calibration = await c.req.json<ServoCalibration>();
   try {
     const result = await authQuery(c.get("jwtClaims"), async (tx) => {

@@ -46,7 +46,11 @@ router.post("/", requireAuth, async (c) => {
   }
 
   const embeddingStr = `[${embedding.join(",")}]`;
-  const resolved = await resolveCardSearch(c.get("jwtClaims"), collectionGuid);
+  const resolved = await resolveCardSearch(
+    c.get("jwtClaims"),
+    c.req.header("X-Org-Id"),
+    collectionGuid,
+  );
   if (!resolved) {
     return c.json(
       { success: false, message: "No game configured for this collection." },
@@ -118,6 +122,7 @@ router.get("/search", requireAuth, async (c) => {
   const query = c.req.query("q") ?? "";
   const resolved = await resolveCardSearch(
     c.get("jwtClaims"),
+    c.req.header("X-Org-Id"),
     c.req.query("collectionGuid"),
   );
   if (!resolved) {
@@ -133,6 +138,7 @@ router.get("/search", requireAuth, async (c) => {
 router.get("/search/:id", requireAuth, async (c) => {
   const resolved = await resolveCardSearch(
     c.get("jwtClaims"),
+    c.req.header("X-Org-Id"),
     c.req.query("collectionGuid"),
   );
   if (!resolved) {

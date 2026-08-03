@@ -1,6 +1,5 @@
 import { BinConfigsProvider } from "@/features/bins/api/use-bin-configs";
 import { CardFiltersProvider } from "@/features/cards/api/use-card-filters";
-import { OrgPickerModal } from "@/features/companies/components/org-picker-modal";
 import { FeederConfigProvider } from "@/features/calibration/api/use-feeder-config";
 import { ModuleConfigsProvider } from "@/features/calibration/api/use-module-configs";
 import { CollectionLocksProvider } from "@/features/collections/api/use-collection-locks";
@@ -58,7 +57,6 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
                   <ScannedCardsProvider>
                     <CardFiltersProvider>
                       {children}
-                      <OrgPickerModal />
                       <DocumentTitleUpdater />
                     </CardFiltersProvider>
                   </ScannedCardsProvider>

@@ -80,6 +80,11 @@ export function BinConfigPanel() {
   }, [config, clear, form, isOnlyCatchAll]);
 
   const isCatchAll = form.watch("isCatchAll");
+  // The firmware implements the catch-all drop only as bin 7 (open every
+  // module's bottom paddle). Marking any other bin as catch-all would silently
+  // misroute unmatched cards into a specific module.
+  const CATCH_ALL_BIN = 7;
+  const isCatchAllEligible = config.binNumber === CATCH_ALL_BIN;
 
   return (
     <div className="flex flex-col">
@@ -94,6 +99,12 @@ export function BinConfigPanel() {
                 type="button"
                 variant={field.value ? "default" : "outline"}
                 size="sm"
+                disabled={!isCatchAllEligible}
+                title={
+                  isCatchAllEligible
+                    ? undefined
+                    : "The sorter can only drop unmatched cards into bin 7 (catch-all)."
+                }
                 onClick={() => field.onChange(!field.value)}
               >
                 {field.value ? "Catch-all enabled" : "Set as catch-all"}

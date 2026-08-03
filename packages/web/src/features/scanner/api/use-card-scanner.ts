@@ -149,6 +149,10 @@ export function useCardScanner({
   const lastScannedCardIdRef = useRef<string | null>(null);
   const isCapturingRef = useRef(false);
   const settleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Bumped whenever the camera stream is torn down or replaced (unmount,
+  // retryCamera, camera switch). In-flight captures check it after their await
+  // so a stale search result can't fire handlers for a dead stream.
+  const streamGenerationRef = useRef(0);
   const onSearchResultsRef = useRef(onSearchResults);
   const onNoMatchRef = useRef(onNoMatch);
   const handleErrorRef = useRef<(msg: string) => void>(() => {});
@@ -208,6 +212,7 @@ export function useCardScanner({
         updateStatus("scanning");
         return;
       }
+      const generation = streamGenerationRef.current;
 
       try {
         const { card, alternativeMatches, debugImageUrl } =
@@ -216,6 +221,10 @@ export function useCardScanner({
             contour,
             activeCollectionGuidRef.current,
           );
+        // The stream may have been replaced/unmounted while the search was in
+        // flight — drop the result instead of updating a dead tree or letting
+        // an old camera's capture enter the session.
+        if (generation !== streamGenerationRef.current) return;
         setDebugImageUrl(debugImageUrl);
         debugImageUrlRef.current = debugImageUrl;
 
@@ -241,11 +250,14 @@ export function useCardScanner({
           updateStatus("no-match");
         }
       } catch (err) {
+        if (generation !== streamGenerationRef.current) return;
         handleErrorRef.current(
           err instanceof Error ? err.message : "Failed to search card",
         );
       } finally {
-        isCapturingRef.current = false;
+        if (generation === streamGenerationRef.current) {
+          isCapturingRef.current = false;
+        }
       }
     },
     [updateStatus, allowDuplicates],
@@ -346,6 +358,8 @@ export function useCardScanner({
 
     return () => {
       cancelled = true;
+      // Invalidate any in-flight capture against this (now dead) stream.
+      streamGenerationRef.current += 1;
       cancelAnimationFrame(rafRef.current);
       rafRef.current = 0;
       if (settleTimeoutRef.current) {

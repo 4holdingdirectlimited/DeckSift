@@ -15,13 +15,13 @@ export function LandingCta() {
           organized from here on out.
         </p>
         <Link
-          to="/auth/sign-up"
+          to="/app"
           className={cn(
             buttonVariants({ variant: "default", size: "lg" }),
             "mt-2",
           )}
         >
-          Get started free
+          Open the app
           <IconArrowRight size={16} />
         </Link>
       </div>

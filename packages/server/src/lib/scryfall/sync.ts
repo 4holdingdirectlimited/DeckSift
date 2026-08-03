@@ -6,7 +6,20 @@ type ScryfallBulkCard = {
   name: string;
   set: string;
   image_uris?: { png?: string; large?: string };
+  card_faces?: { image_uris?: { png?: string; large?: string } }[];
 };
+
+// Double-faced / modal cards carry their images under card_faces[].image_uris
+// rather than top-level image_uris — without this fallback every DFC would be
+// silently skipped by the sync (no imageUrl) and could never match a scan.
+function cardImageUrl(card: ScryfallBulkCard): string | undefined {
+  return (
+    card.image_uris?.png ??
+    card.image_uris?.large ??
+    card.card_faces?.[0]?.image_uris?.png ??
+    card.card_faces?.[0]?.image_uris?.large
+  );
+}
 
 function apiRoot(baseUrl: string): string {
   try {
@@ -51,22 +64,18 @@ async function fetchCards(
     id: c.id,
     name: c.name,
     setCode: c.set,
-    imageUrl: c.image_uris?.png ?? c.image_uris?.large,
+    imageUrl: cardImageUrl(c),
   }));
 }
 
 async function fetchOne(id: string, baseUrl: string) {
   const res = await fetch(`${baseUrl}/${id}`, { headers: SCRYFALL_HEADERS });
   if (!res.ok) return null;
-  const card = (await res.json()) as {
-    name: string;
-    set: string;
-    image_uris?: { png?: string; large?: string };
-  };
+  const card = (await res.json()) as ScryfallBulkCard;
   return {
     name: card.name,
     setCode: card.set,
-    imageUrl: card.image_uris?.png ?? card.image_uris?.large,
+    imageUrl: cardImageUrl(card),
   };
 }
 

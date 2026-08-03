@@ -368,6 +368,11 @@ export function SerialProvider({ children }: { children: React.ReactNode }) {
           await fn();
         }
       : fn;
+    // Return an unsubscribe so React StrictMode double-effects (and any
+    // re-registration) can't chain the hook twice per connect.
+    return () => {
+      preTestHookRef.current = previous;
+    };
   }, []);
 
   const sendCommandWithNewline = useCallback(
@@ -380,7 +385,17 @@ export function SerialProvider({ children }: { children: React.ReactNode }) {
   const sendBin = useCallback(
     async (binNumber: number): Promise<unknown | null> => {
       if (!portRef.current || !writableRef.current) return null;
-      if (binBusyRef.current) return null;
+
+      // The firmware executes commands serially, so a second route request
+      // arriving while one is in flight must wait rather than be dropped -
+      // dropping it made callers treat a concurrent request as a routing
+      // failure and disable auto-feed. Bounded wait; still fail if the
+      // in-flight command never clears.
+      const busyDeadline = Date.now() + 20000;
+      while (binBusyRef.current) {
+        if (Date.now() > busyDeadline) return null;
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
 
       binBusyRef.current = true;
       try {
@@ -424,15 +439,24 @@ export function SerialProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!isConnected || !isReady) return;
     let warned = false;
+    let toastId: string | number | undefined;
     const interval = setInterval(() => {
+      // The firmware executes commands serially: a route/feed blocks loop()
+      // for its whole budget (up to 15 s), so a ping written mid-route would
+      // only be answered after it finishes and would falsely time out. Skip
+      // the ping while a bin command is in flight instead.
+      if (binBusyRef.current) return;
       void sendCommandWithResponse({ ping: true }, 5000).then((pong) => {
         if (pong) {
+          if (warned && toastId !== undefined) {
+            toast.dismiss(toastId);
+          }
           warned = false;
           return;
         }
         if (warned) return;
         warned = true;
-        toast.warning("Device unresponsive", {
+        toastId = toast.warning("Device unresponsive", {
           description:
             "No response from the sorter. Check the USB connection and power.",
           duration: Infinity,

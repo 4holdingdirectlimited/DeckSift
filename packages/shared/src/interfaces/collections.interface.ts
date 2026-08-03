@@ -7,8 +7,9 @@ export interface Collection {
   isActive: boolean;
   cardCount: number;
   game: Game | null;
-  createdAt: Date;
-  updatedAt: Date;
+  /** ISO 8601 — the API serializes timestamps as strings. */
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface CollectionWithCards extends Collection {

@@ -31,8 +31,8 @@ https://makerworld.com/en/models/3066180-tcg-card-sorting-machine#profileId-3451
 ## Stack
 
 - **Web**: React 19, Vite, React Router v7, Tailwind CSS 4, TanStack Query
-- **Server**: Hono 4, Drizzle ORM, Neon PostgreSQL (pgvector)
-- **Auth**: Neon Auth (JWT), backed by Better Auth on the client
+- **Server**: Hono 4, Drizzle ORM, PostgreSQL (pgvector)
+- **Auth**: none — fully-local single-user build, no logins
 - **Hardware**: Arduino Uno R4 via Web Serial API (9600 baud), PCA9685 servo driver
 - **Monorepo**: Turborepo + pnpm workspaces
 
@@ -66,19 +66,72 @@ cp .env.example .env
 
 ```
 # Server
-DATABASE_URL=                 # Neon Postgres connection string
-NEON_AUTH_URL=                # Neon Auth JWKS/auth endpoint
+DATABASE_URL=                 # local Postgres, e.g. postgres://postgres@127.0.0.1:5433/mault
 PORT=                         # optional, defaults to 3001
 WEB_URL=                      # optional, used for CORS and to build absolute links (Discord monitor-page links) - must be publicly reachable for those links/images to work outside your own machine
 
 # Public variables for the React app (baked into the client bundle at build time)
 VITE_API_URL=                 # base URL of the Hono API, e.g. http://localhost:3001
 VITE_APP_ENV=                 # local/developement/QA/production
-VITE_NEON_AUTH_URL=
-VITE_NEON_DATA_API_URL=
 ```
 
 ## Database
+
+The app runs entirely against a local PostgreSQL — no hosted services needed.
+
+### Local PostgreSQL (no Docker/admin needed)
+
+Download the portable PostgreSQL + pgvector bundle (57 MB, user-space — no
+admin rights or services required):
+
+```bash
+# Download once
+curl -L -o postgres.zip \
+  https://github.com/YukeonWayne/pg_pgvector_binary/releases/download/v18.4-pgvector0.8.3-win32-x64/postgres-18.4-pgvector-0.8.3-win32-x64.zip
+```
+
+Extract it anywhere (e.g. `C:\Mault Revised\.local\postgres`), then initialize
+and start:
+
+```bash
+PGBIN="<extracted>/win32-x64/bin"
+"$PGBIN/initdb" -D "<extracted>/data" -U postgres -A trust -E UTF8 --locale=C
+# Start detached (Windows):
+powershell -NoProfile -Command "Start-Process -FilePath '<extracted>\win32-x64\bin\postgres.exe' -ArgumentList '\"-D\" \"<extracted>\data\" \"-p\" \"5433\" \"-c\" \"listen_addresses=127.0.0.1\"' -WindowStyle Hidden"
+```
+
+Create the database and apply the local bootstrap (creates the pgvector
+extension, `authenticated` RLS role, and the `auth_is_org_member()` function
+that the schema's RLS policies reference). Run it BEFORE `db:migrate` (the
+function must exist first) and again AFTER (to grant the `authenticated` role
+access to the newly created tables):
+
+```bash
+"$PGBIN/psql" -h 127.0.0.1 -p 5433 -U postgres -c "CREATE DATABASE mault;"
+"$PGBIN/psql" -h 127.0.0.1 -p 5433 -U postgres -d mault -f packages/server/sql/local-neon-bootstrap.sql
+pnpm --filter @magic-vault/server db:migrate
+"$PGBIN/psql" -h 127.0.0.1 -p 5433 -U postgres -d mault -f packages/server/sql/local-neon-bootstrap.sql
+```
+
+Then point `.env` at it (see `.env.example`):
+
+```
+DATABASE_URL=postgres://postgres@127.0.0.1:5433/mault
+BETTER_AUTH_SECRET=<openssl rand -base64 32>
+```
+
+A helper script manages the server day-to-day (start/stop/status), and can
+register a no-admin logon auto-start so it comes up with your session:
+
+```bash
+node scripts/local-db.mjs start       # start (detached, survives terminal close)
+node scripts/local-db.mjs stop        # graceful shutdown
+node scripts/local-db.mjs status      # is it up?
+node scripts/local-db.mjs install     # add to Windows Startup (runs at logon)
+node scripts/local-db.mjs uninstall   # remove from Startup
+```
+
+### Migrations
 
 ```bash
 pnpm --filter @magic-vault/server db:generate  # generate a migration from schema changes
@@ -86,6 +139,42 @@ pnpm --filter @magic-vault/server db:migrate   # apply migrations
 pnpm --filter @magic-vault/server db:push      # push schema directly (dev)
 pnpm --filter @magic-vault/server db:studio    # open Drizzle Studio
 ```
+
+The migration history was regenerated as a single baseline (`drizzle/0000_*`)
+from the current schema — it models all 13 tables with org-scoped RLS, the
+`(game_key, scryfall_id)` card uniqueness, calibration defaults aligned with
+the shared constants, and the query-path indexes.
+
+### Auth & RLS note
+
+This is a **fully-local, single-user build with no logins**. Every request is
+treated as the same local operator (`local-user` in the `local-org` org — see
+`packages/server/src/middleware/auth.ts`), so the app opens straight into the
+scanner with no sign-in, tokens, or org switching. The `X-Org-Id` header is
+sent automatically by the web client and the server scopes all queries by it.
+
+The schema enables row-level security on every table with `crudPolicy`
+policies scoped by `auth_is_org_member()`. The app's own connection pool
+connects as the table owner (which bypasses RLS), so org isolation is enforced
+at the route layer (`requireOrg` + org-scoped queries). The policies remain as
+defense-in-depth and are fully enforceable by the `authenticated` role — the
+local bootstrap grants it table privileges so you can exercise them locally.
+
+### What still needs the internet
+
+- **Card data sync** (Scryfall / Gundam / Pokémon) — downloading card data in
+  the Admin page. This is how the card database gets built.
+- **Card art** — the image proxy fetches card images from external hosts.
+- **Discord webhooks** — optional notifications, only if you configure a URL.
+- **One-time SigLIP model download** — the vision model downloads once from
+  HuggingFace into a local cache, then all scanning runs fully on-device.
+
+Everything else — scanning, sorting, calibration, the database, auth (none), and
+vision — runs entirely on the local machine.
+
+The vision model (SigLIP) also runs locally via `@huggingface/transformers`;
+it downloads once from HuggingFace into a cache on first use, then all
+embeddings are computed on-device.
 
 ## Deployment
 

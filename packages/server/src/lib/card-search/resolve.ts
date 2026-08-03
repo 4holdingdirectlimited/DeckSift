@@ -10,10 +10,20 @@ const ADAPTERS_BY_GAME_KEY: Record<string, CardSearchAdapter> = {
   pokemon: pokemonAdapter,
 };
 
-async function findCollectionGame(jwtClaims: string, collectionGuid: string) {
+// Resolves the game backing a collection. Scoped by orgId (the card routes
+// receive it from the X-Org-Id header): a collection guid alone must never be
+// enough to resolve another org's collection/game.
+async function findCollectionGame(
+  jwtClaims: string,
+  orgId: string | undefined,
+  collectionGuid: string,
+) {
   return authQuery(jwtClaims, async (tx) => {
     const collection = await tx.query.collections.findFirst({
-      where: (t, { eq }) => eq(t.guid, collectionGuid),
+      where: (t, { eq, and }) =>
+        orgId
+          ? and(eq(t.guid, collectionGuid), eq(t.orgId, orgId))
+          : eq(t.guid, collectionGuid),
       columns: { gameId: true },
     });
     if (!collection?.gameId) return null;
@@ -25,10 +35,11 @@ async function findCollectionGame(jwtClaims: string, collectionGuid: string) {
 
 export async function resolveGameKey(
   jwtClaims: string,
+  orgId: string | undefined,
   collectionGuid: string | undefined,
 ): Promise<string | null> {
   if (!collectionGuid) return null;
-  const game = await findCollectionGame(jwtClaims, collectionGuid);
+  const game = await findCollectionGame(jwtClaims, orgId, collectionGuid);
   return game?.key ?? null;
 }
 
@@ -45,6 +56,7 @@ export async function resolveGameDataSourceUrl(
 
 export async function resolveCardSearch(
   jwtClaims: string,
+  orgId: string | undefined,
   collectionGuid: string | undefined,
 ): Promise<{
   adapter: CardSearchAdapter;
@@ -52,7 +64,7 @@ export async function resolveCardSearch(
   gameKey: string;
 } | null> {
   if (!collectionGuid) return null;
-  const game = await findCollectionGame(jwtClaims, collectionGuid);
+  const game = await findCollectionGame(jwtClaims, orgId, collectionGuid);
   if (!game) return null;
 
   const adapter = ADAPTERS_BY_GAME_KEY[game.key];

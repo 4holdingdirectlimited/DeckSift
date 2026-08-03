@@ -7,7 +7,7 @@ import {
 } from "@/components/ui/tooltip";
 import { BinLocationDiagram } from "@/features/bins/components/bin-location-diagram";
 import type { ScannedCardItemProps } from "@/features/cards/types";
-import { cn } from "@/lib/utils";
+import { cn, resolveCardImageUrl } from "@/lib/utils";
 import { getCardImageUris } from "@magic-vault/shared";
 import {
   IconCheck,
@@ -117,7 +117,7 @@ export const ScannedCardItem = memo(function ScannedCardItem({
             </Tooltip>
           </div>
           <img
-            src={getCardImageUris(card)?.normal || ""}
+            src={resolveCardImageUrl(getCardImageUris(card)?.normal) || ""}
             alt={card.name}
             className="w-full h-full object-cover"
           />

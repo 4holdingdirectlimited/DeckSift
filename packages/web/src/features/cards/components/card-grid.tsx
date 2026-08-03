@@ -26,7 +26,6 @@ import { Link } from "react-router-dom";
 export function CardGrid() {
   const {
     activeCollection,
-    deleteCollection,
     isLoading: collectionsLoading,
   } = useCollections();
   const {
@@ -117,12 +116,11 @@ export function CardGrid() {
   }, [removeCards, selectedIds]);
 
   const handleClearSession = useCallback(async () => {
-    if (activeCollection) {
-      await deleteCollection(activeCollection.guid);
-    } else {
-      clearCards();
-    }
-  }, [activeCollection, deleteCollection, clearCards]);
+    // Clears the cards in the active collection (server + local session),
+    // NOT the collection itself. Deleting the collection here would destroy
+    // the user's collection settings along with every card.
+    clearCards();
+  }, [clearCards]);
 
   if (isLoading) {
     return (

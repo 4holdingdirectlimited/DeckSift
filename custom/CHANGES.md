@@ -513,6 +513,197 @@ Re-upload the firmware.
 
 ---
 
+## Item 11 — Local PostgreSQL hosting + regenerated migration baseline (database)
+
+**Status:** implemented, uncommitted.
+
+### Why
+
+The checked-in drizzle migrations (0000–0010) predated the org-scoping rewrite:
+they created only 6 tables with a legacy Supabase-style `user_id`/`auth.user_id()`
+model, while `schema.ts` models 13 org-scoped tables. A fresh `db:migrate`
+produced a broken database (missing `games`, `collections`, `collection_cards`,
+`feeder_configs`, audit tables, `org_id`/`game_key`/`max_capacity` columns), and
+the app could only run against hosted Neon because the Neon serverless driver
+speaks Neon's WebSocket proxy protocol. We wanted the whole stack to run on a
+local machine with no admin rights or Docker.
+
+### What changed
+
+- **Migration baseline regenerated.** Deleted the stale 0000–0010 SQL + meta
+  snapshots (backed up) and regenerated a single `drizzle/0000_public_pandemic.sql`
+  from `schema.ts`: all 13 tables, 52 org-scoped RLS policies, the per-game
+  `(game_key, scryfall_id)` card uniqueness (was global on `scryfall_id`, which
+  silently swallowed per-game sync conflicts), calibration defaults aligned with
+  the shared constants, and the query-path indexes (`bins.bin_set`,
+  `collection_cards.collection_id`/`scryfall_id`, `cards.game_key`, and an HNSW
+  index on `cards.embedding`).
+- **DB driver swapped.** `packages/server/src/db/index.ts` now uses the standard
+  `pg` driver + `drizzle-orm/node-postgres` instead of `@neondatabase/serverless`
+  (WebSocket-only; can't reach a local Postgres). Works against both local
+  Postgres and Neon's TCP endpoint. Removed the `@neondatabase/serverless` /
+  `ws` deps from `packages/server/package.json`; added `pg` / `@types/pg`.
+- **Local bootstrap.** New `packages/server/sql/local-neon-bootstrap.sql`
+  recreates what hosted Neon provisions automatically — `neon_auth.user` /
+  `organization` / `member` tables, the `authenticated` role, table privileges
+  for it, and the SECURITY DEFINER `auth_is_org_member()` function the RLS
+  policies reference — plus a seeded local user/org.
+- **Schema fixes while regenerating:** `module_configs` / `feeder_configs` DB
+  defaults now match `DEFAULT_CALIBRATION` / `DEFAULT_FEEDER_CALIBRATION` in
+  `@magic-vault/shared` (previously 102/307/… and 400/50/150 — a raw insert
+  without a payload drove the servos to the wrong positions).
+- **README** documents the portable PostgreSQL + pgvector install, the
+  bootstrap, and `.env` values.
+
+### Behavior notes
+
+- Running the server locally without hosted Neon Auth means `NEON_AUTH_URL` is
+  a placeholder; JWT verification (and therefore login) still needs the real
+  Neon Auth URL. DB-backed API routes and RLS are fully testable locally.
+- RLS is enforced by the `authenticated` role (verified locally: cross-org
+  rows invisible, cross-org inserts rejected). The app's own pool connects as
+  the table owner and bypasses RLS by design — org isolation is enforced at the
+  route layer (`requireOrg` + org-scoped queries), with RLS as defense-in-depth.
+
+### How to revert
+
+1. Restore the deleted migrations from `C:\Mault Revised\.local\drizzle-backup`
+   (or from git history before this commit).
+2. Revert `packages/server/src/db/index.ts` to the
+   `@neondatabase/serverless` driver and restore the old deps in
+   `packages/server/package.json` (`pnpm install`).
+3. Delete `packages/server/sql/` and the README Database section.
+4. Re-run `db:generate` to rebuild a migration diff if the schema changes
+   again; keep the new baseline otherwise.
+
+---
+
+## Item 12 — Remove Neon entirely: self-hosted better-auth (auth + web)
+
+**Status:** implemented, uncommitted.
+
+### Why
+
+Neon Auth is a hosted wrapper around `better-auth`, but it still forced every
+login through the internet (JWKS verification, hosted auth UI) and kept the
+project depending on a third-party service. The vision side was already local
+(SigLIP via `@huggingface/transformers`); this removes the last online
+dependency — auth — by self-hosting the identical better-auth library against
+the local Postgres.
+
+### What changed
+
+- **Server — new auth instance.** `packages/server/src/lib/auth.ts` builds a
+  better-auth instance with email/password, the `organization` plugin, the
+  `emailOTP` plugin (OTP codes are logged to the server console — no email
+  provider, fully local), and the `bearer` plugin. Mounted at `/api/auth/*` in
+  `packages/server/src/index.ts`.
+- **Server — token verification.** `packages/server/src/middleware/auth.ts` no
+  longer fetches a JWKS from Neon; it validates `Authorization: Bearer` tokens
+  via `auth.api.getSession` against the local `session` table. `getUserRole` /
+  `getUserDisplayName` / `requireOrg` now read the better-auth `user` and
+  `member` tables instead of `neon_auth.*`.
+- **DB — auth tables.** Added `user` (with a `role` column), `session`,
+  `account`, `verification`, `organization`, `member`, and `invitation` tables
+  to `packages/server/src/db/schema.ts`; regenerated the migration baseline
+  (now 20 tables). RLS `auth_is_org_member()` reads the better-auth `member`
+  table; the bootstrap runs before AND after `db:migrate` (function/role first,
+  grants after) and sets default privileges for future tables.
+- **Web — client swap.** `packages/web/src/lib/auth/client.ts` now uses
+  `createAuthClient` from `better-auth/react` with the organization + email-OTP
+  plugins (Neon's own adapter was a better-auth adapter). Replaced the Neon
+  `SignedIn`/`RedirectToSignIn`/`AuthView`/`AccountView`/`UserButton`/
+  `NeonAuthUIProvider` with local equivalents (custom sign-in/sign-up/forgot
+  password page, account page, sign-out buttons, session-based guards). All
+  org hooks (`useListOrganizations`, `useActiveOrganization`, `organization.*`)
+  map 1:1. Removed the `@neondatabase/neon-js` dependency and the Neon tailwind
+  import. Pinned `better-auth` to the same version (1.4.6) in web and server.
+- **Env/docs.** `.env` / `.env.example` now use `BETTER_AUTH_SECRET` (no Neon
+  vars); README updated.
+
+### Behavior notes
+
+- **Everything is local now**: DB, auth, and vision. Only card-data sync
+  (Scryfall/Gundam/Pokémon), Discord webhooks, and the one-time HuggingFace
+  model download need the internet.
+- Email OTP codes print to the API server console (`[auth] OTP for …`). For a
+  single-user sorter this is the practical offline delivery mechanism.
+- Existing users/orgs are stored in the better-auth tables; first sign-up
+  creates a `role: user` account (the admin panel gate reads this role).
+
+### How to revert
+
+1. `git checkout` the pre-Item-12 versions of `lib/auth/client.ts`,
+   `lib/auth/session.ts`, `router.tsx`, `main.tsx`, the auth/account/nav pages,
+   `use-organization.tsx`, the org components, `hooks/use-role.ts`, and
+   `use-collection-locks.tsx`.
+2. Restore `@neondatabase/neon-js` in `packages/web/package.json` and the
+   Neon tailwind import in `src/index.css`.
+3. Server: delete `packages/server/src/lib/auth.ts`, restore the JWKS
+   verification in `middleware/auth.ts`, and the `neon_auth.*` queries in
+   `routes/collections.ts`.
+4. Drop the 7 auth tables from `schema.ts` and regenerate the migration.
+
+---
+
+## Item 13 — Remove auth entirely: fully-local single-user build (auth + web)
+
+**Status:** implemented, uncommitted.
+
+### Why
+
+The app is intended to run locally (browser, Arduino, camera, and model all on
+one PC) with no remote access. Logins, organizations, and email verification
+were pure overhead — they required a sign-in ceremony and leftover cloud
+plumbing for zero benefit. This removes the whole auth layer so the app opens
+straight into the scanner.
+
+### What changed
+
+- **Server — no-op auth.** `packages/server/src/middleware/auth.ts` now always
+  treats every request as the same local operator: `LOCAL_USER_ID`
+  (`local-user`), `LOCAL_ORG_ID` (`local-org`), admin role, owner org role.
+  `requireAuth`/`requireOrg`/`requireRole`/`requireOrgRole` just set those
+  fixed values and pass through. `verifyToken` always succeeds.
+- **Server — removed the auth endpoints.** Deleted
+  `packages/server/src/lib/auth.ts` (better-auth instance) and its
+  `/api/auth/*` mount in `index.ts`. The SSE routes (`/collections/stream`,
+  `/collections/lock-events`, `/admin/sync/stream`) no longer require
+  `?token=` — they use the fixed org.
+- **Server — dropped the 7 auth tables** (`user`, `session`, `account`,
+  `verification`, `organization`, `member`, `invitation`) from
+  `packages/server/src/db/schema.ts` and regenerated the migration baseline
+  (now 13 tables). `auth_is_org_member()` in the bootstrap now just checks the
+  org_id claim (no membership table).
+- **Web — removed the auth UI.** Deleted the sign-in/sign-up/forgot-password
+  page, verify-email page, account page, email-verification banner, and the
+  org switcher / picker / settings components. `useRole()` always returns
+  admin; `useOrg()` returns the single local org; the nav has no sign-out or
+  org menu. Router has no auth guard and no `/auth/*` routes; landing/build
+  CTAs link straight to `/app`.
+- **Web — no token in API calls.** `getAuthHeaders()` sends only the fixed
+  `X-Org-Id: local-org`; the SSE clients and sync stream no longer build
+  `?token=` URLs. Removed the `better-auth` dependency from both packages.
+
+### Behavior notes
+
+- Opening `http://localhost:5173` goes straight to the app — no login.
+- The `org_id` scoping remains in the DB and queries (single org), so RLS and
+  the existing code paths are untouched; the UI just never asks for an org.
+- Card data sync, card art, and optional Discord webhooks still need the
+  internet; scanning, vision, and everything else are fully local.
+
+### How to revert
+
+1. Restore `packages/server/src/middleware/auth.ts` from before this item, and
+   re-add `packages/server/src/lib/auth.ts` + the `/api/auth/*` mount.
+2. Restore the 7 auth tables in `schema.ts` and regenerate the migration.
+3. Restore `better-auth` in both `package.json`s (`pnpm install`).
+4. Web: restore `lib/auth/client.ts` (authClient) and `lib/auth/session.ts`;
+   re-add the auth/account/verify-email/org pages and the router guards.
+
+---
+
 *Template for future entries:*
 
 ## Item N — <short title> (area)

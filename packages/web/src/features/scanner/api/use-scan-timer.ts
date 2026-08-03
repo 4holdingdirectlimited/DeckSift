@@ -44,6 +44,9 @@ export function useScanTimer(lastScannedAt: number | undefined, resetSignal: num
       }
       isActiveRef.current = false;
       setIsActive(false);
+      // Push the finalized total into state so the displayed session time
+      // doesn't freeze at its last 1s tick while idle.
+      setElapsedMs(accumulated.current);
     }, IDLE_THRESHOLD_MS);
 
     return () => clearTimeout(id);

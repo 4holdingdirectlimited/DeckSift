@@ -23,15 +23,19 @@ app.use(
   }),
 );
 
-app.route("/cards", cardRouter);
-app.route("/bins", sortBinsRouter);
-app.route("/collections", collectionsRouter);
-app.route("/modules", moduleConfigsRouter);
-app.route("/feeder", feederRouter);
-app.route("/games", gamesRouter);
-app.route("/notifications", notificationsRouter);
-app.route("/org-settings", orgSettingsRouter);
-app.route("/admin", adminRouter);
+// Routers are mounted under /api to match the web client's API_BASE paths
+// (packages/web/src/lib/api/client.ts calls "/api/..."). The dev Vite proxy
+// forwards /api/* to this server without rewriting, so the same prefix works
+// in dev and in production.
+app.route("/api/cards", cardRouter);
+app.route("/api/bins", sortBinsRouter);
+app.route("/api/collections", collectionsRouter);
+app.route("/api/modules", moduleConfigsRouter);
+app.route("/api/feeder", feederRouter);
+app.route("/api/games", gamesRouter);
+app.route("/api/notifications", notificationsRouter);
+app.route("/api/org-settings", orgSettingsRouter);
+app.route("/api/admin", adminRouter);
 
 serve({ fetch: app.fetch, port: PORT, hostname: "0.0.0.0" }, () => {
   console.log(`[server] Running on port:${PORT}`);

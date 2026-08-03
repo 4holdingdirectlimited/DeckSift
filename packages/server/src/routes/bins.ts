@@ -66,12 +66,12 @@ function toBinSet(row: {
           dataSourceUrl: row.game.dataSourceUrl,
           isActive: row.game.isActive,
           fieldDefinitions: row.game.fieldDefinitions as FieldMeta[],
-          createdAt: row.game.createdAt,
-          updatedAt: row.game.updatedAt,
+          createdAt: row.game.createdAt.toISOString(),
+          updatedAt: row.game.updatedAt.toISOString(),
         }
       : null,
-    createdAt: row.createdAt,
-    updatedAt: row.updatedAt,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
   };
 }
 
@@ -317,6 +317,18 @@ router.put("/bins/:binNumber", requireAuth, requireOrg, async (c) => {
     isCatchAll?: boolean;
     maxCapacity?: number;
   }>();
+  // The firmware implements the catch-all drop only as bin 7 (it opens every
+  // module's bottom paddle). Reject catch-all on any other bin so a mis-set
+  // flag can't silently misroute unmatched cards into a specific module.
+  if (isCatchAll && binNumber !== 7) {
+    return c.json(
+      {
+        success: false,
+        message: "Only bin 7 can be configured as the catch-all bin.",
+      },
+      400,
+    );
+  }
   try {
     const result = await authQuery(c.get("jwtClaims"), async (tx) => {
       const gameId = await _resolveGameId(tx, gameGuid);

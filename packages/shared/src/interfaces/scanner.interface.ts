@@ -53,12 +53,6 @@ export interface CardScannerProps {
   compact?: boolean;
 }
 
-export interface CardMatch {
-  id: number;
-  scryfallId: string;
-  distance: number;
-}
-
 export interface ScannedCard {
   scanId: string;
   card: PlayingCardWithDistance;

@@ -24,13 +24,32 @@ import {
 } from "../lib/session-stream";
 import {
   getUserDisplayName,
+  LOCAL_ORG_ID,
+  LOCAL_USER_ID,
   requireAuth,
   requireOrg,
-  verifyToken,
   type AppEnv,
 } from "../middleware/auth";
 
 const router = new Hono<AppEnv>();
+
+// Verifies that a collection guid belongs to the caller's org. The session
+// stream, viewers, debug, and scan-lock surfaces are keyed by guid only, so
+// without this check any org member who learns another org's guid could reach
+// that collection's live data.
+async function collectionBelongsToOrg(
+  guid: string,
+  orgId: string,
+  jwtClaims: string,
+): Promise<boolean> {
+  return authQuery(jwtClaims, async (tx) => {
+    const row = await tx.query.collections.findFirst({
+      where: (t, { eq, and }) => and(eq(t.guid, guid), eq(t.orgId, orgId)),
+      columns: { id: true },
+    });
+    return !!row;
+  });
+}
 
 function toCollection(row: {
   guid: string | null;
@@ -61,12 +80,12 @@ function toCollection(row: {
           dataSourceUrl: row.gameDataSourceUrl!,
           isActive: row.gameIsActive!,
           fieldDefinitions: row.gameFieldDefinitions as FieldMeta[],
-          createdAt: row.gameCreatedAt!,
-          updatedAt: row.gameUpdatedAt!,
+          createdAt: row.gameCreatedAt!.toISOString(),
+          updatedAt: row.gameUpdatedAt!.toISOString(),
         }
       : null,
-    createdAt: row.createdAt,
-    updatedAt: row.updatedAt,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
   };
 }
 
@@ -149,28 +168,15 @@ router.get("/", requireAuth, requireOrg, async (c) => {
 
 // GET /collections/lock-events — SSE stream of lock_acquired / lock_released for all org collections
 router.get("/lock-events", async (c) => {
-  const token = c.req.query("token");
-  const orgId = c.req.query("orgId");
-
-  if (!token || !orgId)
-    return c.json({ success: false, message: "Unauthorized" }, 401);
-
-  const payload = await verifyToken(token);
-  if (!payload?.sub)
-    return c.json({ success: false, message: "Unauthorized" }, 401);
-
-  const rows = await db.execute<{ role: string }>(
-    sql`SELECT role FROM neon_auth.member WHERE "organizationId" = ${orgId} AND "userId" = ${payload.sub} LIMIT 1`,
-  );
-  if (!rows.rows[0])
-    return c.json({ success: false, message: "Forbidden" }, 403);
-
-  const jwtClaims = JSON.stringify({ sub: payload.sub, role: "authenticated" });
+  const orgId = c.req.query("orgId") ?? LOCAL_ORG_ID;
+  // Fully-local single-user build: the org is fixed and there is no auth, so
+  // the SSE endpoint just needs the org to know which locks to stream.
+  const claims = JSON.stringify({ sub: LOCAL_USER_ID, role: "authenticated" });
 
   return streamSSE(c, async (stream) => {
     // Send current lock state as initial event
     try {
-      const guids = await authQuery(jwtClaims, async (tx) =>
+      const guids = await authQuery(claims, async (tx) =>
         tx
           .select({ guid: collections.guid })
           .from(collections)
@@ -262,6 +268,9 @@ router.get("/viewers", requireAuth, requireOrg, async (c) => {
 // GET /collections/:guid/viewers — current session viewers for a collection
 router.get("/:guid/viewers", requireAuth, requireOrg, async (c) => {
   const guid = c.req.param("guid");
+  if (!(await collectionBelongsToOrg(guid, c.get("orgId"), c.get("jwtClaims")))) {
+    return c.json({ success: false, message: "Collection not found." }, 404);
+  }
   return c.json({ success: true, data: getSessionViewers(guid) });
 });
 
@@ -600,7 +609,10 @@ router.put("/:guid/cards/:scanId", requireAuth, requireOrg, async (c) => {
       if (card !== undefined) {
         updates.card = card;
         updates.scryfallId = card.id;
-        updates.binNumber = binNumber ?? null;
+        // Only touch binNumber when the client explicitly sends it — a
+        // card-only correction (no binNumber) must preserve the original bin
+        // the physical card was already routed into.
+        if (binNumber !== undefined) updates.binNumber = binNumber;
       }
       if (isFoil !== undefined) updates.isFoil = isFoil;
 
@@ -616,7 +628,9 @@ router.put("/:guid/cards/:scanId", requireAuth, requireOrg, async (c) => {
           card: (card ?? existing.card) as PlayingCardWithDistance,
           scannedAt: existing.scannedAt,
           binNumber:
-            card !== undefined ? (binNumber ?? null) : existing.binNumber,
+            card !== undefined
+              ? binNumber ?? existing.binNumber
+              : existing.binNumber,
           isFoil: isFoil !== undefined ? isFoil : existing.isFoil,
         }),
       };
@@ -748,6 +762,9 @@ router.delete("/:guid/cards/:scanId", requireAuth, requireOrg, async (c) => {
 router.delete("/:guid/scan-lock", requireAuth, requireOrg, async (c) => {
   const guid = c.req.param("guid");
   const userId = c.get("userId");
+  if (!(await collectionBelongsToOrg(guid, c.get("orgId"), c.get("jwtClaims")))) {
+    return c.json({ success: false, message: "Collection not found." }, 404);
+  }
   releaseLock(guid, userId); // emits lock_released to org subscribers internally
   return c.json({ success: true, data: null });
 });
@@ -755,6 +772,9 @@ router.delete("/:guid/scan-lock", requireAuth, requireOrg, async (c) => {
 // POST /collections/:guid/debug/error — emit a test scan_error to session watchers (admin only)
 router.post("/:guid/debug/error", requireAuth, requireOrg, async (c) => {
   const guid = c.req.param("guid");
+  if (!(await collectionBelongsToOrg(guid, c.get("orgId"), c.get("jwtClaims")))) {
+    return c.json({ success: false, message: "Collection not found." }, 404);
+  }
   emitToSession(guid, "scan_error", {
     message: "Debug: forced error triggered.",
     timestamp: Date.now(),
@@ -762,28 +782,27 @@ router.post("/:guid/debug/error", requireAuth, requireOrg, async (c) => {
   return c.json({ success: true, data: null });
 });
 
-// GET /collections/:guid/stream — SSE, auth via ?token= and ?orgId= query params
+// GET /collections/:guid/stream — SSE (fully-local single-user: org id only)
 router.get("/:guid/stream", async (c) => {
   const guid = c.req.param("guid");
-  const token = c.req.query("token");
-  const orgId = c.req.query("orgId");
+  const orgId = c.req.query("orgId") ?? LOCAL_ORG_ID;
 
-  if (!token || !orgId)
-    return c.json({ success: false, message: "Unauthorized" }, 401);
+  const jwtClaims = JSON.stringify({
+    sub: LOCAL_USER_ID,
+    role: "authenticated",
+  });
 
-  const payload = await verifyToken(token);
-  if (!payload?.sub)
-    return c.json({ success: false, message: "Unauthorized" }, 401);
+  // Verify the collection actually belongs to this org BEFORE subscribing:
+  // the subscription and emitToSession are keyed by guid only, so a caller
+  // who guesses another org's collection guid must not receive its events.
+  if (!(await collectionBelongsToOrg(guid, orgId, jwtClaims))) {
+    return c.json(
+      { success: false, message: "Collection not found." },
+      404,
+    );
+  }
 
-  const rows = await db.execute<{ role: string }>(
-    sql`SELECT role FROM neon_auth.member WHERE "organizationId" = ${orgId} AND "userId" = ${payload.sub} LIMIT 1`,
-  );
-  if (!rows.rows[0])
-    return c.json({ success: false, message: "Forbidden" }, 403);
-
-  const jwtClaims = JSON.stringify({ sub: payload.sub, role: "authenticated" });
-
-  const viewerDisplayName = await getUserDisplayName(payload.sub);
+  const viewerDisplayName = await getUserDisplayName(LOCAL_USER_ID);
 
   return streamSSE(c, async (stream) => {
     const writer = (event: string, data: unknown) => {
@@ -793,7 +812,7 @@ router.get("/:guid/stream", async (c) => {
     // Subscribe first so viewers_updated includes this viewer
     const unsubscribe = subscribeSession(
       guid,
-      payload.sub!,
+      LOCAL_USER_ID,
       viewerDisplayName,
       writer,
     );
@@ -850,12 +869,12 @@ router.get("/:guid/stream", async (c) => {
                   dataSourceUrl: game.dataSourceUrl,
                   isActive: game.isActive,
                   fieldDefinitions: game.fieldDefinitions as FieldMeta[],
-                  createdAt: game.createdAt,
-                  updatedAt: game.updatedAt,
+                  createdAt: game.createdAt.toISOString(),
+                  updatedAt: game.updatedAt.toISOString(),
                 }
               : null,
-            createdAt: collection.createdAt,
-            updatedAt: collection.updatedAt,
+            createdAt: collection.createdAt.toISOString(),
+            updatedAt: collection.updatedAt.toISOString(),
           } satisfies Collection,
           cards: cardRows.map(toScannedCard),
           viewers: getSessionViewers(guid),

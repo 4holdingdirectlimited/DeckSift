@@ -147,7 +147,13 @@ async function runSync(source: SyncSource): Promise<void> {
     }
 
     try {
-      const imageRes = await fetch(card.imageUrl, { headers: source.fetchHeaders });
+      // Bounded fetch so a hung image host can't stall the whole sync job
+      // (cancel is only checked between cards, so an in-flight fetch must not
+      // be allowed to block forever).
+      const imageRes = await fetch(card.imageUrl, {
+        headers: source.fetchHeaders,
+        signal: AbortSignal.timeout(30_000),
+      });
       if (!imageRes.ok) throw new Error(`Image fetch failed: ${imageRes.status}`);
       const buffer = Buffer.from(await imageRes.arrayBuffer());
       const embedding = await vectorizeImageFromBuffer(buffer);

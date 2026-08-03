@@ -149,9 +149,13 @@ export function CollectionsProvider({
     mutationFn: clearCollectionCards,
     onSuccess: (r, guid) => {
       if (r.success) {
-        setCollections(
-          collections.map((c) =>
-            c.guid === guid ? { ...c, cardCount: 0, updatedAt: new Date() } : c,
+        // Update via the functional form so a rapid Empty → state change can't
+        // write a stale render-closure snapshot into the collections cache.
+        queryClient.setQueryData<Collection[]>(["collections"], (prev) =>
+          (prev ?? []).map((c) =>
+            c.guid === guid
+              ? { ...c, cardCount: 0, updatedAt: new Date().toISOString() }
+              : c,
           ),
         );
       }

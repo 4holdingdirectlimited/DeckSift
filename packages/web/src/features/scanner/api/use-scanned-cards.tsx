@@ -179,6 +179,24 @@ export function ScannedCardsProvider({
         sent: true,
         response: res,
       });
+    } else if (res.detected === false) {
+      // Firmware: status "ok" + detected:false = feeder timed out without a
+      // card reaching module 1. Don't treat it as a successful feed (which
+      // would fire a capture of an empty frame and save a garbage match).
+      autoFeedRef.current = false;
+      setAutoFeedState(false);
+      pauseHookRef.current?.();
+      toast.error("Feeder timeout", {
+        description:
+          "No card reached the scanner. Check the hopper and the feeder, then resume.",
+        duration: Infinity,
+        dismissible: true,
+      });
+      void reportSerialEvent({
+        command: "auto-feed",
+        sent: true,
+        response: res,
+      });
     } else {
       cardArrivedHookRef.current?.();
     }
@@ -260,6 +278,37 @@ export function ScannedCardsProvider({
         binConfigsRef.current,
         fieldDefinitionsRef.current,
       );
+
+      // Resolve the bin this card will be routed to BEFORE persisting it. If
+      // the matched bin is at capacity, fall back to the catch-all bin so the
+      // physical card still leaves module 1 - otherwise it would sit there and
+      // be re-scanned when auto-feed resumes (double count) while a phantom
+      // record was already saved.
+      let routeBin = matchedBin;
+      if (matchedBin) {
+        const maxCapacity = matchedBin.maxCapacity ?? 0;
+        if (
+          maxCapacity > 0 &&
+          (binCountsRef.current[matchedBin.binNumber] ?? 0) >= maxCapacity
+        ) {
+          const catchAll = getCatchAllBin(binConfigsRef.current);
+          if (catchAll) {
+            routeBin = catchAll;
+          } else {
+            // No catch-all to absorb it: don't persist a card we can't route.
+            toast.error(`Bin ${matchedBin.binNumber} is full`, {
+              description: `Reached its capacity of ${maxCapacity} cards. Empty the bin, then re-enable auto-feed to continue.`,
+              duration: Infinity,
+              dismissible: true,
+            });
+            autoFeedRef.current = false;
+            setAutoFeedState(false);
+            pauseHookRef.current?.();
+            return;
+          }
+        }
+      }
+
       // Reuse the first capture of this card this session (dedupe) so repeated
       // copies don't each store a full base64 JPEG.
       let effectiveImage = capturedImageRef.current[card.id];
@@ -271,7 +320,7 @@ export function ScannedCardsProvider({
         scanId: generateScanId(),
         card,
         scannedAt: Date.now(),
-        binNumber: matchedBin?.binNumber,
+        binNumber: routeBin?.binNumber,
         capturedImageUrl: effectiveImage,
         alternativeMatches: alternativeMatches?.length
           ? alternativeMatches
@@ -293,36 +342,21 @@ export function ScannedCardsProvider({
         .catch((err) => console.error("Failed to persist card:", err));
 
       if (
-        matchedBin &&
+        routeBin &&
         serialRef.current.isConnected &&
         serialRef.current.isReady
       ) {
-        const maxCapacity = matchedBin.maxCapacity ?? 0;
-        if (
-          maxCapacity > 0 &&
-          (binCountsRef.current[matchedBin.binNumber] ?? 0) >= maxCapacity
-        ) {
-          toast.error(`Bin ${matchedBin.binNumber} is full`, {
-            description: `Reached its capacity of ${maxCapacity} cards. Empty the bin, then re-enable auto-feed to continue.`,
-            duration: Infinity,
-            dismissible: true,
-          });
-          autoFeedRef.current = false;
-          setAutoFeedState(false);
-          pauseHookRef.current?.();
-          return;
-        }
-        serialRef.current.sendBin(matchedBin.binNumber).then((response) => {
+        serialRef.current.sendBin(routeBin.binNumber).then((response) => {
           if (!response) {
             toast.error("Routing failed", {
-              description: `No response from sorter for bin ${matchedBin.binNumber}.`,
+              description: `No response from sorter for bin ${routeBin!.binNumber}.`,
             });
             void reportSerialEvent({
               command: "bin",
               sent: true,
               response: null,
               cardName: card.name,
-              binNumber: matchedBin.binNumber,
+              binNumber: routeBin!.binNumber,
             });
             autoFeedRef.current = false;
             setAutoFeedState(false);
@@ -341,7 +375,7 @@ export function ScannedCardsProvider({
               sent: true,
               response: res,
               cardName: card.name,
-              binNumber: matchedBin.binNumber,
+              binNumber: routeBin!.binNumber,
             });
             autoFeedRef.current = false;
             setAutoFeedState(false);
@@ -359,14 +393,14 @@ export function ScannedCardsProvider({
               sent: true,
               response: res,
               cardName: card.name,
-              binNumber: matchedBin.binNumber,
+              binNumber: routeBin!.binNumber,
             });
             autoFeedRef.current = false;
             setAutoFeedState(false);
             return;
           }
-          binCountsRef.current[matchedBin.binNumber] =
-            (binCountsRef.current[matchedBin.binNumber] ?? 0) + 1;
+          binCountsRef.current[routeBin!.binNumber] =
+            (binCountsRef.current[routeBin!.binNumber] ?? 0) + 1;
           if (autoFeedRef.current) {
             triggerAutoFeed();
           }
@@ -481,25 +515,18 @@ export function ScannedCardsProvider({
   const correctCard = useCallback((scanId: string, card: PlayingCard) => {
     const collection = activeCollectionRef.current;
     const corrected: PlayingCardWithDistance = { ...card, distance: 0 };
-    const matchedBin = evaluateCardBin(
-      corrected,
-      binConfigsRef.current,
-      fieldDefinitionsRef.current,
-    );
     setCards((prev) =>
       prev.map((entry) =>
-        entry.scanId === scanId
-          ? { ...entry, card: corrected, binNumber: matchedBin?.binNumber }
-          : entry,
+        // Keep the original binNumber: the physical card is already sorted
+        // into that bin, and re-evaluating the corrected identity would point
+        // the user at a bin the card was never routed to.
+        entry.scanId === scanId ? { ...entry, card: corrected } : entry,
       ),
     );
     if (collection) {
-      updateCollectionCard(
-        collection.guid,
-        scanId,
-        corrected,
-        matchedBin?.binNumber,
-      ).catch((err) => console.error("Failed to update card:", err));
+      updateCollectionCard(collection.guid, scanId, corrected).catch((err) =>
+        console.error("Failed to update card:", err),
+      );
     }
   }, []);
 

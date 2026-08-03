@@ -9,12 +9,9 @@ import {
 import { getLiveSessionCounts } from "@/features/collections/api/collections";
 import { useCollectionLocks } from "@/features/collections/api/use-collection-locks";
 import { useCollections } from "@/features/collections/api/use-collections";
-import { useOrg } from "@/features/companies/api/use-organization";
-import { OrgSwitcher } from "@/features/companies/components/org-switcher";
 import { useIsMobile } from "@/hooks/use-is-mobile";
 import { useRole } from "@/hooks/use-role";
 import { cn } from "@/lib/utils";
-import { UserButton } from "@neondatabase/neon-js/auth/react";
 import {
   IconAdjustments,
   IconCamera,
@@ -148,7 +145,6 @@ function BottomNavItem({ to, icon, label, end, badge }: NavItemDef) {
 export function AppNav() {
   const { isAdmin } = useRole();
   const isMobile = useIsMobile();
-  const { activeOrg } = useOrg();
   const { collections } = useCollections();
   const { locks, currentUserId } = useCollectionLocks();
 
@@ -184,7 +180,6 @@ export function AppNav() {
     queryKey: ["live-sessions"],
     queryFn: () => getLiveSessionCounts().then((r) => r.data ?? {}),
     refetchInterval: 10000,
-    enabled: !!activeOrg,
   });
 
   const hasLiveSessions = !!(
@@ -256,9 +251,6 @@ export function AppNav() {
         {mobileItems.map((item) => (
           <BottomNavItem key={item.to} {...item} />
         ))}
-        <div className="flex flex-col items-center gap-0.5 px-2 py-1">
-          <UserButton size="icon" side="top" />
-        </div>
       </nav>
     );
   }
@@ -353,9 +345,7 @@ export function AppNav() {
           expanded ? "flex-row items-center px-2" : "flex-col items-center",
         )}
       >
-        <OrgSwitcher side="right" />
         <ThemeToggle />
-        <UserButton size="icon" side="right" />
       </div>
     </aside>
   );
