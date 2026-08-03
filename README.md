@@ -47,6 +47,16 @@ Original hardware build: https://makerworld.com/en/models/3066180-tcg-card-sorti
 | Hardware | Arduino Uno R4 Minima via Web Serial (9600 baud), PCA9685 servo driver, IR sensors, scan-light LED | — |
 | Monorepo | Turborepo + pnpm workspaces | pnpm 9 |
 
+**Security posture (2026-08):** `pnpm audit` reports **0 critical** and **0
+high-severity issues in the runtime dependency graph**. The one remaining
+runtime-path flag is a React Router advisory that only affects **RSC mode**
+(server actions) — this app is a classic client-rendered SPA, so it does not
+apply; the fix is v8-only and upgrading would be a breaking change with no
+benefit here. All other `pnpm audit` findings are transitive dependencies of
+dev-only tooling (the `shadcn` CLI, `tsup`, ESLint) that is never shipped or
+exposed. The app itself is local-only and unauthenticated by design — it is
+not intended to be exposed to the public internet.
+
 ## Project structure
 
 ```

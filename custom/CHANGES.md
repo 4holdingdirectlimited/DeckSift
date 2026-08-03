@@ -1721,6 +1721,47 @@ mode, and the Arduino README still pointed at the old Logitech webcam.
    references.
 2. Restore the previous README/docs from git.
 
+## Item 40 — Dependency security pass (repo)
+
+**Status:** implemented, uncommitted.
+
+### Why
+
+`pnpm audit` flagged 2 critical and 45 high-severity advisories. The criticals
+were transitive through the vision stack (`@huggingface/transformers` →
+`onnxruntime-web`/`onnxruntime-node` → `protobufjs`/`tar`), and several highs
+were in our direct runtime deps (hono, @hono/node-server, drizzle-orm,
+react-router-dom, vite).
+
+### What changed
+
+- **Bumped direct deps** — hono `^4.12.4` (4.12.34), `@hono/node-server`
+  `^2.0.12` (2.x — 1.x is EOL for the serve-static advisory), drizzle-orm
+  `^0.45.2`, react-router-dom `^7.18.2`, vite `^6.4.3`, turbo `^2.10.8`,
+  shadcn `^4.16.1`.
+- **pnpm overrides (root `package.json`)** for transitives with no patched
+  release in their pinned line: `protobufjs >=7.6.1` (→8.7.1),
+  `tar >=7.5.19` (→7.5.22), `sharp >=0.35.3` (libvips CVEs), `kysely
+  >=0.28.17`.
+- **Verified the vision path still works** after the sharp override — a live
+  scan (image → sharp decode → SigLIP/DirectML embed → pgvector search)
+  returned 200 on a fresh server process; the web build passes with
+  react-router 7.18.
+
+### Result
+
+`pnpm audit`: **critical 2 → 0**; high 45 → 21, of which **0 are in runtime
+paths** (the remaining highs are dev-tooling transitives via the `shadcn` CLI,
+`tsup`, and ESLint — never shipped). One react-router advisory is flagged but
+only affects RSC mode (server actions), which this SPA does not use; the fix
+is v8-only.
+
+### How to revert
+
+1. Restore the three `package.json` files and `pnpm-lock.yaml` from git, then
+   `pnpm install`.
+2. Remove the `pnpm.overrides` block from root `package.json`.
+
 ---
 
 *Template for future entries:*
