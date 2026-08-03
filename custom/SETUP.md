@@ -10,8 +10,9 @@ How to run the app, connect to it, and do the one-time first-run setup.
 | http://localhost:3001 | The API server (the browser talks to it via the Vite `/api` proxy) |
 | 127.0.0.1:5433 | Local PostgreSQL (database `mault`) |
 
-In-app pages: `/app` scanner · `/app/collections` · `/app/bins` · `/app/calibrate`
-· `/app/settings` (games) · `/app/admin` (card sync) · `/app/monitor`.
+In-app pages: `/app` scanner · `/app/collections` · `/app/library` (card
+browser + set completeness) · `/app/bins` · `/app/calibrate` ·
+`/app/settings` (games) · `/app/admin` (card sync) · `/app/monitor`.
 
 ## Starting / stopping the stack
 

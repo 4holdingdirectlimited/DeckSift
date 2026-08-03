@@ -53,9 +53,16 @@ This cycles every bottom and paddle open, sweeps all pushers left then right, re
 
 - **IR sensors** (active-LOW, internal pull-up): Module 1 gate → `D2`, Module 2 gate → `D3`, Module 3 gate → `D4`, Hopper throat → `D5`
 - **PCA9685** I²C to Arduino `SDA`/`SCL`, logic `VCC` → `5V`, `GND` → `GND`
-- **PCA9685 channels**: `0–3` unused (LEDs reserved in firmware), `4–6` = Module 1 (bottom, paddle, pusher), `7–9` = Module 2, `10–12` = Module 3, `13` = Feeder
+- **PCA9685 channels**: `0–3` = LEDs 1–4, `4–6` = Module 1 (bottom, paddle, pusher), `7–9` = Module 2, `10–12` = Module 3, `13` = Feeder, `14` = **scan light** (LED 5, the angled holo-detection light)
 - **Servo power**: external 5 V PSU (4–10 A) into PCA9685 `V+`, with the PSU ground tied to **both** PCA9685 `GND` and Arduino `GND` (common ground is mandatory)
 
-## Webcam (reference, Logitech C920)
+## Webcam
 
-Auto Focus: Off · Focus: 50% · Auto Exposure: On · Low Light Compensation: On · Auto White Balance: On · Brightness: 140 · Contrast: 140 · Saturation: 160 · Sharpness: 130
+Primary: **EMEET C60E 4K** — the higher resolution gives holo detection and
+the embeddings more detail to work with. Recommended: autofocus off (fixed
+focus on the scan plane), 1080p or 4K capture, moderate and consistent
+lighting.
+
+The original build used a Logitech C920 (Auto Focus: Off · Focus: 50% · Auto
+Exposure: On · Low Light Compensation: On · Auto White Balance: On ·
+Brightness: 140 · Contrast: 140 · Saturation: 160 · Sharpness: 130).

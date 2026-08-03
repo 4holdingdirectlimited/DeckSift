@@ -3,10 +3,10 @@ import { sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import * as schema from "./schema";
 
-// Standard node-postgres Pool. Works against both a local PostgreSQL
-// (packages/server/sql/local-neon-bootstrap.sql) and Neon's TCP endpoint —
-// the Neon-specific objects (neon_auth schema, auth_is_org_member(), the
-// `authenticated` role) are database-side, not driver-side.
+// Standard node-postgres Pool. Works against a local PostgreSQL
+// (packages/server/sql/local-bootstrap.sql); the RLS-supporting objects
+// (auth_is_org_member(), the `authenticated` role) are database-side, not
+// driver-side.
 const pool = new Pool({ connectionString: process.env.DATABASE_URL! });
 export const db = drizzle(pool, { schema });
 

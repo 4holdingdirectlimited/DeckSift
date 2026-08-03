@@ -1686,6 +1686,41 @@ per-scan embed, so a running sync can delay scans.
    `recordScan()` call from `routes/card.ts`; delete `lib/scan-activity.ts`.
 2. Drop `-c shared_buffers=1GB` from `scripts/local-db.mjs` (both places).
 
+## Item 39 — Docs refresh + bootstrap rename (docs + scripts)
+
+**Status:** implemented, uncommitted.
+
+### Why
+
+After items 11–13 removed hosted Neon, the file name
+`packages/server/sql/local-neon-bootstrap.sql` was a misleading leftover for
+anyone onboarding. The README (GitHub landing page) also still referenced a
+Docker deployment and a feature list that predated bundle/chase/wishlist
+mode, and the Arduino README still pointed at the old Logitech webcam.
+
+### What changed
+
+- **`packages/server/sql/local-neon-bootstrap.sql` → `local-bootstrap.sql`**
+  (renamed; references updated in `README.md`, `.env.example`, `db/index.ts`,
+  `db/schema.ts`, and the file's own header).
+- **`README.md`** rewritten: current feature set (bundle/chase/wishlist, value
+  binning, holo detection, bin status, export/duplicates/set-completeness,
+  art cache), accurate stack versions, real step-by-step getting-started,
+  removed the stale Docker/nginx deployment section, hardware + webcam now
+  match the EMEET C60E + scan light.
+- **`custom/README.md`** — status checklist replaced with a summary of the
+  38 documented items.
+- **`arduino/main/README.md`** — scan light (LED 5 / ch14) added to the
+  channel summary; webcam section updated to the EMEET C60E.
+- **`custom/SETUP.md`** — `/app/library` added to the page list.
+- **`.env.example`** — sync pacing variables documented.
+
+### How to revert
+
+1. Rename `packages/server/sql/local-bootstrap.sql` back and restore the
+   references.
+2. Restore the previous README/docs from git.
+
 ---
 
 *Template for future entries:*

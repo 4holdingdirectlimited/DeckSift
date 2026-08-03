@@ -1,137 +1,164 @@
 # Magic Vault
 
-A TCG card scanner and physical sorter. A webcam identifies cards via AI image embeddings, a rule engine decides which bin each card belongs in, and an Arduino-driven feeder and servo mechanism physically routes the card there.
+A TCG card scanner and physical sorter that runs **entirely on your own machine** — no hosted services, no logins, no cloud. A webcam identifies cards via on-device AI embeddings, a rule engine decides which bin each card belongs in, and an Arduino-driven feeder and servo mechanism physically routes the card there.
+
+Fork of [MAULT](https://mault.xyz) by [dishwasher-detergent](https://github.com/dishwasher-detergent/mault) — the physical sorter design (3D model, build guide, firmware base) comes from the original project; this fork adds a fully-local, single-user software stack. See [Credits](#credits).
 
 ## MakerWorld
 
-https://makerworld.com/en/models/3066180-tcg-card-sorting-machine#profileId-3451252
+Original hardware build: https://makerworld.com/en/models/3066180-tcg-card-sorting-machine#profileId-3451252
 
 ## How it works
 
-1. A feeder mechanism (continuous-rotation servo + roller) pulls a card from the hopper into view of the webcam, into a fixed, per-camera-calibrated scan region (see calibration screen)
+1. A feeder mechanism (continuous-rotation servo + roller) pulls a card from the hopper into view of the webcam, into a fixed, per-camera-calibrated scan region (see the calibration screen)
 2. The browser crops that region to a straightened card image (plain Canvas 2D, no computer vision needed, since the camera mounting and card size are fixed and calibrated ahead of time)
-3. The image is sent to the server for embedding search (Hugging Face SigLIP)
+3. The image is sent to the server for embedding search (SigLIP, running locally on CPU or DirectML GPU)
 4. PostgreSQL vector similarity search (pgvector) identifies the card
-5. Configurable, per-collection bin rules decide which bin the card should go to
+5. Configurable, per-collection bin rules — plus bundle, set-chase, wishlist, and value routing — decide which bin the card should go to
 6. The web app sends a serial command to the Arduino, which drives the trapdoor/paddle/pusher servos to route the card into that bin
 
 ## Features
 
-- Live webcam scanning with automatic card detection and identification; captures wait for the card to physically settle at the sensor before the shot is taken
-- Multi-TCG support: pluggable card-search adapters per game (Scryfall/MTG, Yu-Gi-Oh!, Digimon, Gundam Card Game, Pokémon), with each game's own admin-configurable field definitions driving sorting, filtering, and bin rules
-- Rule-based sort bins, grouped by collection, with and/or rule trees across each game's own card fields (color, rarity, price, set, etc.)
-- Card grid sorting (by name, price, rarity, etc.) adapts automatically to whichever game a collection uses
-- Multiple collections per organization, each with their own bin configuration and card history
-- Remote monitoring: watch an in-progress scan session live from another device
-- Discord notifications for sorter errors/jams, plus an optional per-card-scanned notification with the card's image, name, price, collection/game, and a link to watch the session live
-- Per-organization branding and scanner layout settings
-- Feeder, servo, and camera scan-region calibration tools: the camera's capture region can be dragged/resized live against the feed to match different webcam mountings and fields of view
-- In-app hardware build guide (`/build`) with bill of materials, wiring diagrams, and assembly instructions
+- **Fully local & offline** — Postgres, the API, the web app, the vision model, and card art all run on this machine. No accounts, no hosted database, no cloud calls at scan time. Only the one-time card-data sync needs the internet.
+- **Live webcam scanning** with automatic card detection and identification; captures wait for the card to physically settle at the sensor before the shot is taken
+- **Multi-TCG support**: pluggable card-search adapters per game (MTG/Scryfall, Yu-Gi-Oh!, Digimon, Gundam Card Game, Pokémon), each with its own field definitions driving sorting, filtering, and bin rules — a config-driven architecture makes adding more games (One Piece, Dragon Ball, …) a small, independent task
+- **Rule-based sort bins**, grouped by collection, with and/or rule trees across each game's own card fields (color, rarity, price, set, type line, mana value, …)
+- **Value-based binning** — numeric price rules on every bin (`Price (USD) greater than 2` → reject bin, etc.), backed by live prices for MTG and Yu-Gi-Oh!
+- **Bundle mode** — assemble fixed-composition bundles (e.g. 15 common / 15 uncommon / 5 rare / 5 mythic) with no duplicates, optional holo filtering, live running value, and pause-on-complete
+- **Set-chase mode** — route every card from a target set that you don't already own into a chase bin, automatically building set-complete piles
+- **Wishlist routing** — specific cards (by id or name pattern) route to their own bin ahead of normal rules
+- **Holo/foil detection** — two-frame scan light (firmware-controlled LED) + heuristic classifier, with a smart skip so matte cards only need one frame
+- **Sound bin-full logic** — per-bin status vs physical capacity, per-bin Empty/reset, and pause-on-overflow so a bin can never silently overflow
+- **Collection tools** — export everything scanned as CSV, a duplicate report, a set-completeness view, and a card library browser with set/rarity filters
+- **Card grid** sorting (by name, price, rarity, etc.) adapts automatically to whichever game a collection uses
+- **Remote monitoring** — watch an in-progress scan session live from another device on your LAN
+- **Discord notifications** (optional) for sorter errors/jams
+- **Feeder, servo, camera, and scan-light diagnostics** — live calibration tools plus hardware tests from the browser, so servos and lights are verified before a run
+- **In-app hardware build guide** (`/build`) with bill of materials, wiring diagrams, and assembly instructions
 
 ## Stack
 
-- **Web**: React 19, Vite, React Router v7, Tailwind CSS 4, TanStack Query
-- **Server**: Hono 4, Drizzle ORM, PostgreSQL (pgvector)
-- **Auth**: none — fully-local single-user build, no logins
-- **Hardware**: Arduino Uno R4 via Web Serial API (9600 baud), PCA9685 servo driver
-- **Monorepo**: Turborepo + pnpm workspaces
+| Layer | What | Version |
+| --- | --- | --- |
+| Web | React + Vite + React Router + Tailwind CSS + TanStack Query | React 19 · Vite 6 · Tailwind 4 |
+| Server | Hono + Drizzle ORM + PostgreSQL (pgvector) | Hono 4 · Drizzle 0.45 · Postgres 18.4 |
+| Vision | SigLIP base (patch16-512) via `@huggingface/transformers`, onnxruntime-node (CPU q8 or DirectML GPU fp32) | transformers 3.8 |
+| Auth | **none** — fully-local single-user build, no logins | — |
+| Hardware | Arduino Uno R4 Minima via Web Serial (9600 baud), PCA9685 servo driver, IR sensors, scan-light LED | — |
+| Monorepo | Turborepo + pnpm workspaces | pnpm 9 |
 
 ## Project structure
 
 ```
 packages/
 ├── shared/   @magic-vault/shared - types, constants, evaluate-bin rule engine
-├── server/   @magic-vault/server - Hono API, Drizzle schema/db, auth middleware
-└── web/      @magic-vault/web    - React SPA (scanner, bins, collections, admin, build guide)
-arduino/      Arduino sketch (arduino/main/main.ino)
-"3d model"/   Printable enclosure/module design (Fusion 360 + .3mf)
+├── server/   @magic-vault/server - Hono API, Drizzle schema/db, card-search adapters, sync jobs
+└── web/      @magic-vault/web    - React SPA (scanner, bins, collections, library, admin, build guide)
+arduino/      Firmware + build docs (arduino/main/main.ino, BUILD.md, SERIAL_PROTOCOL.md)
+3d model/     Printable enclosure/module design (Fusion 360 + .3mf)
+custom/       Our docs: CHANGES.md (all modifications), SETUP.md (local runbook), TCGS.md, PLAN.md
 drizzle/      Generated SQL migrations
-scripts/      Release/version-bump helpers
+scripts/      Local helpers: start-server.cmd, start-web.cmd, local-db.mjs, arduino-compile.sh
+              (+ packages/server/scripts: seed-local.ts, apply-bin-capacities.ts, import-cardset.ts, bench-vectorize.ts)
 ```
 
 ## Getting started
 
+**Prerequisites:** Windows (or Linux/macOS with adjustments), [pnpm 9](https://pnpm.io), Node 20+, and a portable PostgreSQL + pgvector install (see below). The browser must support the [Web Serial API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Serial_API) (Chrome/Edge) for hardware control.
+
 ```bash
 pnpm install
-pnpm dev        # Vite on :5173, Hono on :3001
+cp .env.example .env   # then fill in DATABASE_URL etc.
 ```
 
-### Environment variables
+### 1. Local PostgreSQL (no Docker/admin needed)
 
-Everything lives in a single root `.env` (Vite is configured to read up from `packages/web`, so there's no separate `packages/web/.env`). Copy `.env.example` to `.env` and fill it in:
+Download the portable PostgreSQL + pgvector bundle (user-space, no admin rights or services required):
 
 ```bash
-cp .env.example .env
-```
-
-```
-# Server
-DATABASE_URL=                 # local Postgres, e.g. postgres://postgres@127.0.0.1:5433/mault
-PORT=                         # optional, defaults to 3001
-WEB_URL=                      # optional, used for CORS and to build absolute links (Discord monitor-page links) - must be publicly reachable for those links/images to work outside your own machine
-
-# Public variables for the React app (baked into the client bundle at build time)
-VITE_API_URL=                 # base URL of the Hono API, e.g. http://localhost:3001
-VITE_APP_ENV=                 # local/developement/QA/production
-```
-
-## Database
-
-The app runs entirely against a local PostgreSQL — no hosted services needed.
-
-### Local PostgreSQL (no Docker/admin needed)
-
-Download the portable PostgreSQL + pgvector bundle (57 MB, user-space — no
-admin rights or services required):
-
-```bash
-# Download once
 curl -L -o postgres.zip \
   https://github.com/YukeonWayne/pg_pgvector_binary/releases/download/v18.4-pgvector0.8.3-win32-x64/postgres-18.4-pgvector-0.8.3-win32-x64.zip
 ```
 
-Extract it anywhere (e.g. `C:\Mault Revised\.local\postgres`), then initialize
-and start:
+Extract it anywhere (e.g. `C:\Mault Revised\.local\postgres`), then initialize and start:
 
 ```bash
 PGBIN="<extracted>/win32-x64/bin"
 "$PGBIN/initdb" -D "<extracted>/data" -U postgres -A trust -E UTF8 --locale=C
 # Start detached (Windows):
-powershell -NoProfile -Command "Start-Process -FilePath '<extracted>\win32-x64\bin\postgres.exe' -ArgumentList '\"-D\" \"<extracted>\data\" \"-p\" \"5433\" \"-c\" \"listen_addresses=127.0.0.1\"' -WindowStyle Hidden"
+powershell -NoProfile -Command "Start-Process -FilePath '<extracted>\win32-x64\bin\postgres.exe' -ArgumentList '\"-D\" \"<extracted>\data\" \"-p\" \"5433\" \"-c\" \"listen_addresses=127.0.0.1\" \"-c\" \"shared_buffers=1GB\"' -WindowStyle Hidden"
 ```
 
-Create the database and apply the local bootstrap (creates the pgvector
-extension, `authenticated` RLS role, and the `auth_is_org_member()` function
-that the schema's RLS policies reference). Run it BEFORE `db:migrate` (the
-function must exist first) and again AFTER (to grant the `authenticated` role
-access to the newly created tables):
+Create the database and apply the local bootstrap (creates the pgvector extension, the RLS role, and the `auth_is_org_member()` function). Run it **before** `db:migrate` and **again after**:
 
 ```bash
 "$PGBIN/psql" -h 127.0.0.1 -p 5433 -U postgres -c "CREATE DATABASE mault;"
-"$PGBIN/psql" -h 127.0.0.1 -p 5433 -U postgres -d mault -f packages/server/sql/local-neon-bootstrap.sql
+"$PGBIN/psql" -h 127.0.0.1 -p 5433 -U postgres -d mault -f packages/server/sql/local-bootstrap.sql
 pnpm --filter @magic-vault/server db:migrate
-"$PGBIN/psql" -h 127.0.0.1 -p 5433 -U postgres -d mault -f packages/server/sql/local-neon-bootstrap.sql
+"$PGBIN/psql" -h 127.0.0.1 -p 5433 -U postgres -d mault -f packages/server/sql/local-bootstrap.sql
 ```
 
-Then point `.env` at it (see `.env.example`):
+Then point `.env` at it:
 
 ```
 DATABASE_URL=postgres://postgres@127.0.0.1:5433/mault
-VECTORIZE_DEVICE=dml
+VECTORIZE_DEVICE=dml    # or cpu (see .env.example)
 ```
 
-A helper script manages the server day-to-day (start/stop/status), and can
-register a no-admin logon auto-start so it comes up with your session:
+A helper script manages the server day-to-day, and can register a no-admin logon auto-start:
 
 ```bash
-node scripts/local-db.mjs start       # start (detached, survives terminal close)
-node scripts/local-db.mjs stop        # graceful shutdown
-node scripts/local-db.mjs status      # is it up?
-node scripts/local-db.mjs install     # add to Windows Startup (runs at logon)
-node scripts/local-db.mjs uninstall   # remove from Startup
+node scripts/local-db.mjs start|stop|status|install|uninstall
 ```
 
-### Migrations
+### 2. Seed + run
+
+```bash
+# One-time seed: games, default collection, bin set, default bundle config
+cd packages/server && npx tsx --env-file ../../.env scripts/seed-local.ts
+
+# Start the stack (two detached processes)
+powershell Start-Process -FilePath "C:\Mault Revised\mault\scripts\start-server.cmd" -WindowStyle Hidden
+powershell Start-Process -FilePath "C:\Mault Revised\mault\scripts\start-web.cmd" -WindowStyle Hidden
+```
+
+Open **http://localhost:5173** — no login, it opens straight to the scanner.
+
+### 3. Card sync (the one internet step)
+
+In the web app, go to **Admin → Sync** and run the sync for each game you'll use. The first MTG sync downloads the Scryfall catalog (~54k cards) and embeds each with the local SigLIP model — roughly 9–10 hours on a mid-range GPU, one-time and resumable (it skips cards already embedded, and the catalog is cached on disk). Syncs are queued one game at a time and auto-advance; the sync paces itself so your desktop stays responsive and scans keep priority.
+
+> Until sync completes for a game, scanning can't match anything — the `cards` table is empty and the search has nothing to compare against.
+
+### 4. Flash the firmware + calibrate
+
+1. Open `arduino/main/main.ino` in the Arduino IDE, install **ArduinoJson** + **Adafruit PWM Servo Driver**, select **Arduino Uno R4 Minima**, and upload.
+2. Open **http://localhost:5173**, connect the Arduino via **Web Serial**, then calibrate at `/app/calibrate` (drag the scan region, tune servo positions) and run the hardware diagnostics to verify servos and the scan light.
+3. Load cards, connect the camera (see [Webcam](#webcam)), and scan.
+
+**Full walkthrough, hardware BOM, wiring, and tuning:** see `custom/SETUP.md` (our local runbook) and `arduino/main/BUILD.md`.
+
+## Environment variables
+
+Copy `.env.example` to `.env` and fill in. All variables live in a single root `.env` (Vite reads up from `packages/web`).
+
+| Variable | Purpose | Default |
+| --- | --- | --- |
+| `DATABASE_URL` | Local Postgres connection string | `postgres://postgres@127.0.0.1:5433/mault` |
+| `PORT` | API port | `3001` |
+| `WEB_URL` | CORS origin / absolute links (Discord) | `http://localhost:5173` |
+| `VITE_API_URL` | Base URL of the API (baked into the web bundle) | `http://localhost:3001` |
+| `VITE_APP_ENV` | `local` / `development` / `qa` (banner + warnings) | `local` |
+| `VECTORIZE_DEVICE` | `cpu` (q8) or `dml` (DirectML GPU, fp32 — ~1.9× faster) | `cpu` |
+| `SYNC_FETCH_BATCH` | Parallel image fetches during sync | `16` |
+| `SYNC_EMBED_BATCH` | GPU embedding batch (8 is proven stable on weaker GPUs) | `8` |
+| `SYNC_PACE_SCAN_MS` | Sync back-off per batch while a scan is active | `200` |
+| `SYNC_PACE_IDLE_MS` | Sync beat per batch when idle | `10` |
+| `ART_CACHE_DIR` / `SYNC_CACHE_DIR` | Override local cache locations | `<repo>/packages/server/.cache/…` |
+
+## Database
+
+Migrations live in `drizzle/`:
 
 ```bash
 pnpm --filter @magic-vault/server db:generate  # generate a migration from schema changes
@@ -140,46 +167,16 @@ pnpm --filter @magic-vault/server db:push      # push schema directly (dev)
 pnpm --filter @magic-vault/server db:studio    # open Drizzle Studio
 ```
 
-The migration history was regenerated as a single baseline (`drizzle/0000_*`)
-from the current schema — it models all 13 tables with org-scoped RLS, the
-`(game_key, scryfall_id)` card uniqueness, calibration defaults aligned with
-the shared constants, and the query-path indexes.
-
-### Auth & RLS note
-
-This is a **fully-local, single-user build with no logins**. Every request is
-treated as the same local operator (`local-user` in the `local-org` org — see
-`packages/server/src/middleware/auth.ts`), so the app opens straight into the
-scanner with no sign-in, tokens, or org switching. The `X-Org-Id` header is
-sent automatically by the web client and the server scopes all queries by it.
-
-The schema enables row-level security on every table with `crudPolicy`
-policies scoped by `auth_is_org_member()`. The app's own connection pool
-connects as the table owner (which bypasses RLS), so org isolation is enforced
-at the route layer (`requireOrg` + org-scoped queries). The policies remain as
-defense-in-depth and are fully enforceable by the `authenticated` role — the
-local bootstrap grants it table privileges so you can exercise them locally.
+The migration history is a single regenerated baseline from the current schema — all tables use org-scoped RLS policies (defense-in-depth for any future deployment; the local build enforces isolation at the route layer). Postgres starts with `shared_buffers=1GB` so the card catalog + vector index stay resident in RAM.
 
 ### What still needs the internet
 
-- **Card data sync** (Scryfall / Yu-Gi-Oh! / Digimon / Gundam / Pokémon) —
-  downloading card data in the Admin page. This is how the card database gets
-  built.
-- **Card art** — the image proxy fetches card images from external hosts.
-- **Discord webhooks** — optional notifications, only if you configure a URL.
-- **One-time SigLIP model download** — the vision model downloads once from
-  HuggingFace into a local cache, then all scanning runs fully on-device.
+- **Card data sync** (Scryfall / Yu-Gi-Oh! / Digimon / Gundam / Pokémon) in the Admin page — how the card database gets built
+- **Card art** — the image proxy fetches new art; everything synced is disk-cached locally afterwards
+- **One-time SigLIP model download** — the vision model downloads once from HuggingFace, then all scanning runs fully on-device
+- **Discord webhooks** — optional, only if you configure a URL
 
-Everything else — scanning, sorting, calibration, the database, auth (none), and
-vision — runs entirely on the local machine.
-
-The vision model (SigLIP) also runs locally via `@huggingface/transformers`;
-it downloads once from HuggingFace into a cache on first use, then all
-embeddings are computed on-device.
-
-## Deployment
-
-`Dockerfile.server` builds the Hono API (and pre-downloads the SigLIP model at build time). `Dockerfile.web` builds the Vite SPA and serves it with nginx (`nginx.conf`); `VITE_API_URL` must be supplied as a build arg since it's baked into the client bundle.
+Everything else — scanning, sorting, calibration, the database, and vision — runs entirely on the local machine.
 
 ## Hardware
 
@@ -187,31 +184,31 @@ The full bill of materials, wiring diagrams, and assembly instructions live in t
 
 - Arduino Uno R4 Minima, driving a PCA9685 servo controller over I2C
 - 9 positional SG90 servos (3 per module: trapdoor, paddle gate, pusher) plus 1 continuous-rotation SG90 for the feeder
-- IR sensor for card-feed detection
+- IR sensors for card-feed detection (hopper + one per module)
+- **Scan light** (LED 5, PCA9685 channel 14) — a small angled LED the firmware toggles for two-frame holo detection
+- External 5 V PSU (4–10 A) into the PCA9685 `V+`, common ground with the Arduino (mandatory)
 - Enclosure and module parts are in `3d model/` (Fusion 360 source + printable `.3mf`)
 
-Upload `arduino/main/main.ino` (requires the ArduinoJson library). It communicates via JSON over USB serial: the web app sends `{"bin": N}` and the Arduino runs the routing sequence.
+Upload `arduino/main/main.ino` (ArduinoJson + Adafruit PWM Servo Driver libraries). It communicates via JSON over USB serial (9600 baud): the web app sends `{"bin": N}` and the Arduino runs the routing sequence. Protocol details in `arduino/main/SERIAL_PROTOCOL.md`.
 
 ## Webcam
 
-Primary: **EMEET C60E 4K** (higher resolution gives the holo-detection and
-embeddings more detail to work with). Recommended camera settings:
+Primary: **EMEET C60E 4K** — the higher resolution gives holo detection and the embeddings more detail to work with. Recommended settings:
 
 - Autofocus: Off (fixed focus on the scan plane)
 - Resolution: 1080p or 4K, whichever the scan-region calibration covers
 - Brightness / contrast / saturation: moderate, consistent lighting
 
-The old documented setup (Logitech C920) used these settings:
+The original build used a Logitech C920 (Auto Focus: Off · Focus: 50% · Auto Exposure: On · Low Light Compensation: On · Auto White Balance: On · Brightness: 140 · Contrast: 140 · Saturation: 160 · Sharpness: 130).
 
-Auto Focus: Off
-Focus: 50%
-Auto Exposure: On
-Low Light Compensation: On
-Auto White Balance: On
-Brightness: 140
-Contrast: 140
-Saturation: 160
-Sharpness: 130
+## Documentation
+
+- `custom/SETUP.md` — **the local runbook**: stack URLs, start/stop, first-run setup, bundle/chase/wishlist modes, bin capacities, value sorting, machine responsiveness tuning
+- `custom/CHANGES.md` — every modification relative to upstream, in revert order
+- `custom/TCGS.md` — multi-TCG architecture, top-20 TCG data-source status, adding a new game
+- `custom/PLAN.md` — firmware roadmap (non-blocking state machine, pipelining, watchdog) and the machine-build commissioning checklist
+- `arduino/main/BUILD.md` — hardware build guide, wiring, calibration
+- `arduino/main/SERIAL_PROTOCOL.md` — JSON serial contract
 
 ## Credits
 

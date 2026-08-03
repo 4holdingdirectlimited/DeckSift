@@ -32,7 +32,7 @@ const vector = customType<{ data: number[]; driverData: string }>({
 // middleware/auth.ts — this is a fully-local, single-user build with no
 // logins). requireOrg injects the org_id claim into request.jwt.claims, which
 // the orgRls policies check against auth_is_org_member(), a SECURITY DEFINER
-// SQL function created by packages/server/sql/local-neon-bootstrap.sql.
+// SQL function created by packages/server/sql/local-bootstrap.sql.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const orgRls = (orgId: any) =>
   sql`(${orgId} = (current_setting('request.jwt.claims', true)::json ->> 'org_id')) AND auth_is_org_member(${orgId})`;

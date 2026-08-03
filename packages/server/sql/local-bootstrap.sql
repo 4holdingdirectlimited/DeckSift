@@ -1,7 +1,7 @@
 -- Local bootstrap: prepares a plain local PostgreSQL for the app.
 --
 -- Usage (from repo root):
---   psql -h 127.0.0.1 -p 5433 -U postgres -d mault -f packages/server/sql/local-neon-bootstrap.sql
+--   psql -h 127.0.0.1 -p 5433 -U postgres -d mault -f packages/server/sql/local-bootstrap.sql
 --
 -- Run it BEFORE db:migrate (the function/role must exist before the RLS
 -- policies reference them) and again AFTER db:migrate (grants must be
