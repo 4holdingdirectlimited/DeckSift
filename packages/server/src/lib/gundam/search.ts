@@ -120,7 +120,7 @@ function normalizeGundamCard(raw: GundamCard): PlayingCard {
     prints_search_uri: "",
     collector_number: collectorNumber,
     digital: false,
-    rarity: (raw.rarity ?? "").toLowerCase(),
+    rarity: gundamRarityName(raw.rarity),
     artist: "",
     artist_ids: [],
     border_color: "black",
@@ -138,6 +138,28 @@ function normalizeGundamCard(raw: GundamCard): PlayingCard {
       tix: null,
     },
   };
+}
+
+/**
+ * Gundam rarities are compact codes with holofoil "+" variants
+ * (c/u/r/sr/ur/lr/p, plus c+/u+/r+/…). Map the base codes to the names the
+ * field definitions and bundle recipes use; the "+" suffix is kept so a holo
+ * variant can still be targeted as its own rarity if wanted.
+ */
+function gundamRarityName(raw: string | undefined): string {
+  const code = (raw ?? "").trim().toLowerCase();
+  const holo = code.endsWith("+") ? "+" : "";
+  const base = holo ? code.slice(0, -1).trim() : code;
+  const names: Record<string, string> = {
+    c: "common",
+    u: "uncommon",
+    r: "rare",
+    sr: "super rare",
+    ur: "ultra rare",
+    lr: "legend rare",
+    p: "promo",
+  };
+  return (names[base] ?? base) + holo;
 }
 
 function extractRows(json: unknown): GundamCard[] {

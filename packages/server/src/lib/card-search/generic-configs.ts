@@ -75,10 +75,40 @@ export const yugiohConfig: GenericGameConfig = {
   },
 };
 
+/**
+ * Digimon rarities come back as inconsistent codes (c/C, u/U, r/R, sr/SR,
+ * sec/SEC, p/P, …). Normalize them to the human-readable names the field
+ * definitions and bundle recipes use, so rarity binning and bundles work
+ * without the operator typing raw codes.
+ */
+function rarityName(raw: string | undefined): string {
+  const code = (raw ?? "").trim().toLowerCase();
+  switch (code) {
+    case "c":
+      return "common";
+    case "u":
+      return "uncommon";
+    case "r":
+      return "rare";
+    case "rc":
+      return "rare";
+    case "sr":
+      return "super rare";
+    case "sec":
+      return "secret rare";
+    case "ur":
+      return "ultra rare";
+    case "p":
+      return "promo";
+    default:
+      return code; // unknown codes pass through rather than silently misrouting
+  }
+}
+
 // ─── Digimon Card Game (digimoncard.io) ─────────────────────────────────────────
-// Verified endpoints (2026-08): search.php?n={q} returns a plain array of card
-// objects (id like "ST1-03", color, rarity codes u/r/sr/sec/..., stage, form,
-// DP, effects, set_name[]). The full-detail catalog is search.php?series=
+// Verified endpoints (2026-08): search?n={q} returns a plain array of card
+// objects (id like "ST1-03", color, rarity codes c/u/r/sr/sec/..., stage, form,
+// DP, effects, set_name[]). The full-detail catalog is search?series=
 // "Digimon Card Game" (~9 MB, ~9k cards with complete fields — the slim
 // getAllCards.php bulk only has name + cardnumber, so it is not used). Images
 // at images.digimoncard.io/images/cards/{id}.jpg. No id endpoint, so searchById
@@ -87,9 +117,9 @@ export const yugiohConfig: GenericGameConfig = {
 export const digimonConfig: GenericGameConfig = {
   key: "digimon",
   label: "Digimon Card Game (digimoncard.io)",
-  searchUrl: "https://digimoncard.io/api-public/search.php?n={q}",
+  searchUrl: "https://digimoncard.io/api-public/search?n={q}",
   bulkUrl:
-    "https://digimoncard.io/api-public/search.php?series=Digimon%20Card%20Game",
+    "https://digimoncard.io/api-public/search?series=Digimon%20Card%20Game",
   cardId: (raw) => str(raw, "id") ?? "",
   setCode: (raw) => (str(raw, "id") ?? "").split("-")[0] ?? "",
   imageUrl: (raw) =>
@@ -124,7 +154,7 @@ export const digimonConfig: GenericGameConfig = {
     card.image_uris = imageUris(
       id ? `https://images.digimoncard.io/images/cards/${id}.jpg` : undefined,
     );
-    card.rarity = str(raw, "rarity")?.toLowerCase() ?? "";
+    card.rarity = rarityName(str(raw, "rarity"));
     const setNames = raw.set_name;
     card.set_name =
       Array.isArray(setNames) && setNames.length > 0

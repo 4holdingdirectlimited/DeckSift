@@ -18,7 +18,7 @@ https://makerworld.com/en/models/3066180-tcg-card-sorting-machine#profileId-3451
 ## Features
 
 - Live webcam scanning with automatic card detection and identification; captures wait for the card to physically settle at the sensor before the shot is taken
-- Multi-TCG support: pluggable card-search adapters per game (Scryfall/MTG built in, plus Gundam Card Game), with each game's own admin-configurable field definitions driving sorting, filtering, and bin rules
+- Multi-TCG support: pluggable card-search adapters per game (Scryfall/MTG, Yu-Gi-Oh!, Digimon, Gundam Card Game, Pokémon), with each game's own admin-configurable field definitions driving sorting, filtering, and bin rules
 - Rule-based sort bins, grouped by collection, with and/or rule trees across each game's own card fields (color, rarity, price, set, etc.)
 - Card grid sorting (by name, price, rarity, etc.) adapts automatically to whichever game a collection uses
 - Multiple collections per organization, each with their own bin configuration and card history
@@ -117,7 +117,7 @@ Then point `.env` at it (see `.env.example`):
 
 ```
 DATABASE_URL=postgres://postgres@127.0.0.1:5433/mault
-BETTER_AUTH_SECRET=<openssl rand -base64 32>
+VECTORIZE_DEVICE=dml
 ```
 
 A helper script manages the server day-to-day (start/stop/status), and can
@@ -162,8 +162,9 @@ local bootstrap grants it table privileges so you can exercise them locally.
 
 ### What still needs the internet
 
-- **Card data sync** (Scryfall / Gundam / Pokémon) — downloading card data in
-  the Admin page. This is how the card database gets built.
+- **Card data sync** (Scryfall / Yu-Gi-Oh! / Digimon / Gundam / Pokémon) —
+  downloading card data in the Admin page. This is how the card database gets
+  built.
 - **Card art** — the image proxy fetches card images from external hosts.
 - **Discord webhooks** — optional notifications, only if you configure a URL.
 - **One-time SigLIP model download** — the vision model downloads once from
@@ -193,7 +194,14 @@ Upload `arduino/main/main.ino` (requires the ArduinoJson library). It communicat
 
 ## Webcam
 
-Using a Logitech C920, these settings worked best:
+Primary: **EMEET C60E 4K** (higher resolution gives the holo-detection and
+embeddings more detail to work with). Recommended camera settings:
+
+- Autofocus: Off (fixed focus on the scan plane)
+- Resolution: 1080p or 4K, whichever the scan-region calibration covers
+- Brightness / contrast / saturation: moderate, consistent lighting
+
+The old documented setup (Logitech C920) used these settings:
 
 Auto Focus: Off
 Focus: 50%
