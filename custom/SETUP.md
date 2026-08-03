@@ -196,3 +196,26 @@ The **Wishlist** panel sits on the scanner page (left sidebar).
 Postgres, the API, the web app, the vision model (SigLIP), and card art
 (disk-cached) all run on this machine. Only the one-time sync and any brand-new
 card art need the internet.
+
+## Machine responsiveness during sync
+
+The sync saturates the GPU while it runs (that's the embedding step), and on
+Windows the desktop compositor shares the GPU — so a full-tilt sync can make
+Windows feel sluggish even though CPU is nearly idle. The server now paces
+itself: it runs near-full speed when idle and backs off when a scan is in
+progress (last 5 s). Tunables (in `.env` or the start command):
+
+```
+SYNC_FETCH_BATCH=16      # parallel image fetches
+SYNC_EMBED_BATCH=8       # GPU embedding batch (8 is proven stable on this GPU)
+SYNC_PACE_SCAN_MS=200    # delay per batch while scanning
+SYNC_PACE_IDLE_MS=10     # delay per batch when idle
+```
+
+Postgres also starts with `shared_buffers=1GB` (was the 128 MB default) so the
+card catalog + vector index stay in RAM. Restart Postgres after a change
+(`node scripts/local-db.mjs stop && start`).
+
+Nothing here needs caching *in* the GPU: the lookup step (vector search) runs
+in Postgres on CPU, and the SigLIP model is already loaded into VRAM once and
+reused for every scan/sync embed.

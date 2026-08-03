@@ -9,6 +9,7 @@ import { cardImageVectors } from "../db/schema";
 import { fetchImageWithCache } from "../lib/art-cache";
 import { resolveCardDetails } from "../lib/card-cache";
 import { resolveCardSearch } from "../lib/card-search/resolve";
+import { recordScan } from "../lib/scan-activity";
 import { sendDiscordNotification } from "../lib/discord";
 import { vectorizeImageFromBuffer } from "../lib/vectorize";
 import { requireAuth, type AppEnv } from "../middleware/auth";
@@ -110,6 +111,9 @@ router.post("/", requireAuth, async (c) => {
       500,
     );
   }
+  // A real scan happened (image → embedding on the GPU). Background jobs pace
+  // against this so they don't starve the scanner / desktop compositor.
+  recordScan();
 
   const embeddingStr = `[${embedding.join(",")}]`;
   const resolved = await resolveCardSearch(

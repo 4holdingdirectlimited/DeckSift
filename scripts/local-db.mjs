@@ -76,7 +76,7 @@ function start() {
     const args = [
       "-NoProfile",
       "-Command",
-      `Start-Process -FilePath '${postgresExe}' -ArgumentList '"-D" "${DATA_DIR}" "-p" "${PORT}" "-c" "listen_addresses=127.0.0.1"' -WindowStyle Hidden -RedirectStandardOutput '${LOG_FILE}' -RedirectStandardError '${LOG_FILE}.err'`,
+      `Start-Process -FilePath '${postgresExe}' -ArgumentList '"-D" "${DATA_DIR}" "-p" "${PORT}" "-c" "listen_addresses=127.0.0.1" "-c" "shared_buffers=1GB"' -WindowStyle Hidden -RedirectStandardOutput '${LOG_FILE}' -RedirectStandardError '${LOG_FILE}.err'`,
     ];
     const out = spawnSync("powershell", args, { encoding: "utf8", timeout: 30000 });
     if (out.status !== 0) {
@@ -122,7 +122,7 @@ function installAutoStart() {
   // Two no-admin options; try the Startup folder first (simplest, runs at
   // logon for this user). schtasks with /sc onlogon may also work.
   const launcher = join(RUN_DIR, "start-postgres.cmd");
-  const cmdContent = `@echo off\r\nstart "" /b "${postgresExe}" -D "${DATA_DIR}" -p ${PORT} -c listen_addresses=127.0.0.1 >> "${LOG_FILE}" 2>&1\r\n`;
+  const cmdContent = `@echo off\r\nstart "" /b "${postgresExe}" -D "${DATA_DIR}" -p ${PORT} -c listen_addresses=127.0.0.1 -c shared_buffers=1GB >> "${LOG_FILE}" 2>&1\r\n`;
   mkdirSync(RUN_DIR, { recursive: true });
   writeFileSync(launcher, cmdContent);
 

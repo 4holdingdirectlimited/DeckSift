@@ -1644,6 +1644,48 @@ work is reused as a disk cache.
 1. Delete `lib/art-cache.ts`; restore the image proxy's direct fetch.
 2. Remove the `saveArtToCache` call in `sync-job.ts`.
 
+## Item 38 — Scan-aware sync pacing + Postgres RAM tuning (server + scripts)
+
+**Status:** implemented, uncommitted.
+
+### Why
+
+A full-tilt sync saturates the DirectML GPU, and on Windows the desktop
+compositor (DWM) shares that GPU — so the whole machine feels sluggish during
+sync even though CPU sits at ~2 %. The scanner also needs the GPU for its own
+per-scan embed, so a running sync can delay scans.
+
+### What changed
+
+- **`lib/scan-activity.ts` (new)** — `recordScan()` / `recentScanWithin(ms)`
+  track when the last scan embed happened.
+- **`routes/card.ts`** — calls `recordScan()` after each successfully
+  vectorized scan.
+- **`lib/sync-job.ts`** — pacing between fetch/embed batches:
+  - `SYNC_FETCH_BATCH` / `SYNC_EMBED_BATCH` env vars (defaults 16 / 8) so the
+    batch sizes are tunable without code edits.
+  - `SYNC_PACE_SCAN_MS` (default 200) delay per batch while the scanner was
+    used in the last 5 s; `SYNC_PACE_IDLE_MS` (default 10) otherwise. Idle
+    cost is negligible; the machine stays responsive during a sync.
+- **`scripts/local-db.mjs`** — Postgres now starts with
+  `-c shared_buffers=1GB` (was the 128 MB default), so the card catalog +
+  vector index stay resident in RAM. Applied on next Postgres start/restart
+  (both `start` and the logon auto-start launcher).
+
+### Behavior notes
+
+- Sync is still one game at a time and fully resumable; the pacing only
+  changes timing between batches.
+- The GPU/memory “half free” numbers during sync are normal: SigLIP uses a
+  small slice of VRAM; the 100 % is compute utilization, and the card
+  *lookups* (pgvector search) run on CPU in Postgres, not the GPU.
+
+### How to revert
+
+1. Remove the `pace()` calls + env vars from `sync-job.ts` and the
+   `recordScan()` call from `routes/card.ts`; delete `lib/scan-activity.ts`.
+2. Drop `-c shared_buffers=1GB` from `scripts/local-db.mjs` (both places).
+
 ---
 
 *Template for future entries:*

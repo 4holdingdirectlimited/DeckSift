@@ -12,6 +12,7 @@ import { resolveGameDataSourceUrl } from "./card-search/resolve";
 import { sendDiscordNotification } from "./discord";
 import { saveArtToCache } from "./art-cache";
 import { vectorizeBuffers } from "./vectorize";
+import { recentScanWithin } from "./scan-activity";
 
 export const SYNC_SOURCES: Record<string, SyncSource> = {
   mtg: scryfallSyncSource,
@@ -176,11 +177,24 @@ async function runSync(source: SyncSource): Promise<void> {
   // connection, but 16 parallel connections all finish in the same wall time as
   // one). Fetching images in parallel batches turns a ~4s-per-card fetch into
   // ~0.1-0.5s-per-card.
-  const FETCH_BATCH = 16;
+  const FETCH_BATCH = Number(process.env.SYNC_FETCH_BATCH ?? 16);
   // GPU-safe embedding batch. Batch-16 crashed the DirectML device on this
   // machine's Quadro M4000 (DXGI_ERROR_DEVICE_HUNG); batch-8 is proven stable
   // under sustained load, so the two are deliberately decoupled.
-  const EMBED_BATCH = 8;
+  const EMBED_BATCH = Number(process.env.SYNC_EMBED_BATCH ?? 8);
+
+  // Back-off pacing: the GPU embed saturates the DirectML device, and on
+  // Windows the desktop compositor (DWM) shares the GPU — a full-tilt sync
+  // makes the whole machine feel slow even at low CPU. When the scanner is
+  // actively used, pace hard between batches so scan embeds win; when idle,
+  // a short beat keeps the machine responsive for almost no sync cost.
+  // Tune with SYNC_PACE_SCAN_MS / SYNC_PACE_IDLE_MS.
+  const paceScanMs = Number(process.env.SYNC_PACE_SCAN_MS ?? 200);
+  const paceIdleMs = Number(process.env.SYNC_PACE_IDLE_MS ?? 10);
+  const pace = async () => {
+    const delay = recentScanWithin(5_000) ? paceScanMs : paceIdleMs;
+    if (delay > 0) await new Promise((r) => setTimeout(r, delay));
+  };
 
   const fetchBatch = async (batch: SyncSourceCard[]): Promise<(Buffer | null)[]> =>
     Promise.all(
@@ -231,6 +245,9 @@ async function runSync(source: SyncSource): Promise<void> {
     const buffers = (await pendingFetch) ?? (await fetchBatch(chunk));
     pendingFetch = pendingNext;
 
+    // Give the scanner / desktop priority when it needs the GPU.
+    await pace();
+
     // Collect the successfully fetched, not-yet-in-DB cards with their chunk
     // index, then embed them in GPU-safe sub-batches (one model forward each).
     const toEmbed: { index: number; card: SyncSourceCard; buffer: Buffer }[] =
@@ -245,6 +262,9 @@ async function runSync(source: SyncSource): Promise<void> {
     const embeddingByIndex = new Map<number, number[]>();
     for (let k = 0; k < toEmbed.length; k += EMBED_BATCH) {
       const sub = toEmbed.slice(k, k + EMBED_BATCH);
+      // Beat between GPU batches so a concurrent scan's embed isn't queued
+      // behind a long run of sync batches.
+      await pace();
       try {
         const embs = await vectorizeBuffers(sub.map((e) => e.buffer));
         for (let m = 0; m < sub.length; m++) {
