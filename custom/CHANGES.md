@@ -1872,8 +1872,13 @@ machines + 3 cameras off one PC) instead of one bigger machine.
     status/bundle runs; shared card library + configs), USB/power/camera
     sizing for 3 stations, single-GPU embed queue math, and a throughput
     table (~50k cards/8-h shift on a 3-machine v2 farm).
-  - **Phased roadmap:** Phase 0 firmware (PLAN.md) → v2 prototype → station
-    software → 3-machine farm.
+  - **Market comparison:** 3× v2 farm vs a ~$30k commercial sorter —
+    comparable throughput (~5,400–7,700/hr) at ~1/10 the cost, with honest
+    gaps (unattended reliability, 7 vs 20–100+ bins) and the ROI verdict.
+  - **Measurement gate:** the roadmap now orders *finish v1 software → build
+    + tune the first machine → measure cards/hr, error rate, jams &
+    double-feeds per 1,000 → cheap upgrades, re-measure → v2 → farm*, so
+    every hardware dollar is justified by a measured number.
 - `custom/README.md` + `custom/PLAN.md` — doc index updated to point at it.
 
 ### How to revert

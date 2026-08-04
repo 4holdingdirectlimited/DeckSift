@@ -212,21 +212,92 @@ collection liquidation, etc.) without a conveyor-belt machine.
 
 ---
 
-## 6. Phased roadmap
+## 7. vs commercial machines (the ~$30k question)
 
-- **Phase 0 — finish v1 firmware** (from `PLAN.md`): non-blocking state
-  machine, interrupt feeding, watchdogs. Proven on the current machine before
-  any new hardware. *(This also de-risks every later phase — the same firmware
-  runs on v2.)*
-- **Phase 1 — v2 prototype (one machine):** MG90S + bushings/bearings + steel
-  base plate + sorbothane feet + ASA/PETG print + brass inserts. Re-measure
-  the route timing; target **~1.7–2 s/card** sustained, jam-free, 10,000+
-  cycles without a stripped part.
-- **Phase 2 — station software:** `station_id` plumbing, per-station scanner
-  islands, 3 serial + 3 cameras on one PC. Verify one GPU serves 3 machines.
-- **Phase 3 — farm it out:** 3 machines running concurrently (phase 1 built
-  3×), injection-molded housings if volume justifies it, and a daily ops
-  routine (hopper load, bin empty, CSV export per machine).
+*“Could three upgraded units perform like a ~$30,000 sorting machine?”* — a
+legitimate ROI question, and the honest answer is: **on throughput, yes; on
+unattended reliability, not quite — and the trade is worth it for a single
+operator.**
 
-Each phase is independently shippable; Phase 0 and 2 are pure software, Phases
-1 and 3 are hardware.
+### What the commercial class typically is
+
+A $20–40k unit is usually a **conveyor or robotic-arm system**: industrial
+servo/stepper motion, a precision feeder, 20–100+ bins, a dedicated scanner,
+and vendor software with collection/set tools. Advertised throughput is often
+0.5–1.5 s/card, built to run long unattended shifts, with warranties and
+support. The catch: the price, plus vendor lock-in for card data and updates.
+
+### Our 3× v2 farm vs one commercial unit
+
+| Axis | Commercial (~$30k) | 3× Magic-Vault v2 (~$3–5k total) |
+| --- | --- | --- |
+| Throughput | ~3,600–7,200 cards/hr (1–2 s/card) | **~5,400–7,700 cards/hr** (3 × ~1.4–2 s) — comparable or better |
+| Bin capacity per run | 20–100+ | 7 per machine (but each machine can be configured for a different target set; bundle/chase/value modes do directed sorting) |
+| Unattended reliability | Industrial MTBF, self-clearing jams | Good after v2 hardening, but a jam still wants a human; per-machine attention scales linearly |
+| Feed consistency | Engineered feeders, low double-feed rate | The weak link; the v2 pinch-roller + encoder closes most of the gap |
+| Cost | $25–40k + subscriptions | ~$1k/machine (servos ~$30, Uno R4 ~$25, PCA9685 ~$8, camera ~$60, PSU ~$30, structure ~$100) |
+| Flexibility | Vendor-defined | Ours: shared library across machines, any game, rules/bundles in software, fully local, no subscriptions |
+| Labor model | Mostly unattended | Mostly attended (load hoppers, empty bins, clear the rare jam) |
+
+### Honest verdict
+
+- **If the job fits the 7-bin routing model** (bundles, set-chasing, value/rule
+  sorting) the farm **wins on ROI by ~10×** and matches a single commercial
+  unit's throughput.
+- **If you need a 60-bin overnight sort** (whole collections to individual
+  cards), commercial wins on bin capacity and unattended time — that's a
+  different machine for a different job, and not the goal here.
+- The commercial unit is **one machine at one speed**; the farm is **three
+  machines you can point at three different jobs** (e.g. one on bundles, one
+  chasing a set, one doing value rejects) sharing one card library and one PC.
+
+### The measurement gate (do this before believing any of the above)
+
+All of section 7 assumes the current machine is tuned and *measured*. Before
+spending on v2/multi-machine:
+
+1. Finish the v1 firmware (state machine + interrupt feeding — `PLAN.md`).
+2. Run the first machine on real card stock and record **cards/hour, error
+   rate, jams per 1,000 cards, and double-feed rate**. These four numbers are
+   the baseline every upgrade is judged against.
+3. Try the cheapest upgrades first (stability base, feeder tweaks) and
+   re-measure — only spend on MG90S/bearings/encoders where the baseline says
+   the bottleneck actually is.
+4. Only then decide the farm: the numbers will tell you if 3 machines buy you
+   the commercial-unit throughput at 1/10 the cost — or where the gaps make
+   it not worth it for your actual workloads.
+
+---
+
+## 8. Phased roadmap (revised)
+## 8. Phased roadmap (revised)
+
+Priority order is deliberate: **software first, then tune the single machine,
+measure it, and only then spend on v2/farm hardware.**
+
+- **Phase 0 — finish v1 firmware + current software** (from `PLAN.md`):
+  non-blocking state machine, interrupt feeding, watchdogs, plus any remaining
+  app work. Nothing else happens until the first machine runs the whole
+  scan → route → bin pipeline reliably.
+- **Phase 1 — build + tune the first machine:** assemble it, calibrate,
+  then run the **measurement gate** (§7): cards/hour, error rate, jams and
+  double-feeds per 1,000. Fix what the numbers say is broken (feeder first —
+  it is almost always the bottleneck). Re-measure after every change.
+- **Phase 2 — cheap upgrades, measured:** stability base + sorbothane feet,
+  feeder tweaks — the low-cost changes that shorten the blind routing delays.
+  Re-measure. Only the bottlenecks that survive this get the expensive
+  treatment (MG90S, bearings, comparator/encoder) in Phase 3.
+- **Phase 3 — v2 prototype (one machine):** the hardened parts from §1–§4
+  (ASA/PETG + brass inserts, bearings, pinch roller, encoder, comparator).
+  Target **~1.7–2 s/card** sustained. Re-measure against the Phase 2 numbers;
+  if the upgrade didn't move the metric, don't replicate it three times.
+- **Phase 4 — station software:** `station_id` plumbing, per-station scanner
+  islands, 3 serial + 3 cameras on one PC; verify one GPU serves 3 machines.
+- **Phase 5 — the farm:** 3 machines running concurrently (build the third
+  machine only if Phase 3's numbers justify it), injection-molded housings if
+  volume is real, daily ops routine (hopper load, bin empty, per-machine CSV
+  export).
+
+Each phase is independently shippable; Phases 0, 2 and 4 are mostly software
+or cheap, and every hardware decision is gated on a measured number rather
+than enthusiasm.
