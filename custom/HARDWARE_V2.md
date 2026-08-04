@@ -212,44 +212,76 @@ collection liquidation, etc.) without a conveyor-belt machine.
 
 ---
 
-## 7. vs commercial machines (the ~$30k question)
+## 7. vs commercial machines (the Roca question)
 
-*“Could three upgraded units perform like a ~$30,000 sorting machine?”* — a
-legitimate ROI question, and the honest answer is: **on throughput, yes; on
-unattended reliability, not quite — and the trade is worth it for a single
-operator.**
+*“Could three upgraded units perform like a ~$25–30k Roca?”* — now we can
+answer it with real numbers, because TCGplayer publishes the specs:
 
-### What the commercial class typically is
+| Machine | Cost | Capacity | Throughput | Notes |
+| --- | --- | --- | --- | --- |
+| **Roca Sorter** | ~$25k | 1,000-card batch | **Sort 500/hr · Sift 725/hr** | Alphabetizes + digitizes; ~2 h per 1,000-card batch; over 50 programmed sorts; **Yu-Gi-Oh! needs a separate machine** (different card size) |
+| Roca Sorter Max | ~$40k | 3,000-card run | Sort 300/hr · Sift 450/hr | Same, bigger batch |
+| Roca Sifter | ~$2–3k | single/stream | **1,800/hr sift** | Compact add-on: reads cards **in premium sleeves**, separates foil/non-foil, any orientation; designed to feed the Sorter |
 
-A $20–40k unit is usually a **conveyor or robotic-arm system**: industrial
-servo/stepper motion, a precision feeder, 20–100+ bins, a dedicated scanner,
-and vendor software with collection/set tools. Advertised throughput is often
-0.5–1.5 s/card, built to run long unattended shifts, with warranties and
-support. The catch: the price, plus vendor lock-in for card data and updates.
+### The headline: we're already faster on raw sorting
 
-### Our 3× v2 farm vs one commercial unit
-
-| Axis | Commercial (~$30k) | 3× Magic-Vault v2 (~$3–5k total) |
+| Config | Cards/hr (sort) | vs Roca Sorter |
 | --- | --- | --- |
-| Throughput | ~3,600–7,200 cards/hr (1–2 s/card) | **~5,400–7,700 cards/hr** (3 × ~1.4–2 s) — comparable or better |
-| Bin capacity per run | 20–100+ | 7 per machine (but each machine can be configured for a different target set; bundle/chase/value modes do directed sorting) |
-| Unattended reliability | Industrial MTBF, self-clearing jams | Good after v2 hardening, but a jam still wants a human; per-machine attention scales linearly |
-| Feed consistency | Engineered feeders, low double-feed rate | The weak link; the v2 pinch-roller + encoder closes most of the gap |
-| Cost | $25–40k + subscriptions | ~$1k/machine (servos ~$30, Uno R4 ~$25, PCA9685 ~$8, camera ~$60, PSU ~$30, structure ~$100) |
-| Flexibility | Vendor-defined | Ours: shared library across machines, any game, rules/bundles in software, fully local, no subscriptions |
-| Labor model | Mostly unattended | Mostly attended (load hoppers, empty bins, clear the rare jam) |
+| Our v1 (current, ~3 s/card) | **~1,200** | **2.4×** |
+| Our v2 (one machine, ~1.7 s/card) | **~2,100** | **4.2×** |
+| Our 3× v2 farm | **~6,300** | **~12.6×** |
+
+**So on raw “put these cards in those bins” throughput, one of our v1 machines
+already beats the $25k Roca Sorter, and the farm is an order of magnitude
+ahead.** Roca's price buys *other* capabilities, not speed. Where Roca genuinely
+wins:
+
+1. **Alphabetizing & full inventory ordering** — Roca sorts a batch into a
+   complete, sell-ready order (we route to 7 bins).
+2. **Digitization + TCGplayer integration** — every card read to a database
+   and listable in one workflow (we record scans, but don't list).
+3. **Sleeved-card handling** (Sifter) — reads cards *in premium sleeves*; we
+   require unsleeved cards.
+4. **Foil sifting at scale** — Sifter's foil separation is industry-proven; our
+   holo detection is still in calibration.
+5. **Unattended batch runs** — load 1,000, walk away for 2 h. Ours wants a
+   hopper re-load and bin-empty roughly every ~500–1,500 cards.
+6. **Orientation tolerance** — Roca reads cards in any orientation; our scan
+   region expects a fixed orientation (feeder-straightened).
+7. **Service/warranty + dedicated support.**
+
+And where **we** win beyond cost:
+
+- **One machine, all games** — Roca requires a *separate $25k unit* for YGO;
+  our single unit handles MTG/YGO/Pokémon/Digimon/Gundam (and any added TCG)
+  by changing the collection.
+- **Cost:** ~$1k/machine → ~$3–5k for the 3-machine farm vs $25–75k of Roca
+  hardware (Sorter + Max + Sifter + YGO unit).
+- **No subscriptions or lock-in** — Roca sells a Software & Service Plan;
+  ours is local and free forever.
+- **Directed sorting tools Roca lacks:** bundle mode (Roca has “Pack Creator”,
+  comparable), set-chase, wishlist routing, per-card value rules, per-bin
+  capacity management.
+
+### What to borrow from Roca (the “similar tools” worth copying)
+
+- **Sleeve-tolerant feeding** — a feeder that handles sleeved cards would let
+  us sort inventory without unsleeving. Big workflow win for a store.
+- **Orientation-tolerant reading** — relax the scan-region constraint (or add
+  a rotation-tolerant crop) so cards needn't be perfectly aligned.
+- **Foil sift as a first-class mode** — a dedicated “foil / non-foil” sift
+  pass (our two-frame holo detection, run as a pure sift) mirrors the Sifter.
+- **Batch digitization** — a “digitize this hopper” mode that scans + records
+  every card without sorting (feeds the library + collection DB).
 
 ### Honest verdict
 
-- **If the job fits the 7-bin routing model** (bundles, set-chasing, value/rule
-  sorting) the farm **wins on ROI by ~10×** and matches a single commercial
-  unit's throughput.
-- **If you need a 60-bin overnight sort** (whole collections to individual
-  cards), commercial wins on bin capacity and unattended time — that's a
-  different machine for a different job, and not the goal here.
-- The commercial unit is **one machine at one speed**; the farm is **three
-  machines you can point at three different jobs** (e.g. one on bundles, one
-  chasing a set, one doing value rejects) sharing one card library and one PC.
+For **bins, bundles, chase sets, and value/rule sorting**, three of our
+machines beat a $25k Roca on throughput by ~10× and on cost by ~5–10×. What
+Roca buys that we don't have is *complete inventory digitization +
+alphabetization + sleeved-card handling + unattended autonomy* — those are
+feature gaps, not speed gaps, and the top two (sleeve feed, digitize mode)
+are on the v2 ideas list above.
 
 ### The measurement gate (do this before believing any of the above)
 
@@ -259,17 +291,17 @@ spending on v2/multi-machine:
 1. Finish the v1 firmware (state machine + interrupt feeding — `PLAN.md`).
 2. Run the first machine on real card stock and record **cards/hour, error
    rate, jams per 1,000 cards, and double-feed rate**. These four numbers are
-   the baseline every upgrade is judged against.
+   the baseline every upgrade is judged against (and the honest test of the
+   1,200/hr claim above).
 3. Try the cheapest upgrades first (stability base, feeder tweaks) and
    re-measure — only spend on MG90S/bearings/encoders where the baseline says
    the bottleneck actually is.
 4. Only then decide the farm: the numbers will tell you if 3 machines buy you
-   the commercial-unit throughput at 1/10 the cost — or where the gaps make
-   it not worth it for your actual workloads.
+   the Roca-class throughput at 1/10 the cost — or where the gaps make it not
+   worth it for your actual workloads.
 
 ---
 
-## 8. Phased roadmap (revised)
 ## 8. Phased roadmap (revised)
 
 Priority order is deliberate: **software first, then tune the single machine,
