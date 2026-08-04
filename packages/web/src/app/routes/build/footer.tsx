@@ -1,5 +1,5 @@
+import { DeckSiftMark } from "@/components/decksift-mark";
 import { UPSTREAM_URL } from "@/lib/links";
-import { IconPigFilled } from "@tabler/icons-react";
 import { Link } from "react-router-dom";
 
 export function BuildFooter() {
@@ -7,9 +7,7 @@ export function BuildFooter() {
     <footer className="border-t">
       <div className="mx-auto flex max-w-4xl flex-col items-center justify-between gap-4 px-4 py-8 sm:flex-row">
         <Link to="/" className="flex items-center gap-2">
-          <span className="grid size-6 shrink-0 place-items-center rounded-md bg-primary text-primary-foreground">
-            <IconPigFilled className="size-3.5" />
-          </span>
+          <DeckSiftMark className="size-6 rounded-md" />
           <span className="font-heading text-xs font-semibold">
             DeckSift
           </span>
@@ -20,7 +18,7 @@ export function BuildFooter() {
             Open source
           </Link>
           <a
-            href="https://github.com/4holdingdirectlimited/mault/issues/new"
+            href="https://github.com/4holdingdirectlimited/DeckSift/issues/new"
             target="_blank"
             rel="noopener noreferrer"
             className="transition-colors hover:text-foreground"

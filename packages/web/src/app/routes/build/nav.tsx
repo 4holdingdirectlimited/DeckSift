@@ -36,7 +36,7 @@ export function BuildNav() {
             Assembly
           </a>
           <a
-            href="https://github.com/4holdingdirectlimited/mault/issues/new"
+            href="https://github.com/4holdingdirectlimited/DeckSift/issues/new"
             target="_blank"
             rel="noopener noreferrer"
             className="transition-colors hover:text-foreground"

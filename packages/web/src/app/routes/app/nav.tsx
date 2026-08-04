@@ -1,4 +1,5 @@
 import { ThemeToggle } from "@/components/theme-toggle";
+import { DeckSiftMark } from "@/components/decksift-mark";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -20,7 +21,6 @@ import {
   IconLayoutSidebarLeftCollapse,
   IconLayoutSidebarLeftExpand,
   IconLibrary,
-  IconPigFilled,
   IconSettings,
   IconWifi,
 } from "@tabler/icons-react";
@@ -276,9 +276,7 @@ export function AppNav() {
             expanded ? "h-8 mx-2" : "size-8 justify-center",
           )}
         >
-          <span className="bg-primary grid size-8 shrink-0 place-items-center rounded-lg text-primary-foreground">
-            <IconPigFilled className="size-4" />
-          </span>
+          <DeckSiftMark className="size-8 rounded-lg" />
           {expanded && (
             <span className="font-bold font-heading text-sm">DeckSift</span>
           )}

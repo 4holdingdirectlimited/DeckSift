@@ -30,7 +30,7 @@ export function LandingOpenSource() {
 
       <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <div className="flex flex-col gap-3 rounded-lg border bg-card p-6">
-          <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
+          <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-primary/20 via-primary/10 to-transparent text-primary ring-1 ring-primary/20">
             <IconBrandGithub size={18} />
           </span>
           <div>
@@ -55,7 +55,7 @@ export function LandingOpenSource() {
         </div>
 
         <div className="flex flex-col gap-3 rounded-lg border bg-card p-6">
-          <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
+          <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-primary/20 via-primary/10 to-transparent text-primary ring-1 ring-primary/20">
             <IconBrandGithub size={18} />
           </span>
           <div>
@@ -83,7 +83,7 @@ export function LandingOpenSource() {
         </div>
 
         <div className="flex flex-col gap-3 rounded-lg border bg-card p-6">
-          <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
+          <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-primary/20 via-primary/10 to-transparent text-primary ring-1 ring-primary/20">
             <IconCube size={18} />
           </span>
           <div>
@@ -116,7 +116,7 @@ export function LandingOpenSource() {
         </div>
 
         <div className="flex flex-col gap-3 rounded-lg border bg-card p-6">
-          <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
+          <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-primary/20 via-primary/10 to-transparent text-primary ring-1 ring-primary/20">
             <IconBrandDiscord size={18} />
           </span>
           <div>

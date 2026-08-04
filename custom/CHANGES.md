@@ -2028,7 +2028,9 @@ DeckSift team.
   firmware modifications, revised Bambu Lab print kit — is credited to
   4holdingdirectlimited.
 - **"Report an issue"** — build guide footer/nav now point at
-  `4holdingdirectlimited/mault/issues` instead of the upstream repo.
+  `4holdingdirectlimited/DeckSift/issues` instead of the upstream repo.
+- **Repo renamed** on GitHub from `mault` to **`DeckSift`**; the git
+  `origin` remote and all fork-repo links now use the new URL.
 - **README / custom docs** — rewritten intro, Credits, license summary, and
   PRODUCT.md positioning for the personal-free / commercial-by-license model.
 - **Not changed (deliberately):** the `@magic-vault/*` package names, the

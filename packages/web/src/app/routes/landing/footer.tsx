@@ -1,5 +1,6 @@
+import { DeckSiftMark } from "@/components/decksift-mark";
 import { DISCORD_URL, UPSTREAM_URL } from "@/lib/links";
-import { IconBrandDiscord, IconPigFilled } from "@tabler/icons-react";
+import { IconBrandDiscord } from "@tabler/icons-react";
 import { Link } from "react-router-dom";
 
 export function LandingFooter() {
@@ -7,9 +8,7 @@ export function LandingFooter() {
     <footer className="border-t">
       <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-4 py-8 sm:flex-row">
         <Link to="/" className="flex items-center gap-2">
-          <span className="grid size-6 shrink-0 place-items-center rounded-md bg-primary text-primary-foreground">
-            <IconPigFilled className="size-3.5" />
-          </span>
+          <DeckSiftMark className="size-6 rounded-md" />
           <span className="font-heading text-xs font-semibold">
             DeckSift
           </span>

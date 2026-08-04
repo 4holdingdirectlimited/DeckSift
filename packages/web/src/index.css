@@ -170,9 +170,56 @@ code {
   }
   body {
     @apply font-sans bg-background text-foreground;
-    @apply font-sans bg-background text-foreground;
   }
   html {
     @apply font-sans;
   }
+}
+
+/* DeckSift brand helpers (landing + hero) */
+@utility bg-grid {
+  background-image:
+    linear-gradient(to right, var(--border) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--border) 1px, transparent 1px);
+  background-size: 44px 44px;
+}
+
+@utility text-gradient {
+  background: linear-gradient(
+    120deg,
+    var(--primary) 0%,
+    oklch(0.62 0.2 270) 55%,
+    oklch(0.7 0.17 300) 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+@utility glow-primary {
+  box-shadow: 0 0 60px -12px color-mix(in oklch, var(--primary) 45%, transparent);
+}
+
+/* Animated scan beam used in the landing hero's "live console" mockup. */
+@keyframes decksift-scan {
+  0%,
+  100% {
+    top: 12%;
+    opacity: 0.3;
+  }
+  50% {
+    top: 86%;
+    opacity: 0.95;
+  }
+}
+
+.scan-beam {
+  position: absolute;
+  left: 5%;
+  right: 5%;
+  height: 2px;
+  border-radius: 9999px;
+  background: linear-gradient(90deg, transparent, var(--primary), transparent);
+  animation: decksift-scan 3.4s ease-in-out infinite;
+  pointer-events: none;
 }

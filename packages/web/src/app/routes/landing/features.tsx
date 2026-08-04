@@ -18,7 +18,7 @@ const FEATURES = [
     icon: IconAdjustments,
     title: "Rules you control",
     description:
-      "Mix and match conditions - rarity, color, set, type and more - to route cards exactly where you want.",
+      "Mix and match conditions - rarity, color, set, type, value and more - to route cards exactly where you want.",
   },
   {
     icon: IconFolders,
@@ -30,13 +30,13 @@ const FEATURES = [
     icon: IconChartBar,
     title: "Know what you own",
     description:
-      "See counts, rarities, and sets across your whole library - no more guessing what's in the box.",
+      "See counts, rarities, sets, and value across your whole library - no more guessing what's in the box.",
   },
   {
     icon: IconStack2,
-    title: "Every card logged",
+    title: "Bundles & chase sets",
     description:
-      "Each scan is saved automatically, so your collection stays accurate without extra bookkeeping.",
+      "Assemble fixed-composition bundles with no duplicates, or route every missing card from a set into one pile.",
   },
   {
     icon: IconDeviceDesktop,
@@ -50,7 +50,10 @@ export function LandingFeatures() {
   return (
     <section id="features" className="mx-auto max-w-6xl px-4 py-20">
       <div className="mx-auto max-w-2xl text-center">
-        <h2 className="font-heading text-2xl font-semibold tracking-tight md:text-3xl">
+        <span className="font-mono text-[11px] font-semibold uppercase tracking-widest text-primary">
+          Features
+        </span>
+        <h2 className="mt-2 font-heading text-2xl font-semibold tracking-tight md:text-3xl">
           Everything you need to get organized
         </h2>
         <p className="mt-3 text-sm/relaxed text-muted-foreground md:text-base/relaxed">
@@ -63,9 +66,9 @@ export function LandingFeatures() {
         {FEATURES.map((feature) => (
           <div
             key={feature.title}
-            className="flex flex-col gap-3 rounded-lg border bg-card p-5"
+            className="group flex flex-col gap-3 rounded-xl border bg-card p-5 transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md"
           >
-            <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
+            <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-primary/20 via-primary/10 to-transparent text-primary ring-1 ring-primary/20">
               <feature.icon size={18} />
             </span>
             <div>
