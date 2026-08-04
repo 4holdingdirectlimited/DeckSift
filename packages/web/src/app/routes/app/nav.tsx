@@ -26,7 +26,7 @@ import {
 } from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useState } from "react";
-import { NavLink } from "react-router-dom";
+import { Link, NavLink } from "react-router-dom";
 
 const EXPANDED_KEY = "sidebarExpanded";
 
@@ -271,17 +271,22 @@ export function AppNav() {
     >
       <Tooltip>
         <TooltipTrigger
-          className={cn(
-            "flex items-center gap-2 cursor-default shrink-0",
-            expanded ? "h-8 mx-2" : "size-8 justify-center",
-          )}
+          render={
+            <Link
+              to="/"
+              className={cn(
+                "flex items-center gap-2 shrink-0",
+                expanded ? "h-8 mx-2" : "size-8 justify-center",
+              )}
+            />
+          }
         >
           <DeckSiftMark className="size-8 rounded-lg" />
           {expanded && (
             <span className="font-bold font-heading text-sm">DeckSift</span>
           )}
         </TooltipTrigger>
-        <TooltipContent side="right">v{__APP_VERSION__}</TooltipContent>
+        <TooltipContent side="right">Home · v{__APP_VERSION__}</TooltipContent>
       </Tooltip>
       <Separator />
       <nav
