@@ -106,7 +106,11 @@ export function RequireCollectionDialog() {
                   </SelectTrigger>
                   <SelectContent>
                     {activeGames.map((game) => (
-                      <SelectItem key={game.guid} value={game.guid}>
+                      <SelectItem
+                        key={game.guid}
+                        value={game.guid}
+                        label={game.name}
+                      >
                         {game.name}
                       </SelectItem>
                     ))}

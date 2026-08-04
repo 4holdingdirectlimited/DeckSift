@@ -334,7 +334,11 @@ export function CollectionSwitcher() {
                     </SelectTrigger>
                     <SelectContent>
                       {activeGames.map((game) => (
-                        <SelectItem key={game.guid} value={game.guid}>
+                        <SelectItem
+                          key={game.guid}
+                          value={game.guid}
+                          label={game.name}
+                        >
                           {game.name}
                         </SelectItem>
                       ))}

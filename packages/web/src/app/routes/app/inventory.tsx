@@ -239,10 +239,10 @@ export default function InventoryPage() {
         open={!!deleteTarget}
         onOpenChange={(open) => !open && setDeleteTarget(null)}
         title="Delete Bundle"
-        description={`Permanently deletes "${deleteTarget?.sku ?? deleteTarget?.guid.slice(0, 8)}" (${deleteTarget?.configName}) and its card list. This cannot be undone — export the CSV first if you need a record.`}
+        description={`Permanently deletes "${deleteTarget?.sku || deleteTarget?.guid.slice(0, 8)}" (${deleteTarget?.configName}) and its card list. This cannot be undone — export the CSV first if you need a record. Type the identifier shown above to confirm.`}
         confirm={{
           type: "name",
-          name: deleteTarget?.sku ?? deleteTarget?.guid ?? "",
+          name: deleteTarget?.sku || deleteTarget?.guid.slice(0, 8) || "",
         }}
         onConfirm={handleDelete}
       />
