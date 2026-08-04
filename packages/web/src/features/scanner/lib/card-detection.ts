@@ -96,6 +96,67 @@ export function extractCardImage(
 }
 
 /**
+ * Rotate a canvas 180° in place (new canvas, same dimensions).
+ */
+function rotate180(canvas: HTMLCanvasElement): HTMLCanvasElement {
+  const out = document.createElement("canvas");
+  out.width = canvas.width;
+  out.height = canvas.height;
+  const ctx = out.getContext("2d");
+  if (!ctx) return canvas;
+  ctx.translate(out.width / 2, out.height / 2);
+  ctx.rotate(Math.PI);
+  ctx.drawImage(canvas, -canvas.width / 2, -canvas.height / 2);
+  return out;
+}
+
+/**
+ * Orientation-tolerant crop: detect whether the card in the capture region is
+ * upside down (fed end-over-end) and rotate it upright.
+ *
+ * Cards are asymmetric: upright, the light name bar sits at the top and the
+ * dense rules-text box at the bottom. Every supported TCG follows that layout
+ * (MTG/YGO/Digimon/Gundam/Pokémon), so the average ink density of the top vs
+ * bottom band is a reliable flip signal. The decision is conservative — a
+ * weak or ambiguous signal leaves the card as-fed rather than risk a wrong
+ * 180° flip (wrongly flipped cards simply no-match, which is visible).
+ */
+export function autoOrientCard(canvas: HTMLCanvasElement): HTMLCanvasElement {
+  const W = canvas.width;
+  const H = canvas.height;
+  if (W === 0 || H === 0) return canvas;
+
+  // Downscale to a tiny grayscale pass — fast and noise-tolerant.
+  const SW = 32;
+  const SH = Math.max(8, Math.round(SW * (H / W)));
+  const small = document.createElement("canvas");
+  small.width = SW;
+  small.height = SH;
+  const ctx = small.getContext("2d", { willReadFrequently: true });
+  if (!ctx) return canvas;
+  ctx.drawImage(canvas, 0, 0, SW, SH);
+  const { data } = ctx.getImageData(0, 0, SW, SH);
+
+  // Compare the top and bottom bands (the name bar zone vs the text-box zone).
+  const band = Math.max(1, Math.floor(SH * 0.12));
+  let topSum = 0;
+  let bottomSum = 0;
+  for (let y = 0; y < band; y++) {
+    for (let x = 0; x < SW; x++) {
+      const i = (y * SW + x) * 4;
+      const j = ((SH - 1 - y) * SW + x) * 4;
+      topSum += (data[i] + data[i + 1] + data[i + 2]) / 3;
+      bottomSum += (data[j] + data[j + 1] + data[j + 2]) / 3;
+    }
+  }
+  const diff = topSum / (band * SW) - bottomSum / (band * SW);
+
+  // diff > 0 → top lighter → upright. diff < -threshold → flipped.
+  if (diff < -10) return rotate180(canvas);
+  return canvas;
+}
+
+/**
  * Scan row-wise vertical gradients to find the y-position of a strong
  * horizontal edge within a vertical band [yMinFrac, yMaxFrac].
  * Returns the row index and its gradient score.

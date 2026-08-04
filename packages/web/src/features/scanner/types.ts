@@ -34,6 +34,9 @@ export interface ScannedCardsContextValue {
   elapsedMs: number;
   isTimerActive: boolean;
   setAutoFeed: (enabled: boolean) => void;
+  /** Digitize mode: scan + record every card without sorting (routes to catch-all). */
+  digitize: boolean;
+  setDigitize: (enabled: boolean) => void;
   addCard: (
     card: PlayingCardWithDistance,
     capturedImageUrl?: string,

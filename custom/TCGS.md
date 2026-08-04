@@ -103,3 +103,50 @@ Notes:
 2. **Flesh and Blood** (fabdb) — likely the fastest add if the endpoint checks
    out.
 3. Anything else from the table on demand — one config + one sync each.
+
+## Future: TCGplayer integration (digitize → price → list)
+
+Investigation summary (2026-08) — this is a **plan**, not yet built. It pairs
+with the scanner's **Digitize mode**: bulk-record cards, then turn that record
+into priced, listable inventory.
+
+### What the API offers (v1.39, verified)
+
+| Area | Endpoints | Notes |
+| --- | --- | --- |
+| **Catalog** | categories / groups (sets) / products / SKUs / GTIN lookup / category search | Products = a unique printing; SKUs = product × condition. Search is the matching path (name + set + collector #). |
+| **Pricing** | market price by product/SKU/group, buylist prices | Per-request, key-gated — **no bulk price dump** like Scryfall; needs an on-demand cache |
+| **Inventory** | product lists (digital buylists) | |
+| **Stores** | seller inventory (SKU qty/prices, batch updates), orders, order manifests, customers, shipping | Order manifest ≈ Roca's “Sort to Ship” |
+
+### Requirements / blockers
+
+1. **OAuth 2.0 with a TCGplayer seller account + API application approval.**
+   The API is for sellers; keys are granted per-application. This is the
+   gate — no key, no integration.
+2. **Product/SKU matching.** Every synced card must be matched to a TCGplayer
+   productId (then SKUId by condition). A “match to TCGplayer” sync job
+   (name + set + collector number → catalog search → store productId) is the
+   biggest chunk of work and the accuracy risk.
+3. **Prices are per-request** — cache them (same pattern as the art cache:
+   on-demand lookup, store `price_updated_at`, refresh daily).
+4. **Condition grading** — TCGplayer sells by condition (Near Mint, Lightly
+   Played…). Our scans don't grade; the operator sets a default condition
+   (usually NM) per export.
+
+### Suggested roadmap (low-friction first)
+
+1. **Bulk-inventory CSV export (no API needed):** a “TCGplayer CSV” export
+   from a collection/digitize session — SKU-free but TCGplayer's portal
+   accepts name/set/number + quantity + price + condition uploads for manual
+   listing. This is the 80/20 win and needs zero API access.
+2. **Price source adapter:** with API keys, a `tcgplayer` price source in the
+   same family as Scryfall/YGO — fills `prices.usd` for value rules + bundle
+   value, cached per card.
+3. **Catalog match job:** resolve every synced card to a productId/SKUId and
+   persist it (one-time per game, then incrementally for new sets).
+4. **Full automation (optional):** store inventory sync (prices/qty via batch
+   endpoints), order manifest → sort-to-ship using our bundle/chase data.
+
+Revisit when a seller account with API access exists — the scanner side
+(digitize mode) is already built so the integration is additive.

@@ -1887,6 +1887,49 @@ machines + 3 cameras off one PC) instead of one bigger machine.
 
 1. Delete `custom/HARDWARE_V2.md` and revert the index links.
 
+## Item 44 — Orientation-tolerant crop + digitize mode (web + shared)
+
+**Status:** implemented, uncommitted.
+
+### Why
+
+Two scanner capabilities that move toward the v2/Roca-style workflow:
+(a) cards fed upside-down (end-over-end) previously failed to match because
+SigLIP embeddings are orientation-sensitive; (b) bulk-recording a library
+(before pricing/listing) needed a “record everything, sort nothing” mode.
+
+### What changed
+
+- **Orientation-tolerant crop** — `autoOrientCard()` in
+  `packages/web/src/features/scanner/lib/card-detection.ts`: after the fixed
+  scan-region crop, a cheap downscaled grayscale pass compares the ink density
+  of the top vs bottom bands (light name bar vs dense rules-text box — a
+  layout shared by every supported TCG) and rotates the crop 180° when it is
+  clearly flipped. Conservative threshold: ambiguous cards stay as-fed
+  (a wrong flip would no-match, which is visible). Wired into the capture
+  path in `use-card-scanner.ts` so foil detection and the upload both see an
+  upright card.
+- **Digitize mode** — `digitize` / `setDigitize` on the scanned-cards
+  context; when on, `addCard` records the scan but bypasses bundle/chase/
+  wishlist/bin rules entirely and routes to the catch-all bin (capacity
+  check included) so the machine keeps moving. New `DigitizeModeToggle` in
+  the scanner sidebar (all three layouts).
+- **Sleeved capacity (shared)** — `CARD_THICKNESS_SLEEVED_MM = 0.7` and
+  `computeBinCapacity(bin, thickness)` so the app's capacity model can switch
+  to sleeved limits with one value (v2 sleeve-tolerant work).
+- **Docs** — `custom/HARDWARE_V2.md` gained a “Sleeve tolerance” section
+  (gaps, foil calibration on sleeves, capacity); `custom/TCGS.md` gained the
+  TCGplayer integration investigation + roadmap; `custom/SETUP.md` documents
+  both new scanner features. Alphabetizing is explicitly out of scope.
+
+### How to revert
+
+1. Remove the `autoOrientCard` call in `use-card-scanner.ts` and the
+   function in `card-detection.ts`.
+2. Remove the digitize branch in `use-scanned-cards.tsx`, the context
+   fields, and `DigitizeModeToggle`.
+3. Drop the sleeved constant (keep `computeBinCapacity` with its default).
+
 ---
 
 *Template for future entries:*

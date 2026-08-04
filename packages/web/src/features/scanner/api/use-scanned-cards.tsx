@@ -49,6 +49,11 @@ export function ScannedCardsProvider({
 }) {
   const [cards, setCards] = useState<ScannedCard[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [digitize, setDigitize] = useState(false);
+  const digitizeRef = useRef(digitize);
+  useEffect(() => {
+    digitizeRef.current = digitize;
+  }, [digitize]);
   const { configs: binConfigs, fieldDefinitions } = useBinConfigs();
   const { sendBin, sendFeed, isConnected, isReady } = useSerial();
   const { activeCollection } = useCollections();
@@ -447,6 +452,42 @@ export function ScannedCardsProvider({
       if (!effectiveImage && capturedImageUrl) {
         effectiveImage = capturedImageUrl;
         capturedImageRef.current[card.id] = effectiveImage;
+      }
+
+      // ── Digitize mode: scan + record every card, no sorting. The physical
+      // card routes to the catch-all so the machine keeps moving; the scan
+      // record still grows the collection/library database.
+      if (digitizeRef.current) {
+        const catchAll = getCatchAllBin(binConfigsRef.current);
+        const binNumber = catchAll?.binNumber;
+        const destCapacity = binNumber
+          ? binConfigsRef.current.find((b) => b.binNumber === binNumber)
+              ?.maxCapacity ?? 0
+          : 0;
+        if (
+          binNumber != null &&
+          destCapacity > 0 &&
+          (binCountsRef.current[binNumber] ?? 0) >= destCapacity
+        ) {
+          pauseForFullBin(binNumber);
+          return;
+        }
+        const record: ScannedCard = {
+          scanId: generateScanId(),
+          card,
+          scannedAt: Date.now(),
+          binNumber,
+          capturedImageUrl: effectiveImage,
+          isFoil: isFoil ?? false,
+          alternativeMatches: alternativeMatches?.length
+            ? alternativeMatches
+            : undefined,
+        };
+        commitScan(record, binNumber);
+        toast.success(`Digitized: ${card.name}`, {
+          description: "Recorded without sorting (catch-all).",
+        });
+        return;
       }
 
       // ── Bundle mode: the active run decides the bin ──
@@ -850,6 +891,8 @@ export function ScannedCardsProvider({
         elapsedMs,
         isTimerActive,
         setAutoFeed,
+        digitize,
+        setDigitize,
         registerCardArrivedHook,
         registerPauseHook,
         registerResumeHook,

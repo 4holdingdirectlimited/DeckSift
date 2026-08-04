@@ -10,6 +10,7 @@ import {
 import {
   canvasToBlob,
   drawDetectionOverlay,
+  autoOrientCard,
   extractCardImage,
   getDefaultCardContour,
 } from "@/features/scanner/lib/card-detection";
@@ -86,7 +87,7 @@ async function searchCardImage(
   isFoil: boolean;
 }> {
   const warp = (c: HTMLCanvasElement) =>
-    contour ? extractCardImage(c, contour) : c;
+    contour ? autoOrientCard(extractCardImage(c, contour)) : c;
   const canvasA = warp(canvas);
 
   // Frame A (scan light off): static foil heuristic. If it's clearly a matte

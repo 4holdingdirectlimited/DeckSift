@@ -189,6 +189,14 @@ The **Wishlist** panel sits on the scanner page (left sidebar).
 - **Export CSV** — toolbar button on the scanner page downloads
   `collection-<date>.csv` (name, set, rarity, collector #, price, qty, foil,
   bin) for everything scanned this session.
+- **Digitize mode** — toggle in the scanner sidebar. When on, every scanned
+  card is recorded to the collection but **not sorted**: no bin rules, bundles,
+  chase, or wishlist apply, and cards route to the catch-all bin so the
+  machine keeps moving. Use it to bulk-record a library (e.g. for later
+  pricing or TCGplayer listing) without deciding where anything goes.
+- **Orientation tolerance** — the scan crop auto-detects a card fed upside
+  down (180°) and rotates it upright before matching, so cards don't need to
+  be perfectly aligned end-over-end.
 - **Duplicates** — toolbar button lists every card scanned more than once, so
   doubles are easy to spot.
 - **Set completeness** — switch on the library page; enter a set code and see

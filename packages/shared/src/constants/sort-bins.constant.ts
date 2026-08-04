@@ -15,8 +15,10 @@ export const BIN_COUNT = 7;
 //   maxCapacity = floor((binHeightMm / cardThicknessMm) * headroom)
 //
 // with a 10% headroom so the top cards never jam against the mechanism above
-// the stack. Average unsleeved trading-card thickness is ~0.3 mm.
+// the stack. Average unsleeved trading-card thickness is ~0.3 mm; a card in a
+// premium sleeve is roughly ~0.7 mm (v2 sleeve-tolerant work halves capacity).
 export const CARD_THICKNESS_MM = 0.3;
+export const CARD_THICKNESS_SLEEVED_MM = 0.7;
 export const BIN_HEADROOM_FACTOR = 0.9;
 /** Bin number → usable card height in mm. */
 export const BIN_HEIGHTS_MM: Record<number, number> = {
@@ -29,10 +31,17 @@ export const BIN_HEIGHTS_MM: Record<number, number> = {
   7: 60,
 };
 
-export function computeBinCapacity(binNumber: number): number {
+/**
+ * Card capacity of a bin. Pass a sleeved thickness to compute the v2
+ * sleeve-tolerant limits; the default keeps the unsleeved behaviour.
+ */
+export function computeBinCapacity(
+  binNumber: number,
+  thickness = CARD_THICKNESS_MM,
+): number {
   const height = BIN_HEIGHTS_MM[binNumber];
   if (!height) return 0;
-  return Math.floor((height / CARD_THICKNESS_MM) * BIN_HEADROOM_FACTOR);
+  return Math.floor((height / thickness) * BIN_HEADROOM_FACTOR);
 }
 
 export function computeAllBinCapacities(): Record<number, number> {

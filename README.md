@@ -30,6 +30,8 @@ Original hardware build: https://makerworld.com/en/models/3066180-tcg-card-sorti
 - **Holo/foil detection** — two-frame scan light (firmware-controlled LED) + heuristic classifier, with a smart skip so matte cards only need one frame
 - **Sound bin-full logic** — per-bin status vs physical capacity, per-bin Empty/reset, and pause-on-overflow so a bin can never silently overflow
 - **Collection tools** — export everything scanned as CSV, a duplicate report, a set-completeness view, and a card library browser with set/rarity filters
+- **Digitize mode** — bulk-record a library without sorting: every scanned card is saved to the collection while cards route to the catch-all bin
+- **Orientation tolerance** — cards fed upside-down are auto-rotated before matching, so alignment is relaxed
 - **Card grid** sorting (by name, price, rarity, etc.) adapts automatically to whichever game a collection uses
 - **Remote monitoring** — watch an in-progress scan session live from another device on your LAN
 - **Discord notifications** (optional) for sorter errors/jams

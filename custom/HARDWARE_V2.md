@@ -137,6 +137,38 @@ before the card does.
   cards + dry air = static cling), and a replaceable wear strip where the
   pusher face contacts cards.
 
+### Sleeve tolerance (v2 design decision)
+
+v2 should sort **sleeved cards** (a store's inventory lives in sleeves; Roca's
+Sifter already reads them). Every tolerance that currently assumes a bare
+0.3 mm card needs a sleeved variant:
+
+- **Bin capacity halves:** a premium sleeve ≈ 0.4 mm + the 0.3 mm card ≈
+  **0.7 mm** total. The shared constants now expose
+  `CARD_THICKNESS_SLEEVED_MM = 0.7` / `computeBinCapacity(bin, thickness)`, so
+the app can flip capacities without new code — the machine must physically
+accept ~half the cards per bin (or the bins get deeper).
+- **Feed path:** feeder gap, pinch-roller spacing, hopper throat and guide
+  widths all open up ~0.4 mm; the o-ring/silicone roller contact patch needs
+  to grip the sleeve without slipping (sleeves are slicker than card stock).
+- **Module clearances:** card-path height and the trapdoor/paddle gaps must
+  pass a sleeved card (bulkier, slightly stiffer).
+- **IR detection:** sleeve gloss can double-reflect the beam; re-aim or
+  dim the sensors (a comparator front-end helps — see PLAN.md).
+- **Foil detection on sleeved cards:** the sleeve is glossy and adds its own
+  reflections, so the two-frame holo difference signal needs recalibration
+  (light angle, thresholds) against real sleeved captures — this is
+  calibration work on the rig, not a code change.
+- **Orientation:** sleeved cards feed the same way; the orientation-tolerant
+  crop (implemented in the web app) is sleeve-agnostic.
+
+Software is already ready: `computeBinCapacity(bin, thickness)` + the
+sleeved constant mean the capacity model switches with one value; the
+remaining work is mechanical (gaps) and calibration (foil thresholds).
+- **Card path:** radiused guides, anti-static brushes at the hopper (foil
+  cards + dry air = static cling), and a replaceable wear strip where the
+  pusher face contacts cards.
+
 ---
 
 ## 4. Sensing & control for production reliability
