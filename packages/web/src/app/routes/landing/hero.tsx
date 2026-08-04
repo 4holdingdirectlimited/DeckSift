@@ -1,6 +1,7 @@
 import { buttonVariants } from "@/components/ui/button";
 import { DeckSiftMark } from "@/components/decksift-mark";
 import { cn } from "@/lib/utils";
+import { listCardGameKeys, listSyncSources } from "@/lib/api/admin";
 import type { PlayingCard } from "@magic-vault/shared";
 import { getCardFaceName, getCardImageUris } from "@magic-vault/shared";
 import { IconArrowRight, IconScan, IconTool } from "@tabler/icons-react";
@@ -8,6 +9,30 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
 const CARD_COUNT = 6;
+
+/** Live numbers for the hero stat bar — fetched on load so they stay true as
+ *  more games are added and the library grows over time. */
+interface LandingStats {
+  games: number;
+  cards: number;
+}
+
+async function loadLandingStats(): Promise<LandingStats | null> {
+  try {
+    const [sources, counts] = await Promise.all([
+      listSyncSources().then((r) => r.data ?? []),
+      listCardGameKeys().then((r) => r.data ?? []),
+    ]);
+    return {
+      games: sources.length,
+      cards: counts.reduce((sum, g) => sum + g.count, 0),
+    };
+  } catch {
+    // API not reachable (server still booting) — the stat bar keeps its
+    // placeholder until it can load.
+    return null;
+  }
+}
 
 function useRandomCards(count: number) {
   const [cards, setCards] = useState<PlayingCard[]>([]);
@@ -34,19 +59,36 @@ function useRandomCards(count: number) {
   return cards;
 }
 
-const STATS = [
-  { value: "5", label: "TCGs supported" },
-  { value: "100k+", label: "Cards in the library" },
-  { value: "7", label: "Sort bins" },
-  { value: "0", label: "Cloud calls at scan time" },
-];
-
 export function LandingHero() {
   const cards = useRandomCards(CARD_COUNT);
   const heroCard = cards[0];
   const heroImage = heroCard
     ? getCardImageUris(heroCard)?.normal
     : undefined;
+
+  const [stats, setStats] = useState<LandingStats | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    loadLandingStats().then((loaded) => {
+      if (!cancelled) setStats(loaded);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const statItems = [
+    {
+      value: stats ? String(stats.games) : "…",
+      label: "TCGs supported",
+    },
+    {
+      value: stats ? stats.cards.toLocaleString() : "…",
+      label: "Cards in the library",
+    },
+    { value: "7", label: "Sort bins" },
+    { value: "0", label: "Cloud calls at scan time" },
+  ];
 
   return (
     <section className="relative overflow-hidden">
@@ -189,7 +231,7 @@ export function LandingHero() {
       {/* Stat strip */}
       <div className="mx-auto max-w-6xl px-4 pb-16">
         <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border bg-border md:grid-cols-4">
-          {STATS.map((stat) => (
+          {statItems.map((stat) => (
             <div
               key={stat.label}
               className="flex flex-col items-center gap-0.5 bg-background px-4 py-5 text-center"
