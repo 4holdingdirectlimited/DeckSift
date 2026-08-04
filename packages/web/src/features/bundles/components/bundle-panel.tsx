@@ -37,6 +37,7 @@ import {
   IconTrash,
 } from "@tabler/icons-react";
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
 const DEFAULT_TARGETS: BundleTarget[] = [
@@ -446,6 +447,12 @@ function BundleInventory() {
         <IconPackage className="size-3.5 text-muted-foreground" />
         <span className="text-xs font-medium">Bundle inventory</span>
         <span className="text-[10px] text-muted-foreground">({pastRuns.length})</span>
+        <Link
+          to="/app/inventory"
+          className="ml-auto text-[10px] font-medium text-primary hover:underline"
+        >
+          View all
+        </Link>
       </div>
       {pastRuns.map((run) => (
         <div

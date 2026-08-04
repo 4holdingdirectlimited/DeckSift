@@ -505,6 +505,35 @@ router.get("/run/:guid/csv", requireAuth, requireOrg, async (c) => {
   }
 });
 
+// DELETE /bundles/run/:guid — remove a bundle record from inventory.
+// Active runs can't be deleted; abort or complete them first.
+router.delete("/run/:guid", requireAuth, requireOrg, async (c) => {
+  const orgId = c.get("orgId");
+  const guid = c.req.param("guid");
+  try {
+    const result = await authQuery(c.get("jwtClaims"), async (tx) => {
+      const run = await tx.query.bundleRuns.findFirst({
+        where: (t, { eq, and }) => and(eq(t.guid, guid), eq(t.orgId, orgId)),
+        columns: { id: true, status: true },
+      });
+      if (!run) return { success: false, message: "Bundle not found." };
+      if (run.status === "active") {
+        return {
+          success: false,
+          message:
+            "An active bundle can't be deleted — abort or complete it first.",
+        };
+      }
+      await tx.delete(bundleRuns).where(eq(bundleRuns.id, run.id));
+      return { success: true, data: null };
+    });
+    return c.json(result, result.success ? 200 : 400);
+  } catch (err) {
+    console.error(err);
+    return c.json({ success: false, message: "Database error." }, 500);
+  }
+});
+
 // POST /bundles/:guid/abort — stop the active run for this config
 router.post("/:guid/abort", requireAuth, requireOrg, async (c) => {
   const orgId = c.get("orgId");

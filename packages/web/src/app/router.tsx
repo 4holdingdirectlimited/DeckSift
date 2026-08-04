@@ -10,6 +10,7 @@ const BuildGuidePage = lazy(() => import("@/app/routes/build"));
 const AppLayout = lazy(() => import("@/app/routes/app/layout"));
 const ScannerPage = lazy(() => import("@/app/routes/app/index"));
 const CollectionsPage = lazy(() => import("@/app/routes/app/collections"));
+const InventoryPage = lazy(() => import("@/app/routes/app/inventory"));
 const BinsPage = lazy(() => import("@/app/routes/app/bins"));
 const LibraryPage = lazy(() => import("@/app/routes/app/library"));
 const CalibratePage = lazy(() => import("@/app/routes/app/calibrate"));
@@ -77,6 +78,14 @@ export const router = createBrowserRouter([
             element: (
               <PageSuspense>
                 <CollectionsPage />
+              </PageSuspense>
+            ),
+          },
+          {
+            path: "/app/inventory",
+            element: (
+              <PageSuspense>
+                <InventoryPage />
               </PageSuspense>
             ),
           },

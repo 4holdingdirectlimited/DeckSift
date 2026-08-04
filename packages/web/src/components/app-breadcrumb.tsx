@@ -11,6 +11,7 @@ function useBreadcrumbs(): Crumb[] {
 
   if (pathname === "/app") return [{ label: "Scanner" }];
   if (pathname === "/app/collections") return [{ label: "Collections" }];
+  if (pathname === "/app/inventory") return [{ label: "Inventory" }];
   if (pathname === "/app/calibrate") return [{ label: "Calibrate" }];
   if (pathname === "/app/settings") return [{ label: "Settings" }];
   if (pathname === "/app/admin") return [{ label: "Admin" }];

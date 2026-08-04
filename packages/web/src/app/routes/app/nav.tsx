@@ -21,6 +21,7 @@ import {
   IconLayoutSidebarLeftCollapse,
   IconLayoutSidebarLeftExpand,
   IconLibrary,
+  IconPackage,
   IconSettings,
   IconWifi,
 } from "@tabler/icons-react";
@@ -219,6 +220,12 @@ export function AppNav() {
       to: "/app/library",
       icon: <IconLibrary size={20} />,
       label: "Library",
+      desktopOnly: true,
+    },
+    {
+      to: "/app/inventory",
+      icon: <IconPackage size={20} />,
+      label: "Inventory",
       desktopOnly: true,
     },
     {

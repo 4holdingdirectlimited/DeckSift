@@ -10,6 +10,7 @@ import {
   completeBundleRun,
   createBundle,
   deleteBundle,
+  deleteBundleRun,
   downloadRunCsv,
   loadBundleRuns,
   loadBundles,
@@ -45,6 +46,8 @@ interface BundlesContextValue {
   getRunCards: (runGuid: string) => Promise<BundleRunCard[]>;
   /** Download a run's inventory CSV. */
   exportRunCsv: (runGuid: string) => Promise<void>;
+  /** Remove a finished bundle from inventory (active runs are refused). */
+  deleteRun: (runGuid: string) => Promise<void>;
   createConfig: (input: {
     name: string;
     targets: BundleTarget[];
@@ -151,6 +154,21 @@ export function BundlesProvider({ children }: { children: React.ReactNode }) {
       });
     }
   }, []);
+
+  const deleteRun = useCallback(
+    async (runGuid: string) => {
+      try {
+        await deleteBundleRun(runGuid);
+        refreshRuns();
+        toast.success("Bundle deleted from inventory");
+      } catch (err) {
+        toast.error("Failed to delete bundle", {
+          description: err instanceof Error ? err.message : undefined,
+        });
+      }
+    },
+    [refreshRuns],
+  );
 
   const createConfig = useCallback(
     async (input: {
@@ -333,6 +351,7 @@ export function BundlesProvider({ children }: { children: React.ReactNode }) {
         runs,
         getRunCards,
         exportRunCsv,
+        deleteRun,
         createConfig,
         updateConfig,
         deleteConfig,

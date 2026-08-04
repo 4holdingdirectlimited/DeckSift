@@ -115,6 +115,12 @@ export async function loadBundleRuns(): Promise<BundleRun[]> {
   return r.data ?? [];
 }
 
+/** Remove a finished bundle from inventory. */
+export async function deleteBundleRun(guid: string): Promise<void> {
+  const r = await apiDelete<Result<null>>(`/api/bundles/run/${guid}`);
+  if (!r.success) throw new Error(r.message ?? "Failed to delete bundle");
+}
+
 /** Card details (grouped with qty) for one run. */
 export async function loadRunCards(
   runGuid: string,
