@@ -1848,6 +1848,38 @@ shutdown or fail-fast config check.
    card_data).
 2. Restore the previous `src/index.ts` and `scripts/start-server.cmd` from git.
 
+## Item 43 — Hardware v2 production review doc (docs)
+
+**Status:** implemented, uncommitted.
+
+### Why
+
+Goal is small-scale production: a faster, more reliable machine (not PLA, a
+stable heavy base), and long-term concurrent multi-machine operation (3
+machines + 3 cameras off one PC) instead of one bigger machine.
+
+### What changed
+
+- **`custom/HARDWARE_V2.md` (new)** — production review covering:
+  - **Materials:** PLA → ASA/PETG per part (creep/heat/toughness table),
+    heat-set brass inserts, connectorized modules, when injection molding wins.
+  - **Stability/mass:** steel base plate (~4 kg), sorbothane feet, one rigid
+    aluminum backplate spine, camera on the machine — the cheapest way to
+    shorten the blind routing delays.
+  - **Mechanism:** MG90S, brass bushings/bearings at pivots, steel pin through
+    flappers, silicone pinch roller + hopper agitator + feeder encoder.
+  - **Multi-machine:** `station_id` software plan (per-machine scans/bin
+    status/bundle runs; shared card library + configs), USB/power/camera
+    sizing for 3 stations, single-GPU embed queue math, and a throughput
+    table (~50k cards/8-h shift on a 3-machine v2 farm).
+  - **Phased roadmap:** Phase 0 firmware (PLAN.md) → v2 prototype → station
+    software → 3-machine farm.
+- `custom/README.md` + `custom/PLAN.md` — doc index updated to point at it.
+
+### How to revert
+
+1. Delete `custom/HARDWARE_V2.md` and revert the index links.
+
 ---
 
 *Template for future entries:*

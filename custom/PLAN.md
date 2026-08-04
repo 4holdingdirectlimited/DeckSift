@@ -163,6 +163,10 @@ problem. Software pre-reqs are noted inline.
 
 ## v2 machine — faster & more accurate sorting
 
+> Full production review (materials, mass/stability, mechanism hardening,
+> multi-machine architecture): **`HARDWARE_V2.md`**. The section below is the
+> machine-level summary.
+
 Ideas for a second build (or a major refit of this one). Goals: shorter
 per-card time, fewer stripped parts, and sensor-confirmed motion instead of
 blind timing.

@@ -21,10 +21,11 @@ belong next to the sketch.
 
 | File | What it is |
 | --- | --- |
-| `CHANGES.md` | **Every modification vs upstream**, cumulative, in revert order (currently items 1–38) |
+| `CHANGES.md` | **Every modification vs upstream**, cumulative, in revert order (currently items 1–43) |
 | `SETUP.md` | The local runbook: stack URLs, start/stop, first-run setup, bundle/chase/wishlist modes, bin capacities, value sorting, sync pacing |
 | `TCGS.md` | Multi-TCG architecture, top-20 TCG data-source status, adding a new game |
 | `PLAN.md` | Firmware roadmap (state machine, pipelining, watchdogs) + machine-build commissioning checklist |
+| `HARDWARE_V2.md` | Production-leaning hardware review: materials/manufacturing, stability/mass, mechanism hardening, and the 3-machine/1-PC multi-machine plan |
 
 ## Git workflow
 
