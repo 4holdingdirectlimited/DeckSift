@@ -5,7 +5,7 @@ import { formatUsd } from "@/features/scanner/components/scan-stats";
 import { computeStats } from "@/features/scanner/lib/compute-stats";
 import { useEffect, useMemo, useState } from "react";
 
-const BASE_TITLE = "MAULT";
+const BASE_TITLE = "Magic Vault";
 const CYCLE_MS = 4000;
 
 export function DocumentTitleUpdater() {
