@@ -8,6 +8,7 @@ import { CardDetailPanel } from "@/features/cards/components/card-detail-panel";
 import { CardToolbar } from "@/features/cards/components/card-toolbar";
 import { DuplicatesDialog } from "@/features/cards/components/duplicates-dialog";
 import { downloadCollectionCsv } from "@/features/cards/lib/collection-export";
+import { downloadTcgplayerCsv } from "@/features/cards/lib/tcgplayer-export";
 import { ScannedCardItem } from "@/features/cards/components/scanned-card-item";
 import { SessionSummaryDialog } from "@/features/cards/components/session-summary-dialog";
 import { getCollectionViewers } from "@/features/collections/api/collections";
@@ -25,6 +26,7 @@ import {
   IconCopy,
   IconDownload,
   IconFolders,
+  IconShoppingBag,
 } from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
 import { AnimatePresence } from "framer-motion";
@@ -133,6 +135,10 @@ export function CardGrid() {
 
   const handleExportCsv = useCallback(() => {
     downloadCollectionCsv(cards);
+  }, [cards]);
+
+  const handleExportTcg = useCallback(() => {
+    downloadTcgplayerCsv(cards);
   }, [cards]);
 
   if (isLoading) {
@@ -299,6 +305,17 @@ export function CardGrid() {
           >
             <IconDownload className="size-3.5" />
             Export CSV
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleExportTcg}
+            disabled={cards.length === 0}
+            className="shrink-0"
+            title="Download a TCGplayer-compatible inventory CSV (name + set + qty + price)"
+          >
+            <IconShoppingBag className="size-3.5" />
+            TCG CSV
           </Button>
           <Button
             variant="outline"

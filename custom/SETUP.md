@@ -189,6 +189,14 @@ The **Wishlist** panel sits on the scanner page (left sidebar).
 - **Export CSV** — toolbar button on the scanner page downloads
   `collection-<date>.csv` (name, set, rarity, collector #, price, qty, foil,
   bin) for everything scanned this session.
+- **TCGplayer CSV** — toolbar button downloads `tcgplayer-<date>.csv`, a
+  TCGplayer-compatible inventory file (`name, set_name, condition, quantity,
+  purchase_price, list_price, tcgplayer_id`). Condition defaults to **Near
+  Mint** (edit before upload if you grade differently); foil scans get
+  `(Foil)` in the name so TCGplayer's matcher picks the foil product;
+  `list_price` is filled from the card's price when the source has one;
+  `tcgplayer_id` is left blank until the API integration lands. Upload it in
+  the TCGplayer seller portal → Inventory → Import.
 - **Digitize mode** — toggle in the scanner sidebar. When on, every scanned
   card is recorded to the collection but **not sorted**: no bin rules, bundles,
   chase, or wishlist apply, and cards route to the catch-all bin so the

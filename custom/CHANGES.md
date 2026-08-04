@@ -1930,6 +1930,39 @@ SigLIP embeddings are orientation-sensitive; (b) bulk-recording a library
    fields, and `DigitizeModeToggle`.
 3. Drop the sleeved constant (keep `computeBinCapacity` with its default).
 
+## Item 45 — TCGplayer inventory CSV export (web)
+
+**Status:** implemented, uncommitted.
+
+### Why
+
+Step 1 of the TCGplayer integration roadmap (`custom/TCGS.md`): the
+no-API 80/20 win — export a scan/digitize session as a TCGplayer-compatible
+inventory CSV, uploaded in the seller portal without any API access.
+
+### What changed
+
+- **`packages/web/src/features/cards/lib/tcgplayer-export.ts`** —
+  `buildTcgplayerCsv()` / `downloadTcgplayerCsv()`: groups scanned cards by
+  card id + foil variant, emits the community-standard inventory shape
+  (`name, set_name, condition, quantity, purchase_price, list_price,
+  tcgplayer_id`).
+  - Condition defaults to **Near Mint** (operator edits before upload).
+  - Foil scans get `(Foil)` appended to the name (TCGplayer's foil product
+    naming) and use `prices.usd_foil` when available.
+  - `list_price` from the card price; blank when the source has none.
+  - `purchase_price` and `tcgplayer_id` are left blank (no cost tracking yet;
+    IDs come with the API integration).
+- **`card-grid.tsx`** — **TCG CSV** button next to Export CSV, exports all
+  scanned cards.
+- Verified output shape with a sample-data run (grouping, foil rows, foil
+  pricing, blank prices all correct).
+
+### How to revert
+
+1. Remove the TCG CSV button + handler from `card-grid.tsx` and delete
+   `tcgplayer-export.ts`.
+
 ---
 
 *Template for future entries:*
