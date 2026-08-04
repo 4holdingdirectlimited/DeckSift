@@ -223,6 +223,32 @@ export function useCardScanner({
   const debugImageUrlRef = useRef<string | null>(null);
   const [allowDuplicates, setAllowDuplicates] = useState(true);
 
+  // Review queue: when the top match is low-confidence (or has close
+  // alternatives), pause for an operator yes/no instead of auto-routing.
+  // Persisted per-browser so the trust default survives reloads.
+  const REVIEW_DISTANCE = 0.18;
+  const REVIEW_QUEUE_KEY = "reviewQueue";
+  const [reviewQueue, setReviewQueueState] = useState<boolean>(
+    () => localStorage.getItem(REVIEW_QUEUE_KEY) !== "off",
+  );
+  const reviewQueueRef = useRef(reviewQueue);
+  reviewQueueRef.current = reviewQueue;
+  const setReviewQueue = useCallback((enabled: boolean) => {
+    setReviewQueueState(enabled);
+    localStorage.setItem(REVIEW_QUEUE_KEY, enabled ? "on" : "off");
+  }, []);
+
+  interface PendingReview {
+    card: PlayingCardWithDistance;
+    alternativeMatches: PlayingCardWithDistance[];
+    capturedImageUrl?: string;
+    isFoil?: boolean;
+  }
+  const [pendingReview, setPendingReview] = useState<PendingReview | null>(
+    null,
+  );
+  const pendingReviewRef = useRef<PendingReview | null>(null);
+
   const updateStatus = useCallback((newStatus: ScannerStatus) => {
     statusRef.current = newStatus;
     setStatus(newStatus);
@@ -299,12 +325,28 @@ export function useCardScanner({
           } else {
             lastScannedCardIdRef.current = card.id;
             playMatchSound();
-            onSearchResultsRef.current?.(
-              [card, ...alternativeMatches],
-              debugImageUrl,
-              isFoil,
-            );
-            updateStatus("scanning");
+            const needsReview =
+              reviewQueueRef.current &&
+              (card.distance >= REVIEW_DISTANCE ||
+                alternativeMatches.length > 0);
+            if (needsReview) {
+              const pending: PendingReview = {
+                card,
+                alternativeMatches,
+                capturedImageUrl: debugImageUrl,
+                isFoil,
+              };
+              pendingReviewRef.current = pending;
+              setPendingReview(pending);
+              updateStatus("review");
+            } else {
+              onSearchResultsRef.current?.(
+                [card, ...alternativeMatches],
+                debugImageUrl,
+                isFoil,
+              );
+              updateStatus("scanning");
+            }
           }
         } else {
           playNoMatchSound();
@@ -505,7 +547,32 @@ export function useCardScanner({
     updateStatus("scanning");
   }, [updateStatus]);
 
+  /** Route the reviewed card normally (it passed the operator's check). */
+  const confirmReview = useCallback(() => {
+    const pending = pendingReviewRef.current;
+    pendingReviewRef.current = null;
+    setPendingReview(null);
+    if (pending) {
+      onSearchResultsRef.current?.(
+        [pending.card, ...pending.alternativeMatches],
+        pending.capturedImageUrl,
+        pending.isFoil,
+      );
+    }
+    updateStatus("scanning");
+  }, [updateStatus]);
+
+  /** The match was wrong (or low quality) - route the card to the catch-all. */
+  const rejectReview = useCallback(() => {
+    pendingReviewRef.current = null;
+    setPendingReview(null);
+    onNoMatchRef.current?.();
+    updateStatus("scanning");
+  }, [updateStatus]);
+
   const handlePause = useCallback(() => {
+    pendingReviewRef.current = null;
+    setPendingReview(null);
     setDuplicateCard(null);
     updateStatus("paused");
   }, [updateStatus]);
@@ -548,5 +615,10 @@ export function useCardScanner({
     selectCamera,
     allowDuplicates,
     setAllowDuplicates,
+    reviewQueue,
+    setReviewQueue,
+    pendingReview,
+    confirmReview,
+    rejectReview,
   };
 }

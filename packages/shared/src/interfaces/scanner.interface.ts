@@ -39,6 +39,7 @@ export type ScannerStatus =
   | "duplicate"
   | "no-match"
   | "searching"
+  | "review"
   | "error";
 
 export interface CardScannerProps {

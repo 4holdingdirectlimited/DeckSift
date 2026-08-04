@@ -23,6 +23,7 @@ interface ScannerMenuProps {
   isConnected: boolean;
   autoFeed: boolean;
   allowDuplicates: boolean;
+  reviewQueue: boolean;
   zoom: number;
   zoomRange: ZoomRange | null;
   cameras: MediaDeviceInfo[];
@@ -37,6 +38,7 @@ interface ScannerMenuProps {
   onCalibrate: () => void;
   onAutoFeedChange: (enabled: boolean) => void;
   onAllowDuplicatesChange: (enabled: boolean) => void;
+  onReviewQueueChange: (enabled: boolean) => void;
 }
 
 export function ScannerMenu({
@@ -44,6 +46,7 @@ export function ScannerMenu({
   isConnected,
   autoFeed,
   allowDuplicates,
+  reviewQueue,
   zoom,
   zoomRange,
   cameras,
@@ -58,6 +61,7 @@ export function ScannerMenu({
   onCalibrate,
   onAutoFeedChange,
   onAllowDuplicatesChange,
+  onReviewQueueChange,
 }: ScannerMenuProps) {
   return (
     <div className="absolute top-2 right-2 z-40">
@@ -147,6 +151,12 @@ export function ScannerMenu({
                     onCheckedChange={onAllowDuplicatesChange}
                   >
                     Allow duplicates
+                  </DropdownMenuCheckboxItem>
+                  <DropdownMenuCheckboxItem
+                    checked={reviewQueue}
+                    onCheckedChange={onReviewQueueChange}
+                  >
+                    Review low-confidence
                   </DropdownMenuCheckboxItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={onCalibrate}>

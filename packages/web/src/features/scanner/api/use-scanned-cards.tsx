@@ -27,6 +27,7 @@ import { useCollections } from "@/features/collections/api/use-collections";
 import { reportSerialEvent } from "@/features/notifications/api/notification-settings";
 import { useScanTimer } from "@/features/scanner/api/use-scan-timer";
 import { useSerial } from "@/features/scanner/api/use-serial";
+import { announceSetProgress } from "@/features/scanner/lib/set-progress";
 import type { ScannedCardsContextValue } from "@/features/scanner/types";
 import { generateScanId } from "@/lib/utils";
 import {
@@ -55,6 +56,21 @@ export function ScannedCardsProvider({
   useEffect(() => {
     digitizeRef.current = digitize;
   }, [digitize]);
+
+  // Set-completeness announcements: when a new scan lands, fire a toast if the
+  // card's set hit a milestone. Uses the newest card (cards[0]) as the trigger.
+  const prevCardCountRef = useRef(0);
+  useEffect(() => {
+    if (cards.length === 0) {
+      prevCardCountRef.current = 0;
+      return;
+    }
+    if (cards.length <= prevCardCountRef.current) return;
+    prevCardCountRef.current = cards.length;
+    const gameKey = activeCollectionRef.current?.game?.key;
+    const snapshot = cards.slice(0, 200);
+    void announceSetProgress(snapshot, gameKey);
+  }, [cards]);
   // Id of the most recently committed scan — powers "Undo last".
   const lastScanIdRef = useRef<string | null>(null);
   const { configs: binConfigs, fieldDefinitions } = useBinConfigs();

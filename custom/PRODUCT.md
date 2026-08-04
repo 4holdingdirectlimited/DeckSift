@@ -48,7 +48,7 @@ Legend: effort ●○○ = tiny (hours) · ●●○ = a session · ●●● = 
 | Scan stats (value, sets, rares) | Already computed — surface it better (sidebar) | ●○○ | ✅ part |
 | Backup/restore | `pg_dump` script wrapper — one command, full safety net | ●○○ | ✅ built (`scripts/backup-db.mjs`) |
 | Collection CSV import | Import ManaBox/TCGplayer list → “owned” data feeds chase/set-completeness instantly | ●●○ | ✅ built |
-| Review queue | Low-confidence matches pause for a yes/no instead of auto-routing | ●●○ | 🧰 |
+| Review queue | Low-confidence matches pause for a yes/no instead of auto-routing | ●●○ | ✅ built |
 
 ### Value & commerce (bridge to v2)
 
@@ -69,7 +69,7 @@ Legend: effort ●○○ = tiny (hours) · ●●○ = a session · ●●● = 
 | Orientation tolerance | Auto-upright flipped cards | ●○○ | ✅ built |
 | Feeder “clear” button | Quick jam-recovery without full recalibration | ●○○ | 🔜 |
 | Session timer pause on bin-full | Already pauses — make the reason obvious in the overlay | ●○○ | ✅ part |
-| Per-set completeness % on scan | “7/40 of this set” toast when set is detected | ●○○ | 🧰 |
+| Per-set completeness % on scan | “7/40 of this set” toast when set is detected | ●○○ | ✅ built |
 
 ## Quick wins I can build next (your pick)
 

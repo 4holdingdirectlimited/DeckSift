@@ -2046,6 +2046,67 @@ DeckSift team.
 
 ---
 
+## Item 49 — Review queue, set-completeness toast, non-blocking firmware state machine + interrupt IR (web + firmware)
+
+**Status:** implemented, uncommitted.
+
+### Why
+
+Closes the last big trust gap (low-confidence scans auto-routed without a human
+check), makes set progress visible mid-run, and delivers the firmware roadmap's
+two speed/robustness items: a non-blocking operation machine and interrupt-
+driven card detection.
+
+### What changed
+
+**Review queue (web)**
+- `packages/shared/src/interfaces/scanner.interface.ts` — `ScannerStatus` gains
+  `"review"`.
+- `packages/web/src/features/scanner/api/use-card-scanner.ts` — when the top
+  match is low-confidence (`distance >= 0.18`) or has close alternatives, the
+  scan pauses with `pendingReview` instead of auto-routing. `confirmReview()`
+  sorts normally; `rejectReview()` routes the physical card to the catch-all
+  via the no-match path. Toggle persisted in localStorage (default ON) and
+  surfaced in the scanner menu.
+- `packages/web/src/features/scanner/components/review-panel.tsx` (new) —
+  overlay with the card image, name, confidence %, and Sort it / Skip buttons.
+- `packages/web/src/features/scanner/components/card-scanner.tsx` +
+  `scanner-menu.tsx` — panel wired in, “Review low-confidence” menu toggle.
+
+**Set-completeness toast (web)**
+- `packages/web/src/features/scanner/lib/set-progress.ts` (new) — counts unique
+  cards owned per set and compares with the set's total in the synced library;
+  toasts on milestones (first card, every 5th, completion) to avoid spam.
+- `use-scanned-cards.tsx` — fires it whenever a new scan lands.
+
+**Non-blocking firmware state machine + interrupt IR (firmware)**
+- `arduino/main/main.ino` rebuilt: `runFeeder`/`routeCard`/test/clear are now
+  phases of a `runMachine()` state machine driven from `loop()`, so serial is
+  serviced mid-operation (`{"cancel":true}` aborts any phase; jam alerts abort
+  immediately; commands mid-run get `{"error":"busy"}`; oversized lines are
+  reported). The whole-operation watchdog replaces the old command deadline.
+- Module-1 IR is interrupt-driven (`attachInterrupt` + volatile flag); the
+  feeder runs continuously and stops the instant the beam is crossed — the
+  old pulse/pause feeding cycle is gone.
+- Command protocol and replies are unchanged (`status`/`bin`/`detected`/
+  `empty`/`error` with id echo), so the web app needs no protocol changes.
+
+### Behavior notes
+
+- Review queue is on by default; disable it from the scanner menu for
+  unattended runs (e.g. digitize/bulk sessions).
+- The feeder now ignores `pulseDuration`/`pauseDuration` (continuous feed);
+  `settleDuration` still controls the last-card push.
+- Firmware compiled: 79,240 bytes (30%) flash, 6,316 bytes (19%) RAM.
+
+### How to revert
+
+1. Remove the `"review"` status + review-queue logic and the panel/menu toggle.
+2. Remove `set-progress.ts` and its effect in `use-scanned-cards.tsx`.
+3. Restore the previous blocking firmware (`git` history of `main.ino`).
+
+---
+
 ## Item 47 — Six adoption features: CSV import, condition, badge, shortcuts, backup script, first-run checklist (server + web + scripts)
 
 **Status:** implemented, uncommitted.

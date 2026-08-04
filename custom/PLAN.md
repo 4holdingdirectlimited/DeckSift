@@ -10,33 +10,24 @@ is independently implementable.
 
 ## Where the current firmware falls short
 
-### 1. Blocking, delay-heavy sequence — the #1 bottleneck and robustness issue
+### 1. Blocking, delay-heavy sequence — ~~the #1 bottleneck and robustness issue~~ ✅ rebuilt
 
-`routeCard()` (L258–354) and `runFeeder()` (L140–190) block `loop()` for the
-entire feed + routing sequence (seconds per card). Consequences:
+`routeCard()` and `runFeeder()` used to block `loop()` for the entire feed +
+routing sequence. They're now a **non-blocking state machine** (`runMachine()` in
+`main.ino`): every mechanical phase advances on a timestamp or a sensor edge,
+so serial stays responsive mid-operation. `{"cancel": true}` aborts any phase
+back to neutral, jam alerts abort immediately, and commands arriving mid-run
+get a clean `{"error":"busy"}` instead of being silently delayed.
 
-- New serial commands are **not processed mid-routing** — no cancel, no status.
-- `checkModule1Jam()` (L198–217) only runs *between* commands, so jam detection
-  is blind while a card is in motion.
-- All motion timing is blind `delay()` calls (`DELAY_CARD_ENTER/PADDLE/PUSH`
-  = 300/300/600 ms) regardless of actual sensor events.
+### 2. Polled IR instead of edge detection — ~~leaves speed on the table~~ ✅ rebuilt
 
-**Plan:** convert the routing pipeline to a **non-blocking state machine** run
-from `loop()`. Each mechanical phase becomes a state that advances on a
-timestamp or a sensor edge. Serial stays responsive; a `{"cancel": true}`
-command can abort any phase back to neutral.
+Module 1's IR sensor is now **interrupt-driven** (`attachInterrupt` on
+`IR_PIN_MODULE1`): the feeder stops the instant the beam is crossed, and the
+motor runs **continuously** (no pulse/pause cycling — the old
+`pulseDuration`/`pauseDuration` feed cycling is gone). Module 2/3 sensors stay
+polled, which is fine for routing waits.
 
-### 2. Polled IR instead of edge detection — leaves speed on the table
-
-`runFeeder()` pulses the motor 80 ms on / 50 ms off and polls module 1's IR
-every 2 ms (`delay(2)`). The card can only be caught when the poll happens to
-sample it, and the pulsing means the roller is off half the time.
-
-**Plan:** use **interrupt-driven IR edges** (`attachInterrupt`/GPIO IRQ) to stop
-the feeder the instant the beam is crossed. Feeder can then run continuously
-(speed-limited only by mechanics), and the settle behavior stays as-is.
-
-### 3. Calibration is RAM-only — lost on every reboot
+### 3. Calibration is RAM-only — lost on every reboot ✅ built
 
 `{"setConfig": ...}` and `{"setFeederConfig": ...}` write only to RAM
 (`moduleConfig` L64–68, `feederConfig` L80). Re-powering the unit reverts to
@@ -111,12 +102,12 @@ loop-level supervisor is the practical option).
 
 ## Suggested order of work
 
-1. Fixed serial buffer + oversized-line error (5) — small, removes a real failure mode.
-2. EEPROM persistence for calibration (3) — big daily-life win.
-3. Non-blocking state machine (1) — unlocks everything else (cancel, mid-sequence jam watch, pipelining).
-4. Interrupt-driven IR feeding (2) + timing re-tune — the actual throughput win.
-5. Watchdog budgets per phase (7), full jam coverage (6).
-6. Concurrent/pipelined motions — last, once the machine is deterministic.
+1. ~~Fixed serial buffer + oversized-line error (5)~~ ✅
+2. ~~EEPROM persistence for calibration (3)~~ ✅
+3. ~~Non-blocking state machine (1)~~ ✅
+4. ~~Interrupt-driven IR feeding (2)~~ ✅ — the throughput win
+5. Watchdog budgets per phase (7), full jam coverage (6) — partially done (whole-op watchdog + jam abort exist; per-phase budgets are implicit in each phase's timeout)
+6. Concurrent/pipelined motions — last, once the machine is deterministic
 
 ## Machine build commissioning checklist
 

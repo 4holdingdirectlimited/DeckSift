@@ -11,6 +11,7 @@ import { useRegisterScannerIsland } from "@/features/scanner/api/use-scanner-isl
 import { useSerial, useSerialMessage } from "@/features/scanner/api/use-serial";
 import { ScannerMenu } from "@/features/scanner/components/scanner-menu";
 import { ScannerOverlay } from "@/features/scanner/components/scanner-overlay";
+import { ReviewPanel } from "@/features/scanner/components/review-panel";
 import { SCANNABLE_STATUSES } from "@/features/scanner/constants";
 import { useIsMobile } from "@/hooks/use-is-mobile";
 import { useRole } from "@/hooks/use-role";
@@ -80,6 +81,11 @@ export function CardScanner({ className, compact }: CardScannerProps) {
     selectCamera,
     allowDuplicates,
     setAllowDuplicates,
+    reviewQueue,
+    setReviewQueue,
+    pendingReview,
+    confirmReview,
+    rejectReview,
   } = useCardScanner({
     onSearchResults: (cards, capturedImageUrl, isFoil) => {
       if (cards.length > 0) {
@@ -354,11 +360,19 @@ export function CardScanner({ className, compact }: CardScannerProps) {
           hasCatchAll={hasCatchAll}
           onRetryError={handleRetryError}
         />
+        {status === "review" && pendingReview && (
+          <ReviewPanel
+            pending={pendingReview}
+            onConfirm={confirmReview}
+            onReject={rejectReview}
+          />
+        )}
         <ScannerMenu
           isCameraActive={isCameraActive}
           isConnected={isConnected}
           autoFeed={autoFeed}
           allowDuplicates={allowDuplicates}
+          reviewQueue={reviewQueue}
           zoom={zoom}
           zoomRange={zoomRange}
           cameras={cameras}
@@ -373,6 +387,7 @@ export function CardScanner({ className, compact }: CardScannerProps) {
           onCalibrate={() => navigate("/app/calibrate")}
           onAutoFeedChange={setAutoFeed}
           onAllowDuplicatesChange={setAllowDuplicates}
+          onReviewQueueChange={setReviewQueue}
         />
       </div>
     </div>
