@@ -90,18 +90,34 @@ export const ScannedCardItem = memo(function ScannedCardItem({
               <TooltipTrigger
                 render={
                   <Badge
-                    variant={card.distance < 0.15 ? "default" : "destructive"}
+                    variant="secondary"
+                    className={cn(
+                      "gap-1 shadow-md",
+                      card.distance == null && "opacity-70",
+                    )}
                   >
+                    <span
+                      className={cn(
+                        "size-1.5 rounded-full shrink-0",
+                        card.distance == null
+                          ? "bg-muted-foreground"
+                          : card.distance < 0.15
+                            ? "bg-emerald-500"
+                            : card.distance < 0.25
+                              ? "bg-amber-500"
+                              : "bg-red-500",
+                      )}
+                    />
                     {card.distance != null
-                      ? (100 - card.distance * 100).toFixed(2)
-                      : "0.00"}
-                    %
+                      ? `${(100 - card.distance * 100).toFixed(0)}%`
+                      : "—"}
                   </Badge>
                 }
               />
               <TooltipContent>
-                How closely the scanned image matches this card, based on visual
-                similarity search
+                {card.distance != null
+                  ? `Match confidence ${(100 - card.distance * 100).toFixed(1)}% (distance ${card.distance.toFixed(3)}) — visual similarity to the scanned image`
+                  : "No match distance (added manually or imported)"}
               </TooltipContent>
             </Tooltip>
             <Tooltip>

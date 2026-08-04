@@ -24,6 +24,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { collectionsQueryOptions } from "@/features/collections/api/collections";
+import { importCollectionCards } from "@/features/collections/api/collections";
 import { useCollections } from "@/features/collections/api/use-collections";
 import { useOrg } from "@/features/companies/api/use-organization";
 import { gamesQueryOptions } from "@/features/games/api/games";
@@ -44,11 +45,13 @@ import {
   IconPlayerPlay,
   IconPlus,
   IconTrash,
+  IconUpload,
 } from "@tabler/icons-react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { Link } from "react-router-dom";
+import { toast } from "sonner";
 
 export default function CollectionsPage() {
   const {
@@ -83,6 +86,13 @@ export default function CollectionsPage() {
     guid: string;
     name: string;
   } | null>(null);
+  const [importTarget, setImportTarget] = useState<{
+    guid: string;
+    name: string;
+  } | null>(null);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importing, setImporting] = useState(false);
+  const queryClient = useQueryClient();
 
   const createForm = useForm<CreateCollectionFormValues>({
     resolver: zodResolver(createCollectionSchema),
@@ -155,6 +165,51 @@ export default function CollectionsPage() {
   const handleEmptyOpenChange = useCallback((open: boolean) => {
     if (!open) setEmptyTarget(null);
   }, []);
+
+  const handleImportOpenChange = useCallback((open: boolean) => {
+    if (!open) {
+      setImportTarget(null);
+      setImportFile(null);
+    }
+  }, []);
+
+  const handleImport = useCallback(async () => {
+    if (!importTarget || !importFile) return;
+    setImporting(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", importFile);
+      const result = await importCollectionCards(importTarget.guid, formData);
+      if (result.success) {
+        const errors = result.errors ?? [];
+        if (errors.length > 0) {
+          const preview = errors
+            .slice(0, 3)
+            .map((e) => `Row ${e.line}${e.name ? ` (${e.name})` : ""}: ${e.reason}`)
+            .join(" · ");
+          toast.warning(`Imported ${result.count} card(s), ${errors.length} row(s) skipped`, {
+            description:
+              errors.length <= 3
+                ? preview
+                : `${preview} · and ${errors.length - 3} more — see browser console for details`,
+          });
+          console.warn("[csv-import] unmatched rows:", errors);
+        } else {
+          toast.success(`Imported ${result.count} card(s) into "${importTarget.name}"`);
+        }
+        await queryClient.invalidateQueries({ queryKey: ["collections"] });
+        setImportTarget(null);
+        setImportFile(null);
+      }
+    } catch (err) {
+      toast.error("Import failed", {
+        description:
+          err instanceof Error ? err.message : "Unknown error while importing.",
+      });
+    } finally {
+      setImporting(false);
+    }
+  }, [importTarget, importFile, queryClient]);
 
   return (
     <div className="flex flex-col p-4 md:p-6 max-w-4xl mx-auto w-full gap-4">
@@ -315,6 +370,24 @@ export default function CollectionsPage() {
                       <Button
                         variant="ghost"
                         size="icon"
+                        disabled={importing}
+                        onClick={() => setImportTarget({
+                          guid: collection.guid,
+                          name: collection.name,
+                        })}
+                      >
+                        <IconUpload className="size-4 text-muted-foreground" />
+                      </Button>
+                    }
+                  ></TooltipTrigger>
+                  <TooltipContent>Import cards from CSV</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <Button
+                        variant="ghost"
+                        size="icon"
                         render={
                           <Link to={`/app/collections/${collection.guid}/bins`}>
                             <IconLayoutGrid />
@@ -453,6 +526,47 @@ export default function CollectionsPage() {
         confirmLabel="Empty"
         onConfirm={handleEmpty}
       />
+      <DynamicDialog
+        open={!!importTarget}
+        onOpenChange={handleImportOpenChange}
+        title="Import cards from CSV"
+        description={`Import a ManaBox / TCGplayer / Delver export into "${importTarget?.name ?? ""}". Rows are matched by name (plus set and collector number when present) against your synced library.`}
+        trigger={<span />}
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setImportTarget(null)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleImport}
+              disabled={!importFile || importing}
+            >
+              {importing && <IconLoader2 className="size-4 animate-spin" />}
+              {importing ? "Importing…" : "Import"}
+            </Button>
+          </>
+        }
+        footerClassName="flex-col-reverse md:flex-row"
+      >
+        <div className="flex flex-col gap-3">
+          <label className="flex flex-col gap-1.5 text-sm">
+            <span className="font-medium">CSV file</span>
+            <input
+              key={importTarget?.guid ?? "none"}
+              type="file"
+              accept=".csv,text/csv"
+              className="block w-full text-sm text-muted-foreground file:mr-3 file:rounded-md file:border-0 file:bg-primary/10 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-primary hover:file:bg-primary/20"
+              onChange={(e) => setImportFile(e.target.files?.[0] ?? null)}
+            />
+          </label>
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            Recognized columns: <span className="font-medium">Name</span>{" "}
+            (required), Set, Collector Number, Rarity, Foil, Condition, Qty,
+            Price. Quantity duplicates the card (one row per copy). Unmatched
+            rows are reported after the import.
+          </p>
+        </div>
+      </DynamicDialog>
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { apiDelete, apiGet, apiPost, apiPut, getAuthHeaders } from "@/lib/api/client";
+import { apiDelete, apiGet, apiPost, apiPostForm, apiPut, getAuthHeaders } from "@/lib/api/client";
 import type { Collection, Result, ScannedCard } from "@magic-vault/shared";
 import { queryOptions } from "@tanstack/react-query";
 
@@ -71,6 +71,37 @@ export async function setCollectionCardFoil(
   return apiPut<Result<ScannedCard>>(`/api/collections/${guid}/cards/${scanId}`, {
     isFoil,
   });
+}
+
+export async function setCollectionCardCondition(
+  guid: string,
+  scanId: string,
+  condition: string | undefined,
+): Promise<Result<ScannedCard>> {
+  return apiPut<Result<ScannedCard>>(`/api/collections/${guid}/cards/${scanId}`, {
+    condition: condition ?? null,
+  });
+}
+
+export interface CsvImportRowError {
+  line: number;
+  name?: string;
+  reason: string;
+}
+
+export interface CsvImportResult {
+  success: boolean;
+  message?: string;
+  count?: number;
+  errors?: CsvImportRowError[];
+}
+
+/** Import a ManaBox/TCGplayer-style CSV into a collection (multipart upload). */
+export async function importCollectionCards(
+  guid: string,
+  formData: FormData,
+): Promise<CsvImportResult> {
+  return apiPostForm<CsvImportResult>(`/api/collections/${guid}/import`, formData);
 }
 
 export async function removeCollectionCard(

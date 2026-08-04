@@ -70,4 +70,6 @@ export interface ScannedCard {
   alternativeMatches?: PlayingCardWithDistance[];
   isFoil?: boolean;
   isDownloaded?: boolean;
+  /** Per-scan grading for TCGplayer listing (e.g. "Near Mint"). */
+  condition?: string;
 }

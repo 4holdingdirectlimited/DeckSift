@@ -70,7 +70,8 @@ arduino/      Firmware + build docs (arduino/main/main.ino, BUILD.md, SERIAL_PRO
 3d model/     Printable enclosure/module design (Fusion 360 + .3mf)
 custom/       Our docs: CHANGES.md (all modifications), SETUP.md (local runbook), TCGS.md, PLAN.md
 drizzle/      Generated SQL migrations
-scripts/      Local helpers: start-server.cmd, start-web.cmd, local-db.mjs, arduino-compile.sh
+scripts/      Local helpers: start-server.cmd, start-web.cmd, local-db.mjs, backup-db.mjs,
+              arduino-compile.sh
               (+ packages/server/scripts: seed-local.ts, apply-bin-capacities.ts, import-cardset.ts, bench-vectorize.ts)
 ```
 
@@ -121,6 +122,14 @@ A helper script manages the server day-to-day, and can register a no-admin logon
 
 ```bash
 node scripts/local-db.mjs start|stop|status|install|uninstall
+```
+
+Back up the database with one command (safety net — see `scripts/backup-db.mjs`):
+
+```bash
+node scripts/backup-db.mjs backup        # dump to .local/backups
+node scripts/backup-db.mjs list          # list existing backups
+node scripts/backup-db.mjs restore <file>  # restore (wipes current data)
 ```
 
 ### 2. Seed + run

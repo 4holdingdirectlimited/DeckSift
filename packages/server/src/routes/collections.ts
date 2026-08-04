@@ -1,14 +1,22 @@
 import type {
   Collection,
   FieldMeta,
+  PlayingCard,
   PlayingCardWithDistance,
   ScannedCard,
 } from "@magic-vault/shared";
-import { and, count, desc, eq, sql } from "drizzle-orm";
+import { and, count, desc, eq, ilike, sql } from "drizzle-orm";
+import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { authQuery, db, type Transaction } from "../db";
-import { collectionCards, collections, games, orgSettings } from "../db/schema";
+import {
+  cardImageVectors,
+  collectionCards,
+  collections,
+  games,
+  orgSettings,
+} from "../db/schema";
 import { buildCardScannedEmbed, sendDiscordNotification } from "../lib/discord";
 import {
   acquireLock,
@@ -97,6 +105,7 @@ function toScannedCard(row: {
   capturedImageDataUrl?: string | null;
   isFoil?: boolean | null;
   isDownloaded?: boolean | null;
+  condition?: string | null;
   alternativeMatches?: unknown;
 }): ScannedCard {
   return {
@@ -107,6 +116,7 @@ function toScannedCard(row: {
     capturedImageUrl: row.capturedImageDataUrl ?? undefined,
     isFoil: row.isFoil ?? undefined,
     isDownloaded: row.isDownloaded ?? undefined,
+    condition: row.condition ?? undefined,
     alternativeMatches:
       (row.alternativeMatches as PlayingCardWithDistance[] | null) ?? undefined,
   };
@@ -430,6 +440,7 @@ router.get("/:guid/cards", requireAuth, requireOrg, async (c) => {
           capturedImageDataUrl: collectionCards.capturedImageDataUrl,
           isFoil: collectionCards.isFoil,
           isDownloaded: collectionCards.isDownloaded,
+          condition: collectionCards.condition,
           alternativeMatches: collectionCards.alternativeMatches,
         })
         .from(collectionCards)
@@ -457,6 +468,7 @@ router.post("/:guid/cards", requireAuth, requireOrg, async (c) => {
     binNumber,
     capturedImageUrl,
     isFoil,
+    condition,
     alternativeMatches,
   } = await c.req.json<ScannedCard>();
 
@@ -507,6 +519,7 @@ router.post("/:guid/cards", requireAuth, requireOrg, async (c) => {
             binNumber: binNumber ?? null,
             capturedImageDataUrl: capturedImageUrl ?? null,
             isFoil: isFoil ?? false,
+            condition: condition ?? null,
             alternativeMatches: alternativeMatches?.length
               ? alternativeMatches
               : null,
@@ -536,6 +549,7 @@ router.post("/:guid/cards", requireAuth, requireOrg, async (c) => {
               binNumber,
               capturedImageUrl,
               isFoil,
+              condition,
               alternativeMatches,
             } as ScannedCard,
           },
@@ -586,10 +600,11 @@ router.post("/:guid/cards", requireAuth, requireOrg, async (c) => {
 router.put("/:guid/cards/:scanId", requireAuth, requireOrg, async (c) => {
   const orgId = c.get("orgId");
   const { guid, scanId } = c.req.param();
-  const { card, binNumber, isFoil } = await c.req.json<{
+  const { card, binNumber, isFoil, condition } = await c.req.json<{
     card?: PlayingCardWithDistance;
     binNumber?: number;
     isFoil?: boolean;
+    condition?: string | null;
   }>();
   try {
     const result = await authQuery(c.get("jwtClaims"), async (tx) => {
@@ -615,6 +630,7 @@ router.put("/:guid/cards/:scanId", requireAuth, requireOrg, async (c) => {
         if (binNumber !== undefined) updates.binNumber = binNumber;
       }
       if (isFoil !== undefined) updates.isFoil = isFoil;
+      if (condition !== undefined) updates.condition = condition || null;
 
       await tx
         .update(collectionCards)
@@ -632,6 +648,7 @@ router.put("/:guid/cards/:scanId", requireAuth, requireOrg, async (c) => {
               ? binNumber ?? existing.binNumber
               : existing.binNumber,
           isFoil: isFoil !== undefined ? isFoil : existing.isFoil,
+          condition: condition !== undefined ? condition || null : null,
         }),
       };
     });
@@ -849,6 +866,7 @@ router.get("/:guid/stream", async (c) => {
             capturedImageDataUrl: collectionCards.capturedImageDataUrl,
             isFoil: collectionCards.isFoil,
             isDownloaded: collectionCards.isDownloaded,
+            condition: collectionCards.condition,
             alternativeMatches: collectionCards.alternativeMatches,
           })
           .from(collectionCards)
@@ -897,6 +915,453 @@ router.get("/:guid/stream", async (c) => {
 
     unsubscribe();
   });
+});
+
+// ---------------------------------------------------------------------------
+// CSV collection import
+//
+// Imports ManaBox / TCGplayer / Delver-style card lists into a collection as
+// ScannedCard records (binNumber null — these are "owned" cards, not physical
+// sort scans). Matching is fully local: rows are matched against the synced
+// cards table by name (+ set / collector number when present), so no network
+// is needed and the imported "owned" data immediately powers chase mode and
+// set completeness.
+// ---------------------------------------------------------------------------
+
+/** Header aliases (case-insensitive) per canonical field. */
+const IMPORT_HEADER_ALIASES: Record<string, string[]> = {
+  name: ["name", "card name", "cardname", "product name", "title"],
+  set: ["set", "set name", "set_name", "expansion", "edition", "series"],
+  number: [
+    "collector number",
+    "collector_number",
+    "card number",
+    "cardnumber",
+    "number",
+    "#",
+    "num",
+    "cardnum",
+    "no",
+  ],
+  rarity: ["rarity", "card rarity"],
+  foil: ["foil", "printing", "finish", "variant", "holo", "is foil"],
+  condition: ["condition", "card condition", "grade"],
+  qty: ["qty", "quantity", "count", "q", "amount", "copies"],
+  price: [
+    "price",
+    "list price",
+    "low price",
+    "market price",
+    "tcg low",
+    "tcgplayer low",
+    "value",
+    "price usd",
+    "usd",
+  ],
+};
+
+function normalizeImportHeader(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9#]+/g, " ")
+    .trim();
+}
+
+function importFieldForHeader(header: string): string | null {
+  const norm = normalizeImportHeader(header);
+  for (const [field, aliases] of Object.entries(IMPORT_HEADER_ALIASES)) {
+    if (aliases.some((alias) => normalizeImportHeader(alias) === norm)) {
+      return field;
+    }
+  }
+  return null;
+}
+
+/** Minimal RFC-4180-style CSV parser (handles quoted fields and embedded
+ *  commas/quotes/newlines). Blank lines are skipped. */
+function parseCsv(text: string): string[][] {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let field = "";
+  let inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inQuotes) {
+      if (ch === '"') {
+        if (text[i + 1] === '"') {
+          field += '"';
+          i++;
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        field += ch;
+      }
+    } else if (ch === '"') {
+      inQuotes = true;
+    } else if (ch === ",") {
+      row.push(field);
+      field = "";
+    } else if (ch === "\n" || ch === "\r") {
+      if (ch === "\r" && text[i + 1] === "\n") i++;
+      row.push(field);
+      field = "";
+      if (row.some((cell) => cell.trim() !== "")) rows.push(row);
+      row = [];
+    } else {
+      field += ch;
+    }
+  }
+  if (field !== "" || row.length > 0) {
+    row.push(field);
+    if (row.some((cell) => cell.trim() !== "")) rows.push(row);
+  }
+  return rows;
+}
+
+function parseImportFoil(value: string | undefined): boolean | undefined {
+  if (!value) return undefined;
+  const v = value.trim().toLowerCase();
+  if (
+    ["yes", "true", "y", "1", "foil", "holo", "holofoil", "etched"].includes(
+      v,
+    )
+  )
+    return true;
+  if (
+    [
+      "no",
+      "false",
+      "n",
+      "0",
+      "nonfoil",
+      "non-foil",
+      "non foil",
+      "normal",
+      "regular",
+    ].includes(v)
+  )
+    return false;
+  if (v.includes("foil") && !v.includes("non")) return true;
+  if (v.includes("non") || v.includes("regular") || v.includes("normal"))
+    return false;
+  return undefined;
+}
+
+const IMPORT_CONDITIONS: Record<string, string> = {
+  "near mint": "Near Mint",
+  nm: "Near Mint",
+  mint: "Near Mint",
+  "lightly played": "Lightly Played",
+  lp: "Lightly Played",
+  "light play": "Lightly Played",
+  "moderately played": "Moderately Played",
+  mp: "Moderately Played",
+  "mod play": "Moderately Played",
+  "heavily played": "Heavily Played",
+  hp: "Heavily Played",
+  "heavy play": "Heavily Played",
+  damaged: "Damaged",
+  dmg: "Damaged",
+  good: "Good",
+  played: "Played",
+};
+
+function normalizeImportCondition(
+  value: string | undefined,
+): string | undefined {
+  if (!value) return undefined;
+  const key = value.trim().toLowerCase().replace(/\s+/g, " ");
+  const mapped = IMPORT_CONDITIONS[key];
+  if (mapped) return mapped;
+  // Unknown grades pass through capitalized so they aren't silently lost.
+  const trimmed = value.trim();
+  return trimmed
+    ? trimmed.charAt(0).toUpperCase() + trimmed.slice(1)
+    : undefined;
+}
+
+/** Compare collector numbers ignoring leading zeros ("001" === "1"). */
+function sameCollectorNumber(a: string, b: string): boolean {
+  const norm = (v: string) => v.trim().replace(/^0+/, "");
+  return norm(a) === norm(b);
+}
+
+/** Escape LIKE wildcards so a card name is matched literally. */
+function escapeLike(value: string): string {
+  return value.replace(/[\\%_]/g, (m) => `\\${m}`);
+}
+
+interface CsvImportRow {
+  line: number;
+  name?: string;
+  set?: string;
+  number?: string;
+  rarity?: string;
+  isFoil?: boolean;
+  condition?: string;
+  qty: number;
+  price?: string;
+}
+
+function parseCsvRows(text: string): CsvImportRow[] {
+  const parsed = parseCsv(text);
+  if (parsed.length === 0) return [];
+  const fields = parsed[0].map((h) => importFieldForHeader(h));
+  const rows: CsvImportRow[] = [];
+  for (let i = 1; i < parsed.length; i++) {
+    const cells = parsed[i];
+    const record: CsvImportRow = { line: i + 1, qty: 1 };
+    cells.forEach((cell, idx) => {
+      const field = fields[idx];
+      if (!field) return;
+      const value = cell.trim();
+      if (value === "") return;
+      switch (field) {
+        case "name":
+          record.name = value;
+          break;
+        case "set":
+          record.set = value;
+          break;
+        case "number":
+          record.number = value;
+          break;
+        case "rarity":
+          record.rarity = value;
+          break;
+        case "foil": {
+          const foil = parseImportFoil(value);
+          if (foil !== undefined) record.isFoil = foil;
+          break;
+        }
+        case "condition":
+          record.condition = normalizeImportCondition(value);
+          break;
+        case "qty": {
+          const n = parseInt(value.replace(/[^0-9]/g, ""), 10);
+          if (!Number.isNaN(n) && n > 0) record.qty = n;
+          break;
+        }
+        case "price":
+          record.price = value.replace(/[^0-9.]/g, "");
+          break;
+      }
+    });
+    rows.push(record);
+  }
+  return rows;
+}
+
+interface ImportRowError {
+  line: number;
+  name?: string;
+  reason: string;
+}
+
+// POST /collections/:guid/import — bulk CSV import (ManaBox/TCGplayer lists)
+router.post("/:guid/import", requireAuth, requireOrg, async (c) => {
+  const guid = c.req.param("guid");
+  const orgId = c.get("orgId");
+  try {
+    const body = await c.req.parseBody();
+    const file = body["file"];
+    if (!file || typeof file === "string") {
+      return c.json(
+        { success: false, message: "No CSV file provided." },
+        400,
+      );
+    }
+    const text = Buffer.from(await file.arrayBuffer()).toString("utf8");
+    const rows = parseCsvRows(text);
+    if (rows.length === 0) {
+      return c.json(
+        { success: false, message: "No data rows found in the CSV." },
+        400,
+      );
+    }
+
+    const result = await authQuery<{
+      success: boolean;
+      message?: string;
+      count?: number;
+      errors?: ImportRowError[];
+      cards?: ScannedCard[];
+    }>(c.get("jwtClaims"), async (tx) => {
+      const collection = await tx.query.collections.findFirst({
+        where: (t, { eq, and }) => and(eq(t.guid, guid), eq(t.orgId, orgId)),
+        columns: { id: true, gameId: true },
+      });
+      if (!collection)
+        return { success: false, message: "Collection not found." };
+      if (!collection.gameId)
+        return {
+          success: false,
+          message: "This collection has no game configured.",
+        };
+
+      const game = await tx.query.games.findFirst({
+        where: (t, { eq }) => eq(t.id, collection.gameId!),
+        columns: { key: true },
+      });
+      if (!game) return { success: false, message: "Game not found." };
+
+      // Fetch candidates once per distinct name, then match each row in JS.
+      const candidatesByKey = new Map<
+        string,
+        { scryfallId: string; setCode: string; cardData: PlayingCard | null }[]
+      >();
+
+      const getCandidates = async (name: string) => {
+        const key = name.trim().toLowerCase();
+        let list = candidatesByKey.get(key);
+        if (!list) {
+          const found = await tx
+            .select({
+              scryfallId: cardImageVectors.scryfallId,
+              setCode: cardImageVectors.setCode,
+              cardData: cardImageVectors.cardData,
+            })
+            .from(cardImageVectors)
+            .where(
+              and(
+                eq(cardImageVectors.gameKey, game.key),
+                ilike(cardImageVectors.name, escapeLike(name.trim())),
+              ),
+            )
+            .limit(200);
+          list = found.map((r) => ({
+            scryfallId: r.scryfallId,
+            setCode: r.setCode,
+            cardData: (r.cardData as PlayingCard | null) ?? null,
+          }));
+          candidatesByKey.set(key, list);
+        }
+        return list;
+      };
+
+      const toInsert: (typeof collectionCards.$inferInsert)[] = [];
+      const errors: ImportRowError[] = [];
+      const imported: ScannedCard[] = [];
+      const now = new Date();
+
+      for (const row of rows) {
+        if (!row.name) {
+          errors.push({ line: row.line, reason: "Row has no card name." });
+          continue;
+        }
+        const candidates = await getCandidates(row.name);
+        if (candidates.length === 0) {
+          errors.push({
+            line: row.line,
+            name: row.name,
+            reason:
+              "No matching card in the local library (sync the game first).",
+          });
+          continue;
+        }
+
+        let matched = candidates;
+        if (row.set) {
+          const setLower = row.set.trim().toLowerCase();
+          const bySet = candidates.filter(
+            (cd) =>
+              cd.setCode.toLowerCase() === setLower ||
+              cd.cardData?.set_name?.toLowerCase() === setLower,
+          );
+          if (bySet.length > 0) matched = bySet;
+        }
+        if (row.number && matched.length > 1) {
+          const byNumber = matched.filter(
+            (cd) =>
+              cd.cardData &&
+              sameCollectorNumber(
+                cd.cardData.collector_number ?? "",
+                row.number!,
+              ),
+          );
+          if (byNumber.length > 0) matched = byNumber;
+        }
+        if (matched.length === 0) {
+          errors.push({
+            line: row.line,
+            name: row.name,
+            reason: "No match for the name/set/number combination.",
+          });
+          continue;
+        }
+
+        const pick = matched[0];
+        if (!pick.cardData) {
+          errors.push({
+            line: row.line,
+            name: row.name,
+            reason: "Card found but has no stored details — re-sync the game.",
+          });
+          continue;
+        }
+        const base: PlayingCardWithDistance = { ...pick.cardData, distance: 0 };
+        for (let copy = 0; copy < row.qty; copy++) {
+          const scanned: ScannedCard = {
+            scanId: randomUUID(),
+            card: base,
+            scannedAt: now.getTime(),
+            isFoil: row.isFoil ?? false,
+            condition: row.condition,
+            alternativeMatches: undefined,
+          };
+          toInsert.push({
+            guid: scanned.scanId,
+            collectionId: collection.id,
+            scryfallId: pick.scryfallId,
+            card: base,
+            scannedAt: now,
+            binNumber: null,
+            capturedImageDataUrl: null,
+            isFoil: row.isFoil ?? false,
+            condition: row.condition ?? null,
+            alternativeMatches: null,
+            orgId,
+          });
+          imported.push(scanned);
+        }
+      }
+
+      if (toInsert.length > 0) {
+        await tx
+          .insert(collectionCards)
+          .values(toInsert)
+          .onConflictDoNothing();
+        await tx
+          .update(collections)
+          .set({ updatedAt: now })
+          .where(eq(collections.id, collection.id));
+      }
+
+      return { success: true, count: imported.length, errors, cards: imported };
+    });
+
+    if (!result.success) {
+      return c.json(
+        result,
+        result.message === "Collection not found." ? 404 : 400,
+      );
+    }
+
+    // Announce imported cards so live session monitors pick them up.
+    for (const card of result.cards ?? []) {
+      emitToSession(guid, "card_added", card);
+    }
+
+    return c.json(result);
+  } catch (err) {
+    console.error(err);
+    return c.json(
+      { success: false, message: "Failed to import collection CSV." },
+      500,
+    );
+  }
 });
 
 export { router as collectionsRouter };

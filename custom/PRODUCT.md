@@ -35,13 +35,13 @@ Legend: effort ●○○ = tiny (hours) · ●●○ = a session · ●●● = 
 
 | Feature | What | Effort | Status |
 | --- | --- | --- | --- |
-| First-run checklist | Guided: connect camera → Arduino → calibrate → sync → first scan | ●●○ | 🧰 |
+| First-run checklist | Guided: connect camera → Arduino → calibrate → sync → first scan | ●●○ | ✅ built |
 | Undo last scan | Remove the most recent record (fix by hand if misrouted) | ●○○ | ✅ built |
 | Match/no-match sounds | Distinct chime vs low tone so you know without looking | ●○○ | ✅ built |
-| Match confidence badge | Show distance/quality on each scanned card | ●○○ | 🔜 |
+| Match confidence badge | Show distance/quality on each scanned card | ●○○ | ✅ built |
 | Scan stats (value, sets, rares) | Already computed — surface it better (sidebar) | ●○○ | ✅ part |
-| Backup/restore | `pg_dump` script wrapper — one command, full safety net | ●○○ | 🔜 |
-| Collection CSV import | Import ManaBox/TCGplayer list → “owned” data feeds chase/set-completeness instantly | ●●○ | 🔜 high value |
+| Backup/restore | `pg_dump` script wrapper — one command, full safety net | ●○○ | ✅ built (`scripts/backup-db.mjs`) |
+| Collection CSV import | Import ManaBox/TCGplayer list → “owned” data feeds chase/set-completeness instantly | ●●○ | ✅ built |
 | Review queue | Low-confidence matches pause for a yes/no instead of auto-routing | ●●○ | 🧰 |
 
 ### Value & commerce (bridge to v2)
@@ -51,14 +51,14 @@ Legend: effort ●○○ = tiny (hours) · ●●○ = a session · ●●● = 
 | TCGplayer CSV export | Inventory CSV for the seller portal | ●○○ | ✅ built |
 | Bundle SKU + inventory + CSV | Traceable bundle records | ●●○ | ✅ built |
 | Total collection value | Per-session + per-collection totals | ●○○ | ✅ part |
-| Condition field | Per-scan condition for TCG export (defaults NM) | ●●○ | 🔜 |
+| Condition field | Per-scan condition for TCG export (defaults NM) | ●●○ | ✅ built |
 | TCGplayer price source | Needs seller API access (TCGS.md roadmap) | ●●● | 🧰 |
 
 ### Everyday QoL
 
 | Feature | What | Effort | Status |
 | --- | --- | --- | --- |
-| Keyboard shortcuts | Space = pause/resume, S = scan, Z = undo | ●○○ | 🔜 |
+| Keyboard shortcuts | Space = pause/resume, S = scan, Z = undo | ●○○ | ✅ built |
 | Digitize mode | Record without sorting | ●○○ | ✅ built |
 | Orientation tolerance | Auto-upright flipped cards | ●○○ | ✅ built |
 | Feeder “clear” button | Quick jam-recovery without full recalibration | ●○○ | 🔜 |
@@ -68,9 +68,10 @@ Legend: effort ●○○ = tiny (hours) · ●●○ = a session · ●●● = 
 ## Quick wins I can build next (your pick)
 
 1. **Match confidence badge** on scanned cards (distance → colored dot) — tiny,
-   huge trust boost.
-2. **Keyboard shortcuts** (pause/scan/undo) — tiny.
+   huge trust boost. — ✅ built (Item 47)
+2. **Keyboard shortcuts** (pause/scan/undo) — tiny. — ✅ built (Item 47)
 3. **Backup/restore script** — one-command `pg_dump`/`pg_restore` wrapper,
-   tiny, big peace of mind.
+   tiny, big peace of mind. — ✅ built (Item 47)
 4. **Collection CSV import** — medium, but it unlocks chase mode + set
    completeness for people with existing collections (strong adoption hook).
+   — ✅ built (Item 47)

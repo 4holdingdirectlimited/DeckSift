@@ -248,6 +248,8 @@ export const collectionCards = pgTable(
     capturedImageDataUrl: text("captured_image_data_url"),
     isFoil: boolean("is_foil").notNull().default(false),
     isDownloaded: boolean("is_downloaded").notNull().default(false),
+    // Per-scan grading for TCGplayer listing (Near Mint, Lightly Played, ...).
+    condition: text("condition"),
     alternativeMatches: jsonb("alternative_matches"),
     orgId: text("org_id").notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),

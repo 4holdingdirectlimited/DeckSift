@@ -19,6 +19,7 @@ import {
   removeCollectionCard,
   removeCollectionCards,
   setCollectionCardFoil,
+  setCollectionCardCondition,
   updateCollectionCard,
 } from "@/features/collections/api/collections";
 import { useCollectionLocks } from "@/features/collections/api/use-collection-locks";
@@ -864,6 +865,20 @@ export function ScannedCardsProvider({
     }
   }, []);
 
+  const setCondition = useCallback((scanId: string, condition?: string) => {
+    const collection = activeCollectionRef.current;
+    setCards((prev) =>
+      prev.map((entry) =>
+        entry.scanId === scanId ? { ...entry, condition } : entry,
+      ),
+    );
+    if (collection) {
+      setCollectionCardCondition(collection.guid, scanId, condition).catch(
+        (err) => console.error("Failed to update condition:", err),
+      );
+    }
+  }, []);
+
   const markDownloaded = useCallback((scanIds: string[]) => {
     const collection = activeCollectionRef.current;
     if (scanIds.length === 0) return;
@@ -917,6 +932,7 @@ export function ScannedCardsProvider({
         undoLastScan,
         correctCard,
         toggleFoil,
+        setCondition,
         markDownloaded,
         clearCards,
       }}

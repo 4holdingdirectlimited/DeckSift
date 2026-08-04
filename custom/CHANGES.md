@@ -1997,6 +1997,89 @@ thesis.
 
 ---
 
+## Item 47 — Six adoption features: CSV import, condition, badge, shortcuts, backup script, first-run checklist (server + web + scripts)
+
+**Status:** implemented, uncommitted.
+
+### Why
+
+Closes out the v1 adoption backlog from `custom/PRODUCT.md`: import an existing
+collection (the strongest hook for chase/set-completeness), per-scan grading for
+TCGplayer listings, instant trust signals on every card, keyboard control, a
+one-command safety net, and a guided first-run path.
+
+### What changed
+
+**Collection CSV import (server + web)**
+- `packages/server/src/routes/collections.ts` — new `POST /api/collections/:guid/import`
+  (multipart `file`). Parses ManaBox/TCGplayer/Delver-style CSVs (case-insensitive
+  header aliases: Name, Set/Set Name, Collector Number, Rarity, Foil, Condition,
+  Qty, Price; RFC-4180 quoting). Rows are matched fully locally against the
+  synced `cards` table by name (ILIKE, escaped) plus set code/name and collector
+  number when present; `Qty` inserts one row per copy. Imports are inserted as
+  `ScannedCard` rows (`binNumber` null, `distance` 0) and announced via
+  `card_added` session events. Returns `{ success, count, errors }` where errors
+  are per-row (line number + reason).
+- `packages/web/src/features/collections/api/collections.ts` —
+  `importCollectionCards(guid, formData)` (multipart via `apiPostForm`).
+- `packages/web/src/app/routes/app/collections.tsx` — per-collection **Import
+  CSV** button + dialog (file picker, format help, result toast with unmatched
+  row preview).
+
+**Condition field (server was done; frontend now complete)**
+- `packages/web/src/features/collections/api/collections.ts` —
+  `setCollectionCardCondition(guid, scanId, condition)` (PUT `{ condition }`).
+- `packages/web/src/features/scanner/api/use-scanned-cards.tsx` + `types.ts` —
+  `setCondition(scanId, condition?)` in the context.
+- `packages/web/src/features/cards/components/card-detail-panel.tsx` — condition
+  Select (Near Mint / Lightly Played / Moderately Played / Heavily Played /
+  Damaged / Not graded) next to the Foil toggle.
+- `packages/web/src/features/cards/lib/tcgplayer-export.ts` — TCG CSV now groups
+  by card + foil + **condition** and emits each scan's condition (defaults
+  "Near Mint").
+
+**Match confidence badge**
+- `packages/web/src/features/cards/components/scanned-card-item.tsx` — distance
+  badge is now a colored dot + compact %: green < 0.15, amber < 0.25, red
+  ≥ 0.25; imports/manual adds (no distance) show a neutral "—" instead of a
+  misleading "0.00%".
+
+**Keyboard shortcuts**
+- `packages/web/src/features/scanner/api/use-scan-shortcuts.ts` (new) — Space =
+  pause/resume, S = force scan, Z = undo last scan; ignored in inputs/textarea
+  and with modifier keys. Mounted in the scanner route (`app/index.tsx`).
+
+**Backup/restore script**
+- `scripts/backup-db.mjs` (new) — `node scripts/backup-db.mjs backup [dir]`
+  (pg_dump --clean --if-exists to `.local/backups/mault-<timestamp>.sql`),
+  `list`, and `restore <file>` (psql restore with a bootstrap re-run hint).
+
+**First-run checklist**
+- `packages/web/src/features/setup/components/first-run-checklist.tsx` (new) —
+  live checklist in the scanner sidebar: camera → Arduino → sync a game →
+  calibrate servos → first scan; links to Admin / Calibrate / Build guide.
+
+### Behavior notes
+
+- CSV import never touches the network — it matches against the synced library
+  only, so the game must be synced first (unmatched rows are reported, not
+  silently dropped).
+- `condition` is optional everywhere; blank grades stay "Near Mint" on TCG
+  export.
+- `guid` is a Postgres UUID — imported scan ids are plain `randomUUID()`s.
+
+### How to revert
+
+1. Remove the `/import` route + CSV helpers from `collections.ts`, and the
+   import button/dialog from the collections page.
+2. Drop `setCondition` from the provider/context type, the panel Select, and
+   the TCG export condition grouping.
+3. Revert the badge change in `scanned-card-item.tsx`; delete
+   `use-scan-shortcuts.ts` and its usage; delete `scripts/backup-db.mjs`;
+   delete the first-run checklist component and its sidebar mount.
+
+---
+
 *Template for future entries:*
 
 ## Item N — <short title> (area)

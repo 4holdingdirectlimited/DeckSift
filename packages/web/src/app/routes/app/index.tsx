@@ -8,11 +8,13 @@ import { CollectionSwitcher } from "@/features/collections/components/collection
 import { orgSettingsQueryOptions } from "@/features/companies/api/org-settings";
 import { useOrg } from "@/features/companies/api/use-organization";
 import { useScannedCards } from "@/features/scanner/api/use-scanned-cards";
+import { useScanShortcuts } from "@/features/scanner/api/use-scan-shortcuts";
 import { BinStatus } from "@/features/scanner/components/bin-status";
 import { CardScanner } from "@/features/scanner/components/card-scanner";
 import { DigitizeModeToggle } from "@/features/scanner/components/digitize-mode-toggle";
 import { ScanStats } from "@/features/scanner/components/scan-stats";
 import { ScannerDebug } from "@/features/scanner/components/scanner-debug";
+import { FirstRunChecklist } from "@/features/setup/components/first-run-checklist";
 import { useIsMobile } from "@/hooks/use-is-mobile";
 import { IconCards } from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
@@ -38,6 +40,7 @@ function MobileScanner() {
         <DrawerContent>
           <div className="overflow-y-auto p-4 flex flex-col gap-4 max-h-[calc(80vh-2rem)]">
             <div className="flex flex-col gap-2">
+              <FirstRunChecklist />
               <CollectionSwitcher />
               <PresetSelector readOnly />
               <DigitizeModeToggle />
@@ -65,6 +68,8 @@ export default function App() {
   );
   const isVertical = orgSettings?.scannerLayout === "vertical";
 
+  useScanShortcuts();
+
   if (isMobile) {
     return <MobileScanner />;
   }
@@ -75,6 +80,7 @@ export default function App() {
         <section className="flex items-stretch gap-2 p-2 border-b bg-sidebar/70 shrink-0 h-1/2">
           <CardScanner className="flex-1 min-w-0" compact />
           <div className="flex flex-col gap-2 w-52 shrink-0 overflow-y-auto">
+            <FirstRunChecklist />
             <CollectionSwitcher />
             <PresetSelector readOnly />
             <DigitizeModeToggle />
@@ -95,6 +101,7 @@ export default function App() {
   return (
     <div className="grid grid-cols-12 flex-1 min-h-0 overflow-hidden">
       <section className="col-span-4 lg:col-span-3 xl:col-span-4 2xl:col-span-2 overflow-hidden flex flex-col h-full p-2 border-r gap-2 bg-sidebar/70">
+        <FirstRunChecklist />
         <CollectionSwitcher />
         <PresetSelector readOnly />
         <DigitizeModeToggle />

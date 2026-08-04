@@ -58,6 +58,8 @@ export interface ScannedCardsContextValue {
   undoLastScan: () => void;
   correctCard: (scanId: string, card: PlayingCard) => void;
   toggleFoil: (scanId: string, isFoil: boolean) => void;
+  /** Per-scan grading for TCGplayer export (e.g. "Near Mint"). */
+  setCondition: (scanId: string, condition?: string) => void;
   markDownloaded: (scanIds: string[]) => void;
   clearCards: () => void;
 }

@@ -12,8 +12,8 @@ import type { ScannedCard } from "@magic-vault/shared";
  * importer and ecosystem tools accept (case-insensitive headers):
  *   name, set_name, condition, quantity, purchase_price, list_price, tcgplayer_id
  *
- * - condition defaults to "Near Mint" — edit the CSV before upload if you
- *   grade differently.
+ * - condition comes from each scan's condition field (set in the card detail
+ *   panel); ungraded scans default to "Near Mint".
  * - Foil variants get " (Foil)" appended to the name, TCGplayer's convention
  *   for foil product names, so the matcher picks the right product.
  * - list_price is filled from the card's price (usd_foil for foil rows) when
@@ -29,14 +29,16 @@ interface TcgRow {
   quantity: number;
   listPrice: string | null;
   isFoil: boolean;
+  condition: string;
 }
 
-/** Group scanned cards by unique product (card id + foil variant). */
+/** Group scanned cards by unique product (card id + foil + condition). */
 function groupTcgRows(cards: ScannedCard[]): TcgRow[] {
   const grouped = new Map<string, TcgRow>();
   for (const scan of cards) {
     const card = scan.card;
-    const key = `${card.id}|${scan.isFoil ? "f" : "n"}`;
+    const condition = scan.condition ?? DEFAULT_CONDITION;
+    const key = `${card.id}|${scan.isFoil ? "f" : "n"}|${condition}`;
     const existing = grouped.get(key);
     if (existing) {
       existing.quantity += 1;
@@ -49,6 +51,7 @@ function groupTcgRows(cards: ScannedCard[]): TcgRow[] {
           ? card.prices?.usd_foil ?? card.prices?.usd ?? null
           : card.prices?.usd ?? null,
         isFoil: !!scan.isFoil,
+        condition,
       });
     }
   }
@@ -80,7 +83,7 @@ export function buildTcgplayerCsv(cards: ScannedCard[]): string {
       [
         row.isFoil ? `${row.name} (Foil)` : row.name,
         row.setName,
-        DEFAULT_CONDITION,
+        row.condition,
         row.quantity,
         "", // purchase_price — we don't track cost basis
         row.listPrice ?? "",

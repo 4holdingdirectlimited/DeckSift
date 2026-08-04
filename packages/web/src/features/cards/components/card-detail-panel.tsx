@@ -53,6 +53,7 @@ interface CardDetailPanelProps {
   alternativeMatches?: PlayingCardWithDistance[];
   capturedImageUrl?: string;
   isFoil?: boolean;
+  condition?: string;
   binNumber?: number;
   onPrev?: () => void;
   onNext?: () => void;
@@ -70,6 +71,7 @@ export function CardDetailPanel({
   alternativeMatches,
   capturedImageUrl,
   isFoil = false,
+  condition,
   binNumber,
   onPrev,
   onNext,
@@ -88,7 +90,7 @@ export function CardDetailPanel({
   const [selectedId, setSelectedId] = useState<string | undefined>(undefined);
   const prevScanIdRef = useRef<string | undefined>(undefined);
 
-  const { addCard, correctCard, toggleFoil } = useScannedCards();
+  const { addCard, correctCard, toggleFoil, setCondition } = useScannedCards();
   const { activeCollection } = useCollections();
 
   useEffect(() => {
@@ -433,16 +435,49 @@ export function CardDetailPanel({
                     );
                   })()}
               </div>
-              <Label className="flex items-center gap-2 w-fit">
-                <Switch
-                  checked={isFoil}
-                  onCheckedChange={(checked) => {
-                    if (scanId) toggleFoil(scanId, checked);
-                  }}
-                  disabled={!scanId}
-                />
-                Foil
-              </Label>
+              <div className="flex flex-wrap items-center gap-4">
+                <Label className="flex items-center gap-2 w-fit">
+                  <Switch
+                    checked={isFoil}
+                    onCheckedChange={(checked) => {
+                      if (scanId) toggleFoil(scanId, checked);
+                    }}
+                    disabled={!scanId}
+                  />
+                  Foil
+                </Label>
+                {scanId && (
+                  <Label className="flex items-center gap-2 w-fit">
+                    <span className="text-xs text-muted-foreground">
+                      Condition
+                    </span>
+                    <Select
+                      value={condition ?? ""}
+                      onValueChange={(value) =>
+                        setCondition(scanId, value || undefined)
+                      }
+                    >
+                      <SelectTrigger className="w-44 h-8">
+                        <SelectValue placeholder="Not graded" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">Not graded</SelectItem>
+                        <SelectItem value="Near Mint">Near Mint</SelectItem>
+                        <SelectItem value="Lightly Played">
+                          Lightly Played
+                        </SelectItem>
+                        <SelectItem value="Moderately Played">
+                          Moderately Played
+                        </SelectItem>
+                        <SelectItem value="Heavily Played">
+                          Heavily Played
+                        </SelectItem>
+                        <SelectItem value="Damaged">Damaged</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </Label>
+                )}
+              </div>
               <div className="flex gap-3 pt-1">
                 <Button
                   variant="outline"
