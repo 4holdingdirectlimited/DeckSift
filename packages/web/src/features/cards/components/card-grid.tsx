@@ -21,6 +21,7 @@ import { ScannerDebug } from "@/features/scanner/components/scanner-debug";
 import { computeStats } from "@/features/scanner/lib/compute-stats";
 
 import {
+  IconArrowBackUp,
   IconArrowBarToDown,
   IconBolt,
   IconCopy,
@@ -44,6 +45,7 @@ export function CardGrid() {
     removeCards,
     clearCards,
     markDownloaded,
+    undoLastScan,
     isLoading,
     elapsedMs,
     autoFeed,
@@ -316,6 +318,17 @@ export function CardGrid() {
           >
             <IconShoppingBag className="size-3.5" />
             TCG CSV
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={undoLastScan}
+            disabled={cards.length === 0}
+            className="shrink-0"
+            title="Remove the most recent scan record (fix the card by hand if it was misrouted)"
+          >
+            <IconArrowBackUp className="size-3.5" />
+            Undo last
           </Button>
           <Button
             variant="outline"

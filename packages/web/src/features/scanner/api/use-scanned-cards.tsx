@@ -54,6 +54,8 @@ export function ScannedCardsProvider({
   useEffect(() => {
     digitizeRef.current = digitize;
   }, [digitize]);
+  // Id of the most recently committed scan — powers "Undo last".
+  const lastScanIdRef = useRef<string | null>(null);
   const { configs: binConfigs, fieldDefinitions } = useBinConfigs();
   const { sendBin, sendFeed, isConnected, isReady } = useSerial();
   const { activeCollection } = useCollections();
@@ -340,6 +342,7 @@ export function ScannedCardsProvider({
     (record: ScannedCard, binNumber: number | undefined) => {
       const collection = activeCollectionRef.current;
       if (!collection) return;
+      lastScanIdRef.current = record.scanId;
       setCards((prev) => [record, ...prev]);
       setTimerTrigger(record.scannedAt);
       addCollectionCard(collection.guid, record)
@@ -809,6 +812,15 @@ export function ScannedCardsProvider({
     }
   }, []);
 
+  /** Undo the most recently committed scan (fixes the record — the physical
+   *  card still needs to be moved back by hand if it was misrouted). */
+  const undoLastScan = useCallback(() => {
+    if (lastScanIdRef.current) {
+      removeCard(lastScanIdRef.current);
+      lastScanIdRef.current = null;
+    }
+  }, [removeCard]);
+
   const removeCards = useCallback((scanIds: string[]) => {
     const collection = activeCollectionRef.current;
     const idSet = new Set(scanIds);
@@ -902,6 +914,7 @@ export function ScannedCardsProvider({
         sendCatchAllBin,
         removeCard,
         removeCards,
+        undoLastScan,
         correctCard,
         toggleFoil,
         markDownloaded,

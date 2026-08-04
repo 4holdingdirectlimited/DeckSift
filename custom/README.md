@@ -26,6 +26,7 @@ belong next to the sketch.
 | `TCGS.md` | Multi-TCG architecture, top-20 TCG data-source status, adding a new game |
 | `PLAN.md` | Firmware roadmap (state machine, pipelining, watchdogs) + machine-build commissioning checklist |
 | `HARDWARE_V2.md` | Production-leaning hardware review: materials/manufacturing, stability/mass, mechanism hardening, and the 3-machine/1-PC multi-machine plan |
+| `PRODUCT.md` | Product strategy (v1 home → v2 commercial), adoption drivers, and the value-vs-effort feature backlog |
 
 ## Git workflow
 

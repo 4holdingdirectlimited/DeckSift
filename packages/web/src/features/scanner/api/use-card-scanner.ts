@@ -42,25 +42,40 @@ function getAudioContext(): AudioContext {
   return sharedAudioCtx;
 }
 
-function playDingSound() {
+function playMatchSound() {
   const ctx = getAudioContext();
   if (ctx.state === "suspended") ctx.resume();
 
-  const oscillator = ctx.createOscillator();
+  const notes = [880, 1174.66]; // A5 → D6, ascending
+  notes.forEach((freq, i) => {
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(freq, ctx.currentTime + i * 0.09);
+    gain.gain.setValueAtTime(0.25, ctx.currentTime + i * 0.09);
+    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + i * 0.09 + 0.22);
+    osc.start(ctx.currentTime + i * 0.09);
+    osc.stop(ctx.currentTime + i * 0.09 + 0.25);
+  });
+}
+
+/** Low single tone on a no-match — distinct from the match chime. */
+function playNoMatchSound() {
+  const ctx = getAudioContext();
+  if (ctx.state === "suspended") ctx.resume();
+
+  const osc = ctx.createOscillator();
   const gain = ctx.createGain();
-
-  oscillator.connect(gain);
+  osc.connect(gain);
   gain.connect(ctx.destination);
-
-  oscillator.type = "sine";
-  oscillator.frequency.setValueAtTime(880, ctx.currentTime);
-  oscillator.frequency.setValueAtTime(660, ctx.currentTime + 0.1);
-
-  gain.gain.setValueAtTime(0.3, ctx.currentTime);
-  gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
-
-  oscillator.start(ctx.currentTime);
-  oscillator.stop(ctx.currentTime + 0.3);
+  osc.type = "square";
+  osc.frequency.setValueAtTime(220, ctx.currentTime);
+  gain.gain.setValueAtTime(0.12, ctx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.25);
+  osc.start(ctx.currentTime);
+  osc.stop(ctx.currentTime + 0.25);
 }
 
 // Encode a blob to a data URL without a second canvas encode — the upload
@@ -283,6 +298,7 @@ export function useCardScanner({
             updateStatus("duplicate");
           } else {
             lastScannedCardIdRef.current = card.id;
+            playMatchSound();
             onSearchResultsRef.current?.(
               [card, ...alternativeMatches],
               debugImageUrl,
@@ -291,7 +307,7 @@ export function useCardScanner({
             updateStatus("scanning");
           }
         } else {
-          playDingSound();
+          playNoMatchSound();
           onNoMatchRef.current?.();
           updateStatus("no-match");
         }

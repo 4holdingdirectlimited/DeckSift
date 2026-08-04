@@ -54,6 +54,8 @@ export interface ScannedCardsContextValue {
   emptyBin: (binNumber: number) => void;
   removeCard: (scanId: string) => void;
   removeCards: (scanIds: string[]) => void;
+  /** Undo the most recent scan record (physical card must be moved by hand). */
+  undoLastScan: () => void;
   correctCard: (scanId: string, card: PlayingCard) => void;
   toggleFoil: (scanId: string, isFoil: boolean) => void;
   markDownloaded: (scanIds: string[]) => void;

@@ -1963,6 +1963,38 @@ inventory CSV, uploaded in the seller portal without any API access.
 1. Remove the TCG CSV button + handler from `card-grid.tsx` and delete
    `tcgplayer-export.ts`.
 
+## Item 46 — QoL quick wins + product strategy doc (web + docs)
+
+**Status:** implemented, uncommitted.
+
+### Why
+
+Adoption-first thinking for v1: fix the trust/feedback gaps a home user hits
+on day one, and capture the v1→v2 product strategy so the roadmap has a
+thesis.
+
+### What changed
+
+- **Sounds** — `use-card-scanner.ts`: successful matches now play a short
+  ascending chime; no-match plays a distinct low square tone. Previously the
+  *same* ding played on no-match and matches were silent (inverted UX).
+- **Undo last scan** — `use-scanned-cards.tsx` tracks the most recently
+  committed scan (`lastScanIdRef`) and exposes `undoLastScan()` (removes the
+  record; the physical card is moved by hand). **Undo last** button added to
+  the card-grid toolbar.
+- **`custom/PRODUCT.md` (new)** — v1 home vs v2 commercial positioning, the
+  five adoption drivers (correctness, trust, easy setup, fun, no surprises),
+  and a value-vs-effort feature backlog with status markers (many items
+  already built; quick wins flagged for the next session).
+- `custom/README.md` — doc index updated.
+
+### How to revert
+
+1. Restore the single ding in `use-card-scanner.ts` (or revert the file).
+2. Remove `lastScanIdRef`/`undoLastScan` from `use-scanned-cards.tsx`,
+   `types.ts`, and the toolbar button.
+3. Delete `custom/PRODUCT.md` and revert the index link.
+
 ---
 
 *Template for future entries:*
