@@ -34,7 +34,10 @@ export function BuildHero() {
             className="rounded border border-border bg-muted px-1.5 py-0.5 text-foreground hover:bg-secondary"
           >
             <code>3d model/Card Sorter.f3d</code>
-          </a>
+          </a>{" "}
+          <span className="text-muted-foreground/60">
+            (original Fusion design by dishwasher-detergent, MIT)
+          </span>
         </span>
         <span>
           Calibration{" "}

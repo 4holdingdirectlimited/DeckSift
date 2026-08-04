@@ -1,8 +1,10 @@
-# Magic Vault
+# DeckSift
 
 A TCG card scanner and physical sorter that runs **entirely on your own machine** — no hosted services, no logins, no cloud. A webcam identifies cards via on-device AI embeddings, a rule engine decides which bin each card belongs in, and an Arduino-driven feeder and servo mechanism physically routes the card there.
 
-Fork of [MAULT](https://mault.xyz) by [dishwasher-detergent](https://github.com/dishwasher-detergent/mault) — the physical sorter design (3D model, build guide, firmware base) comes from the original project; this fork adds a fully-local, single-user software stack. See [Credits](#credits).
+DeckSift is a fork of [MAULT](https://mault.xyz) by [dishwasher-detergent](https://github.com/dishwasher-detergent/mault). The v1 machine's Fusion 3D design, build photos, and firmware base come from the original project (MIT — full credit in [Credits](#credits)); DeckSift adds a fully-local, single-user software stack, firmware hardening, and a revised Bambu Lab print kit with print-optimized part organization.
+
+**License:** free for personal use. Commercial use (selling DeckSift or building it into a product) requires a license from 4holdingdirectlimited — see [LICENSE](LICENSE). The MAULT-derived portions remain MIT. See [Credits](#credits).
 
 ## MakerWorld
 
@@ -233,13 +235,20 @@ The original build used a Logitech C920 (Auto Focus: Off · Focus: 50% · Auto E
 
 ## Credits
 
-This project is a fork of [MAULT](https://mault.xyz) by
-[dishwasher-detergent](https://github.com/dishwasher-detergent/mault), released
-under the MIT license. The physical sorter design — the 3D model, build photos,
-wiring layout, and the Arduino firmware it started from — all come from the
-original project. Our fork keeps that hardware base and adds a fully-local,
-single-user software stack: no hosted services, no logins, on-device vision,
-and local card storage.
+**Original machine design — MAULT by dishwasher-detergent (Kenneth Bass).** The
+v1 card sorter's Fusion 3D design (`3d model/Card Sorter.f3d` / `card_sorter.3mf`),
+the build photos, the parts list, and the Arduino firmware base all come from the
+original [MAULT](https://mault.xyz) project, released under the MIT License. The
+original is the sorter we built from, and it stays credited in the app footers,
+the `/build` guide, and this file.
 
-See the LICENSE file for the MIT terms. Build photos on the `/build` page are
-from the original project, used with attribution.
+**DeckSift work — 4holdingdirectlimited.** Everything else: the fully-local
+software stack (no hosted services, no logins, on-device vision, local card
+storage), the firmware modifications (command-id correlation, jam detection,
+watchdog timing, EEPROM calibration, scan light), and the revised Bambu Lab
+print kit that reorganizes the original parts for faster, more efficient
+printing. The full change log is in `custom/CHANGES.md`.
+
+**License.** DeckSift is free for personal use; commercial use is by license from
+4holdingdirectlimited (see [LICENSE](LICENSE)). The MAULT-derived portions
+remain MIT-licensed under the original notice included in the LICENSE file.

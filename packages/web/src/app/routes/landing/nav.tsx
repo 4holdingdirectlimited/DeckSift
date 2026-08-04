@@ -15,7 +15,7 @@ export function LandingNav() {
             <IconPigFilled className="size-4" />
           </span>
           <span className="font-heading text-sm font-semibold">
-            Magic Vault
+            DeckSift
           </span>
         </Link>
 

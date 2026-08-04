@@ -1997,6 +1997,53 @@ thesis.
 
 ---
 
+## Item 48 — Rebrand to DeckSift + custom license + credit restructure (repo)
+
+**Status:** implemented, uncommitted.
+
+### Why
+
+DeckSift has grown into a distinct product built on MAULT, and the repo was
+presenting it ambiguously: browser tab said MAULT, the app said "Magic Vault",
+"Report an issue" pointed at the upstream repo, and the LICENSE named only the
+original author. The v1→v2 plan also needs a licensing model that lets home
+users build the machine for free while reserving commercial sales to the
+DeckSift team.
+
+### What changed
+
+- **`LICENSE`** — new DeckSift License: copyright © 2026 4holdingdirectlimited.
+  Personal/non-commercial use is free; commercial use (selling DeckSift or
+  building it into a product) requires a license from the copyright holder.
+  The MAULT-derived portions (original Fusion design, build photos, firmware
+  base) remain MIT with the original Kenneth Bass notice included verbatim.
+- **Product name** — all user-facing strings now say **DeckSift**: landing
+  page (hero/nav/features/pipeline/cta/footer/open-source), build guide
+  (nav/hero/footer), app sidebar nav, browser tab (`index.html` +
+  `document-title-updater.tsx`), and Discord notification titles (server).
+- **Credit restructure** — credit for the v1 machine's Fusion 3D design,
+  build photos, and firmware base stays explicit and prominent (footers,
+  `/build` guide, README Credits, `arduino/main` docs): "the sorter we built
+  from" by dishwasher-detergent (MIT). The DeckSift work — software stack,
+  firmware modifications, revised Bambu Lab print kit — is credited to
+  4holdingdirectlimited.
+- **"Report an issue"** — build guide footer/nav now point at
+  `4holdingdirectlimited/mault/issues` instead of the upstream repo.
+- **README / custom docs** — rewritten intro, Credits, license summary, and
+  PRODUCT.md positioning for the personal-free / commercial-by-license model.
+- **Not changed (deliberately):** the `@magic-vault/*` package names, the
+  local database name, the `C:\Mault Revised` path, and the upstream repo
+  links for the 3D model files (those files genuinely live upstream).
+
+### How to revert
+
+1. Restore `LICENSE` to the upstream MIT text.
+2. Replace the "DeckSift" strings with the previous name in the files above.
+3. Point "Report an issue" back at `dishwasher-detergent/mault/issues/new`.
+4. Revert README/custom-doc edits.
+
+---
+
 ## Item 47 — Six adoption features: CSV import, condition, badge, shortcuts, backup script, first-run checklist (server + web + scripts)
 
 **Status:** implemented, uncommitted.

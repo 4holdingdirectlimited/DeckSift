@@ -15,7 +15,7 @@ export function BuildNav() {
             <IconPigFilled className="size-4" />
           </span>
           <span className="font-heading text-sm font-semibold">
-            Magic Vault
+            DeckSift
           </span>
         </Link>
 
@@ -36,7 +36,7 @@ export function BuildNav() {
             Assembly
           </a>
           <a
-            href="https://github.com/dishwasher-detergent/mault/issues/new"
+            href="https://github.com/4holdingdirectlimited/mault/issues/new"
             target="_blank"
             rel="noopener noreferrer"
             className="transition-colors hover:text-foreground"

@@ -12,7 +12,7 @@ const FEATURES = [
     icon: IconScan,
     title: "Instant recognition",
     description:
-      "No typing card names, no barcodes. Just show the card and Magic Vault knows what it is.",
+      "No typing card names, no barcodes. Just show the card and DeckSift knows what it is.",
   },
   {
     icon: IconAdjustments,
@@ -54,7 +54,7 @@ export function LandingFeatures() {
           Everything you need to get organized
         </h2>
         <p className="mt-3 text-sm/relaxed text-muted-foreground md:text-base/relaxed">
-          Magic Vault handles the sorting so you can spend more time playing and
+          DeckSift handles the sorting so you can spend more time playing and
           less time digging through boxes.
         </p>
       </div>

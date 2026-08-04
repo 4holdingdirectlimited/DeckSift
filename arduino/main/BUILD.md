@@ -1,11 +1,12 @@
-# Build guide — Magic Vault card sorter
+# Build guide — DeckSift card sorter
 
 Parts list and assembly instructions for the physical sorting unit: a hopper feeds cards one at a time through three stacked routing modules, each capable of dropping a card into one of two side bins or passing it down to the next module — seven bins total, driven by an Arduino Uno R4 Minima over I²C.
 
 - **Firmware:** `arduino/main/main.ino` (this folder)
-- **Enclosure:** `3d model/Card Sorter.f3d` (Fusion 360 source) or `3d model/card_sorter.3mf` (mesh, slicer-ready) — both in the upstream repo
+- **Enclosure:** `3d model/Card Sorter.f3d` (Fusion 360 source) or `3d model/card_sorter.3mf` (mesh, slicer-ready) — the original design by dishwasher-detergent, in the upstream repo
 - **Calibration:** `/app/calibrate` in the web app
-- **Photo references:** the interactive guide at [mault.xyz/build](https://mault.xyz/build) shows assembly photos for most steps (`/instructions/*.jpg` in the repo)
+- **Photo references:** the original interactive guide at [mault.xyz/build](https://mault.xyz/build) shows assembly photos for most steps (`/instructions/*.jpg` in the repo)
+- **Revised print kit:** DeckSift adds a Bambu Lab quantity kit that organizes the same parts for faster, more efficient printing than the original layout
 
 ---
 

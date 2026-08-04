@@ -134,7 +134,7 @@ export function startSync(orgId: string | undefined, gameKey: string): void {
     emit("error", { message: msg });
     if (orgId) {
       void sendDiscordNotification(orgId, {
-        title: "Magic Vault — Sync Failed",
+        title: "DeckSift — Sync Failed",
         description: `The card database sync job encountered a fatal error.\n\n**Error:** ${msg}`,
         color: 0xed4245,
         timestamp: new Date().toISOString(),

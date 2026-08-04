@@ -11,7 +11,7 @@ export function LandingFooter() {
             <IconPigFilled className="size-3.5" />
           </span>
           <span className="font-heading text-xs font-semibold">
-            Magic Vault
+            DeckSift
           </span>
         </Link>
 
@@ -53,12 +53,12 @@ export function LandingFooter() {
             <IconBrandDiscord size={18} />
           </a>
           <p className="text-xs text-muted-foreground">
-            © {new Date().getFullYear()} Magic Vault · v{__APP_VERSION__}
+            © {new Date().getFullYear()} DeckSift by 4holdingdirectlimited · v{__APP_VERSION__}
           </p>
         </div>
       </div>
       <p className="mx-auto max-w-6xl px-4 pb-6 text-center text-[11px] text-muted-foreground/70">
-        A fork of{" "}
+        DeckSift is a fork of{" "}
         <a
           href={UPSTREAM_URL}
           target="_blank"
@@ -67,8 +67,10 @@ export function LandingFooter() {
         >
           MAULT
         </a>{" "}
-        by dishwasher-detergent (MIT). Build photos and the 3D model come from the
-        original project.
+        by dishwasher-detergent. The v1 machine's Fusion 3D design and build
+        photos are his work (MIT); the DeckSift software stack, firmware
+        changes, and revised Bambu Lab print kit are ours. Personal use of
+        DeckSift is free; commercial use is by license from 4holdingdirectlimited.
       </p>
     </footer>
   );

@@ -11,7 +11,7 @@ export function BuildFooter() {
             <IconPigFilled className="size-3.5" />
           </span>
           <span className="font-heading text-xs font-semibold">
-            Magic Vault
+            DeckSift
           </span>
         </Link>
 
@@ -20,7 +20,7 @@ export function BuildFooter() {
             Open source
           </Link>
           <a
-            href="https://github.com/dishwasher-detergent/mault/issues/new"
+            href="https://github.com/4holdingdirectlimited/mault/issues/new"
             target="_blank"
             rel="noopener noreferrer"
             className="transition-colors hover:text-foreground"
@@ -33,11 +33,12 @@ export function BuildFooter() {
         </nav>
 
         <p className="text-xs text-muted-foreground">
-          © {new Date().getFullYear()} Magic Vault
+          © {new Date().getFullYear()} DeckSift by 4holdingdirectlimited
         </p>
       </div>
       <p className="mx-auto max-w-4xl px-4 pb-6 text-center text-[11px] text-muted-foreground/70">
-        Build photos, parts list, and the 3D model are from the original{" "}
+        The v1 machine's Fusion 3D design, build photos, parts list, and
+        firmware base are from the original{" "}
         <a
           href={UPSTREAM_URL}
           target="_blank"
@@ -46,7 +47,9 @@ export function BuildFooter() {
         >
           MAULT
         </a>{" "}
-        project by dishwasher-detergent (MIT).
+        project by dishwasher-detergent (MIT) — the sorter we built from.
+        DeckSift adds a revised Bambu Lab quantity kit with print-optimized
+        part organization, plus the local software stack and firmware changes.
       </p>
     </footer>
   );

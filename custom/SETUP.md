@@ -1,4 +1,4 @@
-# Magic Vault — local runbook (this machine)
+# DeckSift — local runbook (this machine)
 
 How to run the app, connect to it, and do the one-time first-run setup.
 

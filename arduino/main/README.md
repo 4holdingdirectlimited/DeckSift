@@ -1,6 +1,6 @@
-# Magic Vault — Arduino firmware & build docs (`arduino/main`)
+# DeckSift — Arduino firmware & build docs (`arduino/main`)
 
-This folder contains the firmware and build documentation for the **Magic Vault TCG card sorter** — a hopper-fed, Arduino-driven machine that physically routes scanned trading cards into one of seven bins.
+This folder contains the firmware and build documentation for the **DeckSift TCG card sorter** — a hopper-fed, Arduino-driven machine that physically routes scanned trading cards into one of seven bins.
 
 | File | Purpose |
 | --- | --- |
@@ -8,7 +8,7 @@ This folder contains the firmware and build documentation for the **Magic Vault 
 | `BUILD.md` | Complete build guide: bill of materials, wiring, assembly, first power-on, calibration. |
 | `SERIAL_PROTOCOL.md` | JSON command/response reference for talking to the firmware over USB serial. |
 
-> Upstream source: [github.com/dishwasher-detergent/mault](https://github.com/dishwasher-detergent/mault) · interactive build guide: [mault.xyz/build](https://mault.xyz/build) · 3D models: `3d model/Card Sorter.f3d` (Fusion 360) and `3d model/card_sorter.3mf` (slicer-ready) in the upstream repo.
+> Upstream source (the machine's original design): [github.com/dishwasher-detergent/mault](https://github.com/dishwasher-detergent/mault) · interactive build guide: [mault.xyz/build](https://mault.xyz/build) · 3D models: `3d model/Card Sorter.f3d` (Fusion 360) and `3d model/card_sorter.3mf` (slicer-ready) in the upstream repo. The firmware here is DeckSift's modified version of that base.
 
 ## What the machine does
 

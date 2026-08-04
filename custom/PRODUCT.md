@@ -10,9 +10,15 @@ usage first (see `HARDWARE_V2.md` for the measurement gate).
 | --- | --- | --- |
 | Who | Home collectors/sellers, hobbyists | Card shops, bulk buyers, small production |
 | Hardware | Current machine: PLA/PETG, SG90, ~$250 parts | Hardened: ASA/steel base, MG90S + bearings, sleeve-tolerant, ~$1k+ parts |
-| Software | Same app, local, free | Same app + multi-machine, digitize/listing workflows, support |
+| Software | Same app, local, free for personal use | Same app + multi-machine, digitize/listing workflows, support |
 | Adoption goal | **Get it into homes first** — trust, fun, correct | Sell units + service, justify the $ premium |
-| Price | Open/self-build | Kit or assembled |
+| Price | Free for personal use (source available, license in `LICENSE`) | Sold by license from 4holdingdirectlimited — others may not sell DeckSift commercially |
+
+**Licensing (2026):** DeckSift is source-available and free for personal,
+non-commercial use. Commercial use — selling DeckSift or building it into a
+product — requires a license from 4holdingdirectlimited, who sell the upgraded
+v2 product. The MAULT-derived portions (original Fusion design, build photos,
+firmware base) remain MIT (see `LICENSE`).
 
 **Why v1 first:** v1 adoption is what funds v2 — community calibration data
 (foil labels), real-world feedback, a proven throughput baseline, and word of

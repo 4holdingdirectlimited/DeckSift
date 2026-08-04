@@ -1,4 +1,44 @@
-MIT License
+DeckSift License
+Copyright (c) 2026 4holdingdirectlimited
+
+DeckSift is a fork of MAULT by dishwasher-detergent (Kenneth Bass), released
+under the MIT License. All portions of this repository derived from MAULT —
+the original 3D model (Card Sorter.f3d / card_sorter.3mf), the build photos,
+and the original Arduino firmware base — remain licensed under the MIT
+License (full text at the bottom of this file) and may be used, modified, and
+distributed under those terms.
+
+The DeckSift-specific work — the local software stack (web app, API, database
+schema, card-search adapters), the firmware modifications, the revised
+print/assembly materials, and the documentation — is licensed under the
+following terms.
+
+TERMS
+
+1. Personal use — free. Any person may use, copy, modify, and run DeckSift
+   for personal, non-commercial purposes, free of charge.
+
+2. Commercial use — by permission only. You may not sell, license, or
+   distribute DeckSift, or any substantial portion of it, for commercial
+   gain — including bundling it into a product or service offered for sale —
+   without the prior written permission of the copyright holder. The
+   copyright holder sells an upgraded commercial version with additional
+   features; for commercial licensing, contact the copyright holder.
+
+3. Attribution. Redistributions of DeckSift must retain this license text,
+   credit the original MAULT project by dishwasher-detergent, and include
+   the MIT notice below for the MAULT-derived portions.
+
+4. No warranty. DeckSift is provided "as is", without warranty of any kind,
+   express or implied, including but not limited to the warranties of
+   merchantability, fitness for a particular purpose and noninfringement. In
+   no event shall the authors or copyright holders be liable for any claim,
+   damages or other liability, whether in an action of contract, tort or
+   otherwise, arising from, out of or in connection with the software or the
+   use or other dealings in the software.
+
+----------------------------------------------------------------------------
+MIT License — original MAULT portions
 
 Copyright (c) 2026 Kenneth Bass
 

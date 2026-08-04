@@ -1,8 +1,8 @@
 # Custom
 
-This folder is the home for **our** modifications to Magic Vault — everything that
-makes this build different from upstream. The upstream project stays pristine on
-`master`; all of our work lives on the `custom` branch.
+This folder is the home for **our** modifications to DeckSift — everything
+that makes this build different from the upstream MAULT project. The upstream
+project stays pristine on `master`; all of our work lives on the `custom` branch.
 
 ## How this project is organized
 

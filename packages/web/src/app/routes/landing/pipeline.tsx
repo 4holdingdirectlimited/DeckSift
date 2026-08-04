@@ -16,7 +16,7 @@ const STEPS = [
     icon: IconSparkles,
     title: "It's recognized instantly",
     description:
-      "Magic Vault matches it against the full card database in a moment, rarity, set and all.",
+      "DeckSift matches it against the full card database in a moment, rarity, set and all.",
   },
   {
     icon: IconRoute,

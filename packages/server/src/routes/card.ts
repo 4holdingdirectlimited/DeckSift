@@ -179,7 +179,7 @@ router.post("/", requireAuth, async (c) => {
     const orgId = c.req.header("X-Org-Id");
     if (orgId) {
       void sendDiscordNotification(orgId, {
-        title: "Magic Vault — Card Search Error",
+        title: "DeckSift — Card Search Error",
         description: "A database error occurred while searching for a card.",
         color: 0xed4245,
         timestamp: new Date().toISOString(),

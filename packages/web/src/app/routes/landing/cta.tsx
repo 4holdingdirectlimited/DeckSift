@@ -11,7 +11,7 @@ export function LandingCta() {
           Stop shuffling. Start sorting.
         </h2>
         <p className="max-w-md text-sm/relaxed text-muted-foreground md:text-base/relaxed">
-          Set up your first collection in minutes and let Magic Vault keep it
+          Set up your first collection in minutes and let DeckSift keep it
           organized from here on out.
         </p>
         <Link

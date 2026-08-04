@@ -19,11 +19,12 @@ export function LandingOpenSource() {
     <section id="open-source" className="mx-auto max-w-6xl px-4 py-20">
       <div className="mx-auto max-w-2xl text-center">
         <h2 className="font-heading text-2xl font-semibold tracking-tight md:text-3xl">
-          Fully open source
+          Open source, free for personal use
         </h2>
         <p className="mt-3 text-sm/relaxed text-muted-foreground md:text-base/relaxed">
-          The software and the physical sorter are both free to build, inspect,
-          and modify. Grab the code and print your own.
+          DeckSift is free to build, inspect, and modify for personal use.
+          Commercial use is by license from the DeckSift team — we sell an
+          upgraded version with more features for shops and small production.
         </p>
       </div>
 
@@ -35,8 +36,8 @@ export function LandingOpenSource() {
           <div>
             <p className="font-heading text-sm font-semibold">Source code</p>
             <p className="mt-1 text-xs/relaxed text-muted-foreground">
-              The web app, API, and Arduino firmware are all in one repo under
-              an open license.
+              The web app, API, and Arduino firmware are all in one repo.
+              Free for personal use; commercial use needs a license.
             </p>
           </div>
           <a
@@ -59,12 +60,12 @@ export function LandingOpenSource() {
           </span>
           <div>
             <p className="font-heading text-sm font-semibold">
-              Original project
+              Built on MAULT
             </p>
             <p className="mt-1 text-xs/relaxed text-muted-foreground">
-              This is a fork of MAULT by dishwasher-detergent, released under
-              the MIT license. The 3D model, build photos, and much of the
-              firmware come from the original — thanks for making it open.
+              The v1 machine's Fusion 3D design, build photos, and firmware
+              base come from MAULT by dishwasher-detergent (MIT) — the
+              original sorter we built from. Thanks for making it open.
             </p>
           </div>
           <a
@@ -90,8 +91,9 @@ export function LandingOpenSource() {
               3D printable sorter
             </p>
             <p className="mt-1 text-xs/relaxed text-muted-foreground">
-              Print the card sorter yourself - Fusion 360 and 3MF files are
-              included in the repo.
+              Print the card sorter yourself. The Fusion 360 design is the
+              original MAULT file; DeckSift adds a revised Bambu Lab quantity
+              kit with print-optimized part organization.
             </p>
           </div>
           <div className="mt-2 flex flex-wrap gap-2">
