@@ -99,6 +99,14 @@ struct OpState {
 OpState op;               // zero-initialized → kind = OP_NONE
 bool cancelRequested = false;
 
+// Queued feed (pipelining): the web requests the next card while a route is
+// still running. We hold the request (no reply yet) until the route finishes,
+// then start the feed and reply with the ORIGINAL command id — so the web's
+// waiter only resolves when the card actually arrives at module 1.
+bool pendingFeed = false;
+int pendingFeedId = 0;
+bool pendingFeedHasId = false;
+
 // Any module where a card sits at the gate continuously for this long with no
 // routing command in progress (e.g. the app never sent a bin command) is
 // reported as a jam. Only checked while idle — runMachine() services it.
@@ -133,13 +141,23 @@ struct FeederConfig {
 
 FeederConfig feederConfig = {400, 3000, 0, 50, 150};
 
+// Routing delays (ms) — runtime-tunable via {"setTimingConfig": ...} and
+// persisted to EEPROM with saveConfig, so commissioning tunes them from the
+// browser without re-flashing. Defaults match the old compile-time constants.
+struct TimingConfig {
+  int cardEnterMs;  // time for card to settle after target bottom opens
+  int paddleMs;     // time for paddle to engage
+  int pushMs;       // time for pusher to complete its stroke
+};
+TimingConfig timingConfig = {300, 300, 600};
+
 // ─── Calibration persistence (EEPROM) ───────────────────────────────────────
 // Module/feeder config is persisted so a reboot (e.g. a power blip mid-run)
 // restores the tuned values instead of silently reverting to stock pulses.
 // The magic + version guard detects stale data from older firmware or a
 // hardware change (e.g. servo swap) and falls back to factory defaults.
 #define CONFIG_MAGIC       0x4D56  // "MV"
-#define CONFIG_VERSION     1
+#define CONFIG_VERSION     2
 #define CONFIG_EEPROM_ADDR 0
 
 struct PersistedCalibration {
@@ -147,6 +165,7 @@ struct PersistedCalibration {
   uint8_t version;
   ModuleConfig modules[NUM_MODULES];
   FeederConfig feeder;
+  TimingConfig timing;
 };
 
 // Factory defaults — keep in sync with the moduleConfig/feederConfig
@@ -163,6 +182,9 @@ void setFactoryDefaults() {
   feederConfig.pulseDuration = 0;
   feederConfig.pauseDuration = 50;
   feederConfig.settleDuration = 150;
+  timingConfig.cardEnterMs = 300;
+  timingConfig.paddleMs = 300;
+  timingConfig.pushMs = 600;
 }
 
 void loadCalibration() {
@@ -171,6 +193,7 @@ void loadCalibration() {
   if (stored.magic == CONFIG_MAGIC && stored.version == CONFIG_VERSION) {
     memcpy(moduleConfig, stored.modules, sizeof(moduleConfig));
     feederConfig = stored.feeder;
+    timingConfig = stored.timing;
   }
 }
 
@@ -180,13 +203,12 @@ void saveCalibration() {
   data.version = CONFIG_VERSION;
   memcpy(data.modules, moduleConfig, sizeof(moduleConfig));
   data.feeder = feederConfig;
+  data.timing = timingConfig;
   EEPROM.put(CONFIG_EEPROM_ADDR, data);
 }
 
-// Routing delays (ms) — tune to match your hardware timing
-#define DELAY_CARD_ENTER   300  // time for card to settle after target bottom opens
-#define DELAY_PADDLE       300  // time for paddle to engage
-#define DELAY_PUSH         600  // time for pusher to complete its stroke
+// Routing delays are now runtime-tunable (timingConfig above, persisted with
+// saveConfig) instead of compile-time #defines.
 
 // Fixed-size serial line buffer — avoids String heap fragmentation on long
 // sessions. Oversized lines are discarded cleanly.
@@ -392,7 +414,7 @@ void afterFeedDone() {
       setServoPosition(getChannel(m, 0), moduleConfig[m - 1].bottomOpen);
     }
     op.phase = PH_HOLD;
-    op.holdMs = DELAY_PUSH;
+    op.holdMs = timingConfig.pushMs;
   } else if (bin == 1 || bin == 2) {
     // Module 1: open paddle, then push.
     op.pushLeft = (bin == 1);
@@ -451,6 +473,12 @@ void beginClear() {
 void runMachine() {
   if (op.kind == OP_NONE) {
     checkModuleJams();
+    if (pendingFeed) {
+      pendingFeed = false;
+      g_cmdId = pendingFeedId;
+      g_hasCmdId = pendingFeedHasId;
+      beginFeed();
+    }
     return;
   }
 
@@ -523,7 +551,7 @@ void runMachine() {
       break;
     }
     case PH_CARD_ENTER: {
-      if (now - op.phaseStart >= DELAY_CARD_ENTER) {
+      if (now - op.phaseStart >= (unsigned long)timingConfig.cardEnterMs) {
         op.phase = PH_PADDLE;
         op.phaseStart = now;
         setServoPosition(
@@ -533,7 +561,7 @@ void runMachine() {
       break;
     }
     case PH_PADDLE: {
-      if (now - op.phaseStart >= DELAY_PADDLE) {
+      if (now - op.phaseStart >= (unsigned long)timingConfig.paddleMs) {
         op.phase = PH_PUSH;
         op.phaseStart = now;
         setServoPosition(
@@ -544,7 +572,7 @@ void runMachine() {
       break;
     }
     case PH_PUSH: {
-      if (now - op.phaseStart >= DELAY_PUSH) {
+      if (now - op.phaseStart >= (unsigned long)timingConfig.pushMs) {
         op.phase = PH_NEUTRAL;
         op.phaseStart = now;
         setAllNeutral();
@@ -569,7 +597,7 @@ void runMachine() {
       break;
     }
     case PH_TEST_OPEN: {
-      if (now - op.phaseStart >= DELAY_PUSH) {
+      if (now - op.phaseStart >= (unsigned long)timingConfig.pushMs) {
         op.phase = PH_TEST_LEFT;
         op.phaseStart = now;
         for (int m = 1; m <= NUM_MODULES; m++) {
@@ -579,7 +607,7 @@ void runMachine() {
       break;
     }
     case PH_TEST_LEFT: {
-      if (now - op.phaseStart >= DELAY_PUSH) {
+      if (now - op.phaseStart >= (unsigned long)timingConfig.pushMs) {
         op.phase = PH_TEST_RIGHT;
         op.phaseStart = now;
         for (int m = 1; m <= NUM_MODULES; m++) {
@@ -589,7 +617,7 @@ void runMachine() {
       break;
     }
     case PH_TEST_RIGHT: {
-      if (now - op.phaseStart >= DELAY_PUSH) {
+      if (now - op.phaseStart >= (unsigned long)timingConfig.pushMs) {
         setAllNeutral();
         op.phase = PH_TEST_FEED;
         op.phaseStart = now;
@@ -630,7 +658,7 @@ void runMachine() {
       break;
     }
     case PH_CLEAR_OPEN: {
-      if (now - op.phaseStart >= DELAY_PUSH) {
+      if (now - op.phaseStart >= (unsigned long)timingConfig.pushMs) {
         op.phase = PH_NEUTRAL;
         op.phaseStart = now;
         setAllNeutral();
@@ -660,6 +688,14 @@ void handleCommand(const char* json) {
   if (doc["cancel"].is<bool>() && doc["cancel"].as<bool>()) {
     if (op.kind != OP_NONE) cancelRequested = true;
     replyLiteral("{\"status\":\"cancelled\"}");
+    return;
+  }
+
+  // {"cancelFeed": true} — drop a queued feed (used when a route fails so the
+  // next card must not be pulled). Does not stop a feed already in flight.
+  if (doc["cancelFeed"].is<bool>() && doc["cancelFeed"].as<bool>()) {
+    pendingFeed = false;
+    replyLiteral("{\"status\":\"ok\"}");
     return;
   }
 
@@ -696,6 +732,15 @@ void handleCommand(const char* json) {
       }
       res["hopper"] = hopperHasCards();
       replyJson(res);
+      return;
+    }
+    // {"feeder": true} while busy: queue it instead of dropping it. No reply
+    // here — the response goes out when the queued feed completes, so the web
+    // only sees the card arrive (within its 10 s feed timeout).
+    if (doc["feeder"].is<bool>() && doc["feeder"].as<bool>()) {
+      pendingFeed = true;
+      pendingFeedId = g_cmdId;
+      pendingFeedHasId = g_hasCmdId;
       return;
     }
     replyLiteral("{\"error\":\"busy\"}");
@@ -851,6 +896,27 @@ void handleCommand(const char* json) {
     saveCalibration();  // persist so a reboot keeps the tuned values
     JsonDocument res;
     res["status"] = "ok";
+    replyJson(res);
+    return;
+  }
+
+  // {"setTimingConfig": {"cardEnterMs": 300, "paddleMs": 300, "pushMs": 600}}
+  // Runtime-tunable routing delays — no re-flash needed, persisted via
+  // saveConfig. Clamped to sane bounds so a bad value can't brick a route.
+  if (!doc["setTimingConfig"].isNull()) {
+    JsonObject cfg = doc["setTimingConfig"];
+    if (cfg["cardEnterMs"].is<int>()) timingConfig.cardEnterMs = cfg["cardEnterMs"].as<int>();
+    if (cfg["paddleMs"].is<int>()) timingConfig.paddleMs = cfg["paddleMs"].as<int>();
+    if (cfg["pushMs"].is<int>()) timingConfig.pushMs = cfg["pushMs"].as<int>();
+    timingConfig.cardEnterMs = constrain(timingConfig.cardEnterMs, 50, 2000);
+    timingConfig.paddleMs = constrain(timingConfig.paddleMs, 50, 2000);
+    timingConfig.pushMs = constrain(timingConfig.pushMs, 100, 3000);
+    JsonDocument res;
+    res["status"] = "ok";
+    JsonObject t = res["timing"].to<JsonObject>();
+    t["cardEnterMs"] = timingConfig.cardEnterMs;
+    t["paddleMs"] = timingConfig.paddleMs;
+    t["pushMs"] = timingConfig.pushMs;
     replyJson(res);
     return;
   }

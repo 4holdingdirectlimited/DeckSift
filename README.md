@@ -145,7 +145,19 @@ powershell Start-Process -FilePath "C:\Mault Revised\mault\scripts\start-server.
 powershell Start-Process -FilePath "C:\Mault Revised\mault\scripts\start-web.cmd" -WindowStyle Hidden
 ```
 
-Open **http://localhost:5173** — no login, it opens straight to the scanner.
+Open **https://decksift.local:5173** (preferred) or **http://localhost:5173** — no login, it opens straight to the scanner.
+
+**decksift.local** is the friendly hostname: run `node scripts/ssl-setup.mjs`
+once to generate a locally-trusted HTTPS certificate (required because Web
+Serial only works in a secure context), then add this line to your hosts file
+(as admin):
+
+```
+127.0.0.1  decksift.local
+```
+
+Restart the web server afterwards. `localhost` keeps working as a fallback,
+and the app is also reachable from other devices on your LAN via `http://<pc-ip>:5173`.
 
 ### 3. Card sync (the one internet step)
 
@@ -170,7 +182,7 @@ Copy `.env.example` to `.env` and fill in. All variables live in a single root `
 | `DATABASE_URL` | Local Postgres connection string | `postgres://postgres@127.0.0.1:5433/mault` |
 | `PORT` | API port | `3001` |
 | `WEB_URL` | CORS origin / absolute links (Discord) | `http://localhost:5173` |
-| `VITE_API_URL` | Base URL of the API (baked into the web bundle) | `http://localhost:3001` |
+| `VITE_API_URL` | Base URL of the API (baked into the web bundle). **Leave empty** for same-origin — the Vite dev/preview server proxies `/api` to the API, so any hostname (localhost, decksift.local, LAN IP) works | *(empty — relative)* |
 | `VITE_APP_ENV` | `local` / `development` / `qa` (banner + warnings) | `local` |
 | `VECTORIZE_DEVICE` | `cpu` (q8) or `dml` (DirectML GPU, fp32 — ~1.9× faster) | `cpu` |
 | `SYNC_FETCH_BATCH` | Parallel image fetches during sync | `16` |

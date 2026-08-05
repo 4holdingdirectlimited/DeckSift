@@ -73,6 +73,24 @@ function remember(key: string, data: PlayingCard): void {
   cache.set(key, { data, expiresAt: Date.now() + TTL_MS });
 }
 
+/**
+ * Force-fetch fresh card data (including prices) straight from the source,
+ * bypassing every cache, and persist it to the local DB. Used by the manual
+ * "Refresh prices" action — the adapter passed in MUST be an unwrapped raw
+ * adapter (see resolve.ts getRawAdapter) or the TTL cache would answer.
+ */
+export async function refreshCardDetails(
+  gameKey: string,
+  adapter: CardSearchAdapter,
+  baseUrl: string,
+  scryfallId: string,
+): Promise<PlayingCard | null> {
+  const result = await adapter.searchById(scryfallId, baseUrl);
+  if (!result.success || !result.data) return null;
+  await persistCardData(gameKey, scryfallId, result.data);
+  return result.data;
+}
+
 async function persistCardData(
   gameKey: string,
   scryfallId: string,

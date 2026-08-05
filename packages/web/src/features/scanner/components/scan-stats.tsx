@@ -1,9 +1,14 @@
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { getPriceStatus, refreshPrices } from "@/features/cards/api/card";
 import { useCardFilters } from "@/features/cards/api/use-card-filters";
+import { useCollections } from "@/features/collections/api/use-collections";
 import { useScannedCards } from "@/features/scanner/api/use-scanned-cards";
 import { computeStats } from "@/features/scanner/lib/compute-stats";
 import { cn } from "@/lib/utils";
+import { IconRefresh } from "@tabler/icons-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
+import { toast } from "sonner";
 
 export function formatUsd(value: number): string {
   return `$${value.toFixed(2)}`;
@@ -23,7 +28,30 @@ export function ScanStats() {
   const [expandedSets, setExpandedSets] = useState(false);
   const { cards, elapsedMs, isTimerActive, scanRatePerMin, lastScanAt } =
     useScannedCards();
+  const { activeCollection } = useCollections();
+  const queryClient = useQueryClient();
   const { filters, toggleRarity, toggleColor, toggleSet } = useCardFilters();
+
+  const { data: priceStatus } = useQuery({
+    queryKey: ["price-status", activeCollection?.guid],
+    queryFn: () => getPriceStatus(activeCollection!.guid),
+    enabled: !!activeCollection && cards.length > 0,
+    staleTime: 60_000,
+  });
+  const refreshMutation = useMutation({
+    mutationFn: () => refreshPrices(activeCollection!.guid),
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ["price-status"] });
+      toast.success("Prices refreshed", {
+        description: `${result.refreshed} of ${result.total} cards updated from the source.`,
+      });
+    },
+    onError: () => {
+      toast.error("Price refresh failed", {
+        description: "Check the server log for details.",
+      });
+    },
+  });
 
   const stats = useMemo(() => computeStats(cards), [cards]);
 
@@ -224,6 +252,33 @@ export function ScanStats() {
                 : `Show all ${stats.sets.length} sets`}
             </button>
           )}
+        </div>
+        <div className="rounded-lg bg-input/20 dark:bg-input/30 border border-input p-2">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
+              Prices
+            </p>
+            {activeCollection && cards.length > 0 && (
+              <button
+                type="button"
+                onClick={() => refreshMutation.mutate()}
+                disabled={refreshMutation.isPending}
+                className="flex items-center gap-1 text-[10px] text-primary hover:underline disabled:opacity-50"
+                title="Re-fetch card data (incl. prices) from the source for this collection"
+              >
+                <IconRefresh
+                  size={11}
+                  className={cn(refreshMutation.isPending && "animate-spin")}
+                />
+                {refreshMutation.isPending ? "Refreshing…" : "Refresh"}
+              </button>
+            )}
+          </div>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {priceStatus && priceStatus.cardCount > 0
+              ? `${priceStatus.cardCount} card${priceStatus.cardCount === 1 ? "" : "s"} · updated ${priceStatus.lastUpdated ? formatElapsed(Date.now() - priceStatus.lastUpdated) + " ago" : "—"}`
+              : "No priced cards in this collection yet"}
+          </p>
         </div>
       </div>
     </ScrollArea>

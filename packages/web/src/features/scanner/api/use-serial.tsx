@@ -420,14 +420,27 @@ export function SerialProvider({ children }: { children: React.ReactNode }) {
     async (
       data: Record<string, unknown>,
       timeoutMs = 5000,
+      retries = 0,
     ): Promise<unknown | null> => {
       if (!portRef.current || !writableRef.current) return null;
 
-      const id = nextCmdIdRef.current++;
-      const sent = await sendCommand(JSON.stringify({ ...data, id }) + "\n");
-      if (!sent) return null;
-
-      return await waitForId(id, timeoutMs);
+      // Bounded retry with linear backoff for idempotent commands only (e.g.
+      // clearDevice). Callers must NOT request retries for commands that have
+      // side effects if executed twice (bin routing) — a lost ACK could mean
+      // the command actually ran.
+      let attempt = 0;
+      while (true) {
+        const id = nextCmdIdRef.current++;
+        const sent = await sendCommand(JSON.stringify({ ...data, id }) + "\n");
+        if (sent) {
+          const response = await waitForId(id, timeoutMs);
+          if (response !== null || attempt >= retries) return response;
+        } else if (attempt >= retries) {
+          return null;
+        }
+        attempt += 1;
+        await new Promise((resolve) => setTimeout(resolve, 300 * attempt));
+      }
     },
     [sendCommand, waitForId],
   );

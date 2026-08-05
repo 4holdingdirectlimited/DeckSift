@@ -76,6 +76,37 @@ function backup(backupDir) {
   console.log(`Backup complete: ${file} (${size})`);
 }
 
+/** Newest backup age in hours, or null if no backups exist. */
+function newestBackupAgeHours(backupDir) {
+  if (!existsSync(backupDir)) return null;
+  const files = readdirSync(backupDir)
+    .filter((f) => f.endsWith(".sql"))
+    .map((f) => join(backupDir, f));
+  if (files.length === 0) return null;
+  const newest = files.reduce((a, b) =>
+    statSync(a).mtimeMs > statSync(b).mtimeMs ? a : b,
+  );
+  return (Date.now() - statSync(newest).mtimeMs) / 3_600_000;
+}
+
+/**
+ * Backup only if the newest backup is older than `maxHours` (or none exists).
+ * Tolerant when the DB isn't running — used from start-server.cmd so every
+ * server start is a safety-net opportunity without slowing boot.
+ */
+function backupIfStale(maxHours, backupDir) {
+  if (!isRunning()) {
+    console.log("PostgreSQL not running — skipping backup-if-stale.");
+    return;
+  }
+  const age = newestBackupAgeHours(backupDir);
+  if (age !== null && age < maxHours) {
+    console.log(`Newest backup is ${age.toFixed(1)}h old (limit ${maxHours}h) — skipping.`);
+    return;
+  }
+  backup(backupDir);
+}
+
 function list(backupDir) {
   if (!existsSync(backupDir)) {
     console.log("No backups directory yet.");
@@ -126,6 +157,9 @@ switch (cmd) {
   case "backup":
     backup(arg ? join(process.cwd(), arg) : DEFAULT_BACKUP_DIR);
     break;
+  case "backup-if-stale":
+    backupIfStale(Number(arg ?? "24") || 24, DEFAULT_BACKUP_DIR);
+    break;
   case "list":
     list(arg ? join(process.cwd(), arg) : DEFAULT_BACKUP_DIR);
     break;
@@ -137,6 +171,6 @@ switch (cmd) {
     restore(join(process.cwd(), arg));
     break;
   default:
-    console.log("Usage: node scripts/backup-db.mjs [backup [dir]|list [dir]|restore <file>]");
+    console.log("Usage: node scripts/backup-db.mjs [backup [dir] | backup-if-stale [hours] | list [dir] | restore <file>]");
     process.exit(1);
 }

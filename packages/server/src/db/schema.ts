@@ -70,7 +70,7 @@ export const cardImageVectors = pgTable(
     index("cards_embedding_idx").using(
       "hnsw",
       table.embedding.op("vector_cosine_ops"),
-    ),
+    ).with({ m: 32, ef_construction: 128 }),
     crudPolicy({
       role: authenticatedRole,
       read: true,

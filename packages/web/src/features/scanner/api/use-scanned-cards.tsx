@@ -101,7 +101,8 @@ export function ScannedCardsProvider({
   // Id of the most recently committed scan — powers "Undo last".
   const lastScanIdRef = useRef<string | null>(null);
   const { configs: binConfigs, fieldDefinitions } = useBinConfigs();
-  const { sendBin, sendFeed, isConnected, isReady } = useSerial();
+  const { sendBin, sendFeed, sendCommandWithResponse, isConnected, isReady } =
+    useSerial();
   const { activeCollection } = useCollections();
 
   const { locks, currentUserId } = useCollectionLocks();
@@ -140,6 +141,7 @@ export function ScannedCardsProvider({
   const serialRef = useRef({
     sendBin,
     sendFeed,
+    sendCommandWithResponse,
     isConnected,
     isReady,
   });
@@ -183,10 +185,11 @@ export function ScannedCardsProvider({
     serialRef.current = {
       sendBin,
       sendFeed,
+      sendCommandWithResponse,
       isConnected,
       isReady,
     };
-  }, [sendBin, sendFeed, isConnected, isReady]);
+  }, [sendBin, sendFeed, sendCommandWithResponse, isConnected, isReady]);
 
   const resetBinCounts = useCallback(() => {
     binCountsRef.current = {};
@@ -406,8 +409,24 @@ export function ScannedCardsProvider({
         serialRef.current.isConnected &&
         serialRef.current.isReady
       ) {
+        // Pipeline: request the next card NOW, while this one is still being
+        // routed. The firmware queues the feed and replies only when the card
+        // actually arrives at module 1 — so the next card starts moving the
+        // moment the route finishes, instead of after a serial round-trip.
+        if (autoFeedRef.current) {
+          void triggerAutoFeed();
+        }
         serialRef.current.sendBin(binNumber).then((response) => {
+          // Abort a still-pending queued feed if routing failed — the next
+          // card must not be pulled when the current one wasn't placed.
+          const cancelQueuedFeed = () => {
+            void serialRef.current.sendCommandWithResponse(
+              { cancelFeed: true },
+              1000,
+            );
+          };
           if (!response) {
+            cancelQueuedFeed();
             toast.error("Routing failed", {
               description: `No response from sorter for bin ${binNumber}.`,
             });
@@ -424,6 +443,7 @@ export function ScannedCardsProvider({
           }
           const res = response as Record<string, unknown>;
           if (res.empty) {
+            cancelQueuedFeed();
             toast.error("Feeder empty", {
               description:
                 "No cards remaining in the hopper. Add more cards to continue.",
@@ -443,6 +463,7 @@ export function ScannedCardsProvider({
             return;
           }
           if (res.error) {
+            cancelQueuedFeed();
             toast.error("Sorter error", {
               description: String(res.error),
               duration: Infinity,
@@ -460,9 +481,7 @@ export function ScannedCardsProvider({
             return;
           }
           incrementBin(binNumber);
-          if (autoFeedRef.current) {
-            triggerAutoFeed();
-          }
+          // Next-card feed was already requested up front (see above).
         });
       }
     },

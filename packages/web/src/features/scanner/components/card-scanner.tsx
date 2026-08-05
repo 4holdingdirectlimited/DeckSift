@@ -90,6 +90,7 @@ export function CardScanner({ className, compact }: CardScannerProps) {
     setReviewMatchPercent,
     autoRejectMatchPercent,
     setAutoRejectMatchPercent,
+    lastScanTiming,
     pendingReview,
     confirmReview,
     rejectReview,
@@ -246,6 +247,7 @@ export function CardScanner({ className, compact }: CardScannerProps) {
       const response = await sendCommandWithResponse(
         { clearDevice: true },
         10000,
+        1,
       );
       if (!response) {
         toast.error("Clear failed", {
@@ -389,6 +391,19 @@ export function CardScanner({ className, compact }: CardScannerProps) {
             onConfirm={confirmReview}
             onReject={rejectReview}
           />
+        )}
+        {lastScanTiming && status !== "review" && (
+          <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-30 flex items-center gap-2 rounded-full bg-background/80 backdrop-blur-sm border px-2.5 py-1 text-[10px] text-muted-foreground tabular-nums">
+            <span>
+              last card:{" "}
+              <span className="font-semibold text-foreground">
+                {((lastScanTiming.settleMs + lastScanTiming.searchMs) / 1000).toFixed(1)}s
+              </span>
+            </span>
+            <span className="text-border">|</span>
+            <span>settle {lastScanTiming.settleMs}ms</span>
+            <span>search {lastScanTiming.searchMs.toFixed(0)}ms</span>
+          </div>
         )}
         <ScannerMenu
           isCameraActive={isCameraActive}

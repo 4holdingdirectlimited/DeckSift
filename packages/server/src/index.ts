@@ -29,9 +29,17 @@ if (!process.env.DATABASE_URL) {
 const app = new Hono<AppEnv>();
 const PORT = parseInt(process.env.PORT ?? "3001", 10);
 
+// WEB_URL may be a comma-separated list (e.g. localhost + decksift.local) —
+// each is an allowed CORS origin. With the dev proxy the web app is
+// same-origin anyway; this only matters for direct (non-proxied) API calls.
+const webOrigins = (process.env.WEB_URL ?? "http://localhost:5173")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+
 app.use(
   cors({
-    origin: process.env.WEB_URL ?? "http://localhost:5173",
+    origin: webOrigins,
     allowMethods: ["GET", "POST", "PUT", "DELETE"],
     allowHeaders: ["Content-Type", "Authorization", "X-Org-Id"],
   }),

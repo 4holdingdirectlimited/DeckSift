@@ -81,6 +81,7 @@ export interface SerialContextValue {
   sendCommandWithResponse: (
     data: Record<string, unknown>,
     timeoutMs?: number,
+    retries?: number,
   ) => Promise<unknown | null>;
   sendFeed: () => Promise<unknown | null>;
   subscribe: (listener: SerialMessageListener) => () => void;

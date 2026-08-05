@@ -19,6 +19,7 @@ import { FeederCalibrationPanel } from "@/features/calibration/components/feeder
 import { IrSensorPanel } from "@/features/calibration/components/ir-sensor-panel";
 import { LedControls } from "@/features/calibration/components/led-controls";
 import { ModuleCalibrationGrid } from "@/features/calibration/components/module-calibration-grid";
+import { RoutingTimingPanel } from "@/features/calibration/components/routing-timing-panel";
 import { ScanRegionCalibrationPanel } from "@/features/calibration/components/scan-region-calibration-panel";
 import { ServoDiagnostics } from "@/features/calibration/components/servo-diagnostics";
 import { IconClockHour3, IconDeviceUsb, IconDeviceUsbFilled } from "@tabler/icons-react";
@@ -258,6 +259,10 @@ export default function CalibratePage() {
           onSetPauseDuration={handleFeederSetPauseDuration}
           onSetSettleDuration={handleFeederSetSettleDuration}
         />
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <RoutingTimingPanel isConnected={isConnected} />
       </div>
 
       <div className="flex flex-col gap-2">

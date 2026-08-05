@@ -6,9 +6,22 @@ How to run the app, connect to it, and do the one-time first-run setup.
 
 | URL | What |
 | --- | --- |
-| **http://localhost:5173** | The app (Vite dev server; no login — opens straight to the scanner) |
+| **https://decksift.local:5173** | The app, friendly hostname (HTTPS — required for Web Serial). See below for the one-time setup |
+| **http://localhost:5173** | The app fallback (works the same; `localhost` is already a secure context) |
 | http://localhost:3001 | The API server (the browser talks to it via the Vite `/api` proxy) |
 | 127.0.0.1:5433 | Local PostgreSQL (database `mault`) |
+
+**decksift.local one-time setup** (needs no admin except the hosts line):
+
+```powershell
+node scripts/ssl-setup.mjs        # downloads mkcert, issues + trusts a local cert
+# then, as admin, add to C:\Windows\System32\drivers\etc\hosts:
+#   127.0.0.1  decksift.local
+# then restart the web server (start-web.cmd)
+```
+
+The app also works from other devices on your LAN via `http://<pc-ip>:5173`
+(the API is same-origin through the Vite proxy, so no CORS setup needed).
 
 In-app pages: `/app` scanner · `/app/collections` · `/app/library` (card
 browser + set completeness) · `/app/bins` · `/app/calibrate` ·
@@ -53,7 +66,7 @@ This creates:
 
 Then run the card sync for each game you'll actually use:
 
-1. Open **http://localhost:5173**.
+1. Open **https://decksift.local:5173** (or **http://localhost:5173**).
 2. **Admin** → run the **sync** for each game. The first MTG sync downloads the
    Scryfall catalog (~54k unique-artwork cards) and embeds each with the local
    SigLIP model — roughly **9-10 hours** on this machine's GPU, one-time and

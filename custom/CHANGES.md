@@ -2350,6 +2350,86 @@ every card; a single feeder hiccup pausing the whole line).
 
 ---
 
+## Item 53 — decksift.local access + software-only speed/reliability batch (web + server + firmware)
+
+**Status:** implemented, committed (this commit).
+
+### Why
+
+Make the app reachable at a friendly hostname and squeeze speed/reliability
+out of the existing hardware before the machine is built. Two hard facts
+shaped this: Web Serial only works in a **secure context**, so `decksift.local`
+needs HTTPS (not just a hosts entry); and fp16 DirectML embedding benchmarked
+identical to fp32 on this GPU (item 52), so embedding stays fp32.
+
+### What changed
+
+- **decksift.local access** — `scripts/ssl-setup.mjs` downloads mkcert,
+  issues + trusts (per-user Root store, no admin) certs for
+  decksift.local/localhost/127.0.0.1; Vite serves HTTPS when the certs exist
+  and listens on all interfaces; `VITE_API_URL` is now empty (same-origin
+  via the Vite `/api` proxy), so any hostname/LAN IP works; the API CORS
+  accepts a comma-separated `WEB_URL` list. README/SETUP document the hosts
+  entry + cert step. (Localhost still works as a fallback.)
+- **Pipelining step 1 — queued feed (firmware + web)** — the firmware now
+  queues a `{"feeder": true}` command received while another operation is
+  running (replying only when the queued feed completes, with the original
+  command id), plus `{"cancelFeed": true}` to drop a pending feed. The web
+  requests the next card **up front**, right after sending the bin command,
+  instead of waiting for the route ACK — the next card starts moving the
+  moment the route finishes, and routing failures cancel the queued feed.
+  (Full concurrent feed-during-route stays a machine-validation step per
+  PLAN.md.)
+- **Runtime-tunable route delays (firmware + web)** — `DELAY_CARD_ENTER /
+  DELAY_PADDLE / DELAY_PUSH` are now a persisted `TimingConfig` (EEPROM
+  version 2) settable via `{"setTimingConfig": ...}` and exposed as a
+  **Routing Timing** panel on the Calibrate page — tune with a stopwatch
+  from the browser, no re-flash.
+- **HNSW index tuning** — `cards_embedding_idx` rebuilt with
+  `m=32, ef_construction=128` (migration 0007; note drizzle 0.45 passes
+  `with()` keys through literally, so the option must be `ef_construction`).
+- **Auto-backup on server start** — `backup-db.mjs backup-if-stale <hours>`
+  (skips if a newer backup exists or Postgres is down); `start-server.cmd`
+  calls it with 24 h before booting the API.
+- **Serial retry with backoff** — `sendCommandWithResponse(data, timeout,
+  retries)` retries with linear backoff for idempotent commands only;
+  `clearDevice` now retries once. Bin routing stays single-shot (a retried
+  bin command could double-route).
+- **Scan-phase breakdown** — the scanner records settle + search latency per
+  card and shows a live "last card: Xs (settle Nms · search Nms)" pill under
+  the camera, making commissioning tuning measurable.
+- **Price refresh status + action** — `GET /api/cards/price-status` shows
+  when the collection's card data was last updated; `POST
+  /api/cards/refresh-prices` force re-fetches (raw adapter, caches bypassed)
+  up to the 200 most recent cards, paced; the stats panel shows updated-ago
+  and a Refresh button.
+
+### Behavior notes
+
+- Users of the pre-built bundle see the same app on localhost; the HTTPS
+  certs only affect `decksift.local`/`localhost` serving.
+- Firmware EEPROM config version bumped to 2 — old persisted calibration is
+  ignored once (falls back to factory defaults); re-save calibration after
+  flashing.
+- Queued feeds wait within the web's existing 10 s feed timeout; a jammed
+  route can time that out and disable auto-feed exactly as a normal feed
+  timeout would.
+
+### How to revert
+
+1. Revert `vite.config.ts`, `index.ts` CORS, `.env*` API base; delete
+   `scripts/ssl-setup.mjs` and `.local/certs`.
+2. Revert the pending-feed/cancelFeed firmware + the up-front feed in
+   `use-scanned-cards.tsx`.
+3. Revert `TimingConfig`/EEPROM v2/`setTimingConfig` (firmware) and the
+   Routing Timing panel (web).
+4. Drop migration 0007 and restore the default HNSW index params in schema.
+5. Remove `backup-if-stale` from `backup-db.mjs`/`start-server.cmd`.
+6. Remove the retries param + clearDevice retry; the timing pill; the
+   price-status/refresh routes and the stats-panel UI.
+
+---
+
 *Template for future entries:*
 
 ## Item N — <short title> (area)

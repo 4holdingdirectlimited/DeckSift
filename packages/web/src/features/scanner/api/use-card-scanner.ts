@@ -330,6 +330,13 @@ export function useCardScanner({
   );
   const pendingReviewRef = useRef<PendingReview | null>(null);
 
+  // Per-card timing for tuning: settle wait + server search round trip. The
+  // firmware-side route time is fixed until the delays are runtime-tunable.
+  const [lastScanTiming, setLastScanTiming] = useState<{
+    settleMs: number;
+    searchMs: number;
+  } | null>(null);
+
   const updateStatus = useCallback((newStatus: ScannerStatus) => {
     statusRef.current = newStatus;
     setStatus(newStatus);
@@ -378,6 +385,7 @@ export function useCardScanner({
         return;
       }
       const generation = streamGenerationRef.current;
+      const searchStartMs = performance.now();
 
       try {
         const { card, alternativeMatches, debugImageUrl, isFoil } =
@@ -388,6 +396,10 @@ export function useCardScanner({
             () => displayCanvasRef.current,
             toggleScanLightRef.current,
           );
+        setLastScanTiming({
+          settleMs: CARD_SETTLE_DELAY_MS,
+          searchMs: performance.now() - searchStartMs,
+        });
         // The stream may have been replaced/unmounted while the search was in
         // flight — drop the result instead of updating a dead tree or letting
         // an old camera's capture enter the session.
@@ -718,6 +730,7 @@ export function useCardScanner({
     setReviewMatchPercent,
     autoRejectMatchPercent,
     setAutoRejectMatchPercent,
+    lastScanTiming,
     pendingReview,
     confirmReview,
     rejectReview,

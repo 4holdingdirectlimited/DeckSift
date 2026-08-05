@@ -7,6 +7,14 @@ import { createSearchAdapter } from "./generic";
 import { digimonConfig, yugiohConfig } from "./generic-configs";
 import type { CardSearchAdapter } from "./types";
 
+const RAW_ADAPTERS: Record<string, CardSearchAdapter> = {
+  mtg: scryfallAdapter,
+  gundam: gundamAdapter,
+  pokemon: pokemonAdapter,
+  yugioh: createSearchAdapter(yugiohConfig),
+  digimon: createSearchAdapter(digimonConfig),
+};
+
 const ADAPTERS_BY_GAME_KEY: Record<string, CardSearchAdapter> = {
   mtg: withCache(scryfallAdapter),
   gundam: withCache(gundamAdapter),
@@ -14,6 +22,14 @@ const ADAPTERS_BY_GAME_KEY: Record<string, CardSearchAdapter> = {
   yugioh: withCache(createSearchAdapter(yugiohConfig)),
   digimon: withCache(createSearchAdapter(digimonConfig)),
 };
+
+/**
+ * Unwrapped adapter (no TTL cache) — for forced refreshes like the manual
+ * "Refresh prices" action, which must hit the source API, not the cache.
+ */
+export function getRawAdapter(gameKey: string): CardSearchAdapter | null {
+  return RAW_ADAPTERS[gameKey] ?? null;
+}
 
 // Resolves the game backing a collection. Scoped by orgId (the card routes
 // receive it from the X-Org-Id header): a collection guid alone must never be

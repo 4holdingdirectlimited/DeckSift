@@ -50,6 +50,13 @@
       "when": 1785807112174,
       "tag": "0006_collection_condition",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1785969875354,
+      "tag": "0007_furry_bucky",
+      "breakpoints": true
     }
   ]
 }

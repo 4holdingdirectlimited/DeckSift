@@ -2,13 +2,24 @@ import {
   CLOSE_MATCH_DELTA,
   type SearchCardMatch,
 } from "@magic-vault/shared";
-import { and, count, sql } from "drizzle-orm";
+import { and, count, eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { authQuery, db } from "../db";
-import { cardImageVectors } from "../db/schema";
+import {
+  cardImageVectors,
+  collectionCards,
+  collections,
+} from "../db/schema";
 import { fetchImageWithCache } from "../lib/art-cache";
-import { resolveCardDetails } from "../lib/card-cache";
-import { resolveCardSearch } from "../lib/card-search/resolve";
+import {
+  refreshCardDetails,
+  resolveCardDetails,
+} from "../lib/card-cache";
+import {
+  getRawAdapter,
+  resolveCardSearch,
+  resolveGameDataSourceUrl,
+} from "../lib/card-search/resolve";
 import { recordScan } from "../lib/scan-activity";
 import { sendDiscordNotification } from "../lib/discord";
 import { vectorizeImageFromBuffer } from "../lib/vectorize";
@@ -19,6 +30,122 @@ const router = new Hono<AppEnv>();
 // GET /cards/library — browse the synced card library with filters
 // (game, name search, rarity, set code). Art and rarity come from the stored
 // card_data jsonb; image_uris are proxied URLs the client resolves locally.
+// GET /cards/price-status — when the collection's card data (incl. prices)
+// was last refreshed, and how many cards it covers. Prices live in the synced
+// card_data jsonb; they refresh automatically as cards re-hydrate on scan and
+// manually via POST /cards/refresh-prices.
+router.get("/price-status", requireAuth, async (c) => {
+  const collectionGuid = c.req.query("collectionGuid");
+  if (!collectionGuid) {
+    return c.json({ success: false, message: "collectionGuid is required." }, 400);
+  }
+  try {
+    const collection = await db.query.collections.findFirst({
+      where: (t, { eq }) => eq(t.guid, collectionGuid),
+      columns: { id: true, gameId: true },
+    });
+    if (!collection) {
+      return c.json({ success: false, message: "Collection not found." }, 404);
+    }
+    const gameId: number | null = collection.gameId;
+    if (gameId === null) {
+      return c.json({ success: false, message: "Collection not found." }, 404);
+    }
+    const game = await db.query.games.findFirst({
+      where: (t, { eq }) => eq(t.id, gameId),
+      columns: { key: true },
+    });
+    const rows = await db
+      .select({
+        updatedAt: cardImageVectors.updatedAt,
+      })
+      .from(collectionCards)
+      .innerJoin(
+        cardImageVectors,
+        and(
+          eq(collectionCards.scryfallId, cardImageVectors.scryfallId),
+          game ? eq(cardImageVectors.gameKey, game.key) : sql`true`,
+        ),
+      )
+      .where(eq(collectionCards.collectionId, collection.id));
+    const updated = rows
+      .map((r) => r.updatedAt?.getTime() ?? 0)
+      .filter((t) => t > 0);
+    return c.json({
+      success: true,
+      data: {
+        lastUpdated: updated.length > 0 ? Math.max(...updated) : null,
+        cardCount: rows.length,
+      },
+    });
+  } catch (err) {
+    console.error(err);
+    return c.json({ success: false, message: "Database error." }, 500);
+  }
+});
+
+// POST /cards/refresh-prices — force re-fetch card data (incl. prices) for the
+// collection's cards straight from the source API, bypassing caches. Bounded to
+// the most recent 200 cards and paced so the desktop stays responsive.
+router.post("/refresh-prices", requireAuth, async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  const collectionGuid =
+    typeof body.collectionGuid === "string" ? body.collectionGuid : undefined;
+  if (!collectionGuid) {
+    return c.json({ success: false, message: "collectionGuid is required." }, 400);
+  }
+  try {
+    const collection = await db.query.collections.findFirst({
+      where: (t, { eq }) => eq(t.guid, collectionGuid),
+      columns: { id: true, gameId: true },
+    });
+    if (!collection) {
+      return c.json({ success: false, message: "Collection not found." }, 404);
+    }
+    const gameId: number | null = collection.gameId;
+    if (gameId === null) {
+      return c.json({ success: false, message: "Collection not found." }, 404);
+    }
+    const game = await db.query.games.findFirst({
+      where: (t, { eq }) => eq(t.id, gameId),
+      columns: { key: true },
+    });
+    if (!game) {
+      return c.json({ success: false, message: "Game not found." }, 404);
+    }
+    const adapter = getRawAdapter(game.key);
+    if (!adapter) {
+      return c.json(
+        { success: false, message: `No data source for game "${game.key}".` },
+        400,
+      );
+    }
+    const baseUrl = await resolveGameDataSourceUrl(game.key, adapter.defaultUrl);
+
+    const ids = await db
+      .select({ scryfallId: collectionCards.scryfallId })
+      .from(collectionCards)
+      .where(eq(collectionCards.collectionId, collection.id))
+      .orderBy(sql`scanned_at desc`)
+      .limit(200);
+
+    let refreshed = 0;
+    const seen = new Set<string>();
+    for (const { scryfallId } of ids) {
+      if (seen.has(scryfallId)) continue;
+      seen.add(scryfallId);
+      const fresh = await refreshCardDetails(game.key, adapter, baseUrl, scryfallId);
+      if (fresh) refreshed += 1;
+      // Pace against the rest of the machine (same spirit as sync pacing).
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    return c.json({ success: true, data: { refreshed, total: seen.size } });
+  } catch (err) {
+    console.error(err);
+    return c.json({ success: false, message: "Refresh failed." }, 500);
+  }
+});
+
 router.get("/library", requireAuth, async (c) => {
   const gameKey = (c.req.query("gameKey") ?? "").trim() || undefined;
   const search = (c.req.query("search") ?? "").trim();

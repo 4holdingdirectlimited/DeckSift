@@ -180,6 +180,20 @@ Feeds until the module 1 IR detects a card, the hopper reads empty, or the feed 
 {"status":"ok","detected":true,"empty":false}
 ```
 
+**Queued feed (pipelining):** if a feed arrives while another operation is
+running, the firmware queues it and replies **only when the queued feed
+completes** (with the original command id) — so the caller sees the card
+arrive rather than a "busy" error. This is what lets the web app request the
+next card while the current one is still being routed.
+
+```json
+{"cancelFeed": true}
+```
+
+Drops a still-pending queued feed (used when routing fails so the next card
+must not be pulled). Does not stop a feed already in flight. Replies
+`{"status":"ok"}`.
+
 ### Feeder raw PWM (calibration preview, no auto-stop)
 
 ```json
@@ -225,6 +239,29 @@ Replies:
 ```json
 {"status":"ok"}
 ```
+
+### Set routing timing (delays, persisted with saveConfig)
+
+```json
+{"setTimingConfig":{
+  "cardEnterMs":300,
+  "paddleMs":300,
+  "pushMs":600
+}}
+```
+
+Runtime-tunable replacements for the old compile-time `DELAY_*` constants:
+- `cardEnterMs` — time for the card to settle after the target bottom opens (50–2000)
+- `paddleMs` — time for the paddle to engage (50–2000)
+- `pushMs` — time for the pusher to complete its stroke (100–3000)
+
+Values are clamped to the bounds above and echoed back in the reply:
+
+```json
+{"status":"ok","timing":{"cardEnterMs":300,"paddleMs":300,"pushMs":600}}
+```
+
+Send `{"saveConfig": true}` afterwards to persist across reboots.
 
 ### Save config to EEPROM
 
