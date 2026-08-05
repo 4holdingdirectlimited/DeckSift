@@ -2304,6 +2304,52 @@ an auto-reject floor — turns the filter concept into automation.
 
 ---
 
+## Item 52 — Scan-rate telemetry, per-game thresholds, monitor pagination, feeder retry (web)
+
+**Status:** implemented, committed (this commit).
+
+### Why
+
+No-new-hardware speed/reliability pass. The machine isn't assembled yet, so
+this batch is about making tuning measurable, keeping each TCG's match
+thresholds independent, and removing two rough edges (monitor grid rendering
+every card; a single feeder hiccup pausing the whole line).
+
+### What changed
+
+- **Live scan-rate telemetry** — `use-scanned-cards` records each completed
+  scan timestamp and exposes a rolling 60-second rate (`scanRatePerMin`) +
+  last-scan time. ScanStats now shows **Live rate** (scans/min, with a
+  decaying 5 s tick so it drops when the line idles) and **Last scan**
+  ("X.Xs ago"), alongside the existing session stats. This makes firmware
+  delay tuning measurable when the machine is built.
+- **Per-game match thresholds** — review-below and auto-reject-below
+  settings are now keyed by game (`reviewMatchPercent:<gameKey>`), so each
+  TCG keeps its own tuned values and switching collections reloads them.
+- **Monitor page pagination** — the live-session grid now pages at 96
+  cards/page (same as the main grid) instead of rendering every card.
+- **Feeder retry-once** — a `detected:false` feeder timeout now retries
+  once (toast + 400 ms) before pausing, absorbing single-card hiccups;
+  the pause only happens if the retry also times out.
+
+### Behavior notes
+
+- Existing users keep their current thresholds: the old unqualified
+  localStorage keys are no longer read, but the new per-game keys default
+  to the same 82% / 0% values.
+- fp16 DirectML embedding was benchmarked and **not** adopted — identical
+  to fp32 on this GPU (375 ms vs 372 ms mean), so `vectorize.ts` stays fp32.
+
+### How to revert
+
+1. Remove `scanRatePerMin`/`lastScanAt` from `use-scanned-cards.tsx`,
+   `types.ts`, and the two stat cards in `scan-stats.tsx`.
+2. Restore the unqualified localStorage keys in `use-card-scanner.ts`.
+3. Revert the pagination in `monitor.tsx`.
+4. Remove the retry branch in `card-scanner.tsx` `handleFeed`.
+
+---
+
 *Template for future entries:*
 
 ## Item N — <short title> (area)

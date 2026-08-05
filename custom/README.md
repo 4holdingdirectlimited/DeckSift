@@ -22,7 +22,7 @@ belong next to the sketch.
 
 | File | What it is |
 | --- | --- |
-| `CHANGES.md` | **Every modification vs upstream**, cumulative, in revert order (currently items 1–51) |
+| `CHANGES.md` | **Every modification vs upstream**, cumulative, in revert order (currently items 1–52) |
 | `SETUP.md` | The local runbook: stack URLs, start/stop, first-run setup, bundle/chase/wishlist modes, bin capacities, value sorting, sync pacing |
 | `TCGS.md` | Multi-TCG architecture, top-20 TCG data-source status, adding a new game |
 | `PLAN.md` | Firmware roadmap (state machine, pipelining, watchdogs) + machine-build commissioning checklist |
@@ -41,7 +41,7 @@ belong next to the sketch.
 
 ## Status
 
-All modifications are documented in `CHANGES.md` (items 1–51). The headline
+All modifications are documented in `CHANGES.md` (items 1–52). The headline
 deliverables, all on the `custom` branch:
 
 - **Fully local, no logins** — removed hosted Neon, Supabase-style auth, and

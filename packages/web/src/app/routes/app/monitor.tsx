@@ -1,3 +1,4 @@
+import { Button } from "@/components/ui/button";
 import {
   Drawer,
   DrawerContent,
@@ -15,9 +16,11 @@ import { SessionStatsPanel } from "@/features/scanner/components/session-stats-p
 import { computeStats } from "@/features/scanner/lib/compute-stats";
 import { useIsMobile } from "@/hooks/use-is-mobile";
 import { FIELD_DEFINITIONS } from "@magic-vault/shared";
-import { IconCards, IconLoader2, IconWifiOff } from "@tabler/icons-react";
-import { useMemo } from "react";
+import { IconCards, IconChevronLeft, IconChevronRight, IconLoader2, IconWifiOff } from "@tabler/icons-react";
+import { useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
+
+const PAGE_SIZE = 96;
 
 function CardGrid({
   filteredAndSorted,
@@ -28,6 +31,16 @@ function CardGrid({
   status: string;
   cardCount: number;
 }) {
+  const [page, setPage] = useState(0);
+  const pageCount = Math.max(
+    1,
+    Math.ceil(filteredAndSorted.length / PAGE_SIZE),
+  );
+  const clampedPage = Math.min(page, pageCount - 1);
+  const pagedCards = filteredAndSorted.slice(
+    clampedPage * PAGE_SIZE,
+    (clampedPage + 1) * PAGE_SIZE,
+  );
   return (
     <>
       {status === "connecting" && cardCount === 0 && (
@@ -55,7 +68,7 @@ function CardGrid({
           </div>
         )}
       <div className="grid grid-cols-3 @md:grid-cols-4 @4xl:grid-cols-6 @5xl:grid-cols-8 gap-2 p-4">
-        {filteredAndSorted.map((card) => (
+        {pagedCards.map((card) => (
           <ScannedCardItem
             key={card.scanId}
             card={card.card}
@@ -64,6 +77,29 @@ function CardGrid({
           />
         ))}
       </div>
+      {pageCount > 1 && (
+        <div className="flex items-center justify-center gap-3 pb-4">
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => setPage((p) => Math.max(0, p - 1))}
+            disabled={clampedPage === 0}
+          >
+            <IconChevronLeft />
+          </Button>
+          <span className="text-sm text-muted-foreground">
+            Page {clampedPage + 1} of {pageCount}
+          </span>
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
+            disabled={clampedPage === pageCount - 1}
+          >
+            <IconChevronRight />
+          </Button>
+        </div>
+      )}
     </>
   );
 }

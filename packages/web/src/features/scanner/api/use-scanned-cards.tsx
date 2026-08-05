@@ -35,6 +35,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -56,6 +57,32 @@ export function ScannedCardsProvider({
   useEffect(() => {
     digitizeRef.current = digitize;
   }, [digitize]);
+
+  // Rolling scan-rate telemetry: timestamps of completed scans, kept for a
+  // 60-second window. Drives the "Live rate" stat so tuning changes are
+  // measurable without watching the session average (which includes idle).
+  const scanTimesRef = useRef<number[]>([]);
+  const [lastScanAt, setLastScanAt] = useState<number | null>(null);
+  const recordScanTime = useCallback(() => {
+    const now = Date.now();
+    scanTimesRef.current = [
+      ...scanTimesRef.current.filter((t) => t >= now - 60_000),
+      now,
+    ].slice(-60);
+    setLastScanAt(now);
+  }, []);
+  // 5 s tick so the rolling window decays without needing a new scan.
+  const [nowTick, setNowTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setNowTick((t) => t + 1), 5000);
+    return () => clearInterval(id);
+  }, []);
+  const scanRatePerMin = useMemo(
+    () =>
+      scanTimesRef.current.filter((t) => t >= Date.now() - 60_000).length,
+    // Recompute when a scan lands or the window slides.
+    [lastScanAt, nowTick],
+  );
 
   // Set-completeness announcements: when a new scan lands, fire a toast if the
   // card's set hit a milestone. Uses the newest card (cards[0]) as the trigger.
@@ -465,6 +492,8 @@ export function ScannedCardsProvider({
         });
         return;
       }
+
+      recordScanTime();
 
       // Reuse the first capture of this card this session (dedupe) so repeated
       // copies don't each store a full base64 JPEG.
@@ -933,6 +962,8 @@ export function ScannedCardsProvider({
         autoFeed,
         elapsedMs,
         isTimerActive,
+        scanRatePerMin,
+        lastScanAt,
         setAutoFeed,
         digitize,
         setDigitize,

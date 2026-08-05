@@ -33,6 +33,10 @@ export interface ScannedCardsContextValue {
   autoFeed: boolean;
   elapsedMs: number;
   isTimerActive: boolean;
+  /** Scans completed in the last 60s (rolling window) — live throughput. */
+  scanRatePerMin: number;
+  /** Timestamp of the most recent completed scan (for "X s ago" display). */
+  lastScanAt: number | null;
   setAutoFeed: (enabled: boolean) => void;
   /** Digitize mode: scan + record every card without sorting (routes to catch-all). */
   digitize: boolean;

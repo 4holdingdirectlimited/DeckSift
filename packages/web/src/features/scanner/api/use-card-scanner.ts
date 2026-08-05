@@ -224,48 +224,86 @@ export function useCardScanner({
   const debugImageUrlRef = useRef<string | null>(null);
   const [allowDuplicates, setAllowDuplicates] = useState(true);
 
-  // Match-confidence thresholds for the review queue, persisted per-browser.
-  // "Review below" is where a low-confidence match pauses for a yes/no;
-  // "auto-reject below" skips the pause entirely and routes to the catch-all
-  // (0 = off). Different games score differently, so both are adjustable.
+  // Match-confidence thresholds for the review queue, persisted per-browser
+  // AND per-game (different TCGs score matches differently, so each game keeps
+  // its own tuned values). "Review below" is where a low-confidence match
+  // pauses for a yes/no; "auto-reject below" skips the pause entirely and
+  // routes to the catch-all (0 = off).
   const REVIEW_MATCH_PCT_KEY = "reviewMatchPercent";
   const AUTO_REJECT_MATCH_PCT_KEY = "autoRejectMatchPercent";
   const DEFAULT_REVIEW_MATCH_PCT = 82;
   const DEFAULT_AUTO_REJECT_MATCH_PCT = 0;
 
-  const [reviewMatchPercent, setReviewMatchPercentState] = useState<number>(
-    () => {
-      const raw = localStorage.getItem(REVIEW_MATCH_PCT_KEY);
-      const parsed = raw === null ? Number.NaN : Number(raw);
-      return Number.isFinite(parsed) && parsed >= 0 && parsed <= 100
-        ? parsed
-        : DEFAULT_REVIEW_MATCH_PCT;
-    },
-  );
-  const reviewMatchPercentRef = useRef(reviewMatchPercent);
-  reviewMatchPercentRef.current = reviewMatchPercent;
-  const setReviewMatchPercent = useCallback((pct: number) => {
-    const clamped = Math.max(0, Math.min(100, Math.round(pct)));
-    setReviewMatchPercentState(clamped);
-    localStorage.setItem(REVIEW_MATCH_PCT_KEY, String(clamped));
-  }, []);
+  const gameKey = activeCollection?.game?.key ?? "default";
+  const gameKeyRef = useRef(gameKey);
+  gameKeyRef.current = gameKey;
 
-  const [autoRejectMatchPercent, setAutoRejectMatchPercentState] = useState<
-    number
-  >(() => {
-    const raw = localStorage.getItem(AUTO_REJECT_MATCH_PCT_KEY);
+  const loadThreshold = useCallback((key: string, fallback: number): number => {
+    const raw = localStorage.getItem(key);
     const parsed = raw === null ? Number.NaN : Number(raw);
     return Number.isFinite(parsed) && parsed >= 0 && parsed <= 100
       ? parsed
-      : DEFAULT_AUTO_REJECT_MATCH_PCT;
-  });
+      : fallback;
+  }, []);
+
+  const [reviewMatchPercent, setReviewMatchPercentState] = useState<number>(
+    () =>
+      loadThreshold(
+        `${REVIEW_MATCH_PCT_KEY}:${gameKey}`,
+        DEFAULT_REVIEW_MATCH_PCT,
+      ),
+  );
+  const reviewMatchPercentRef = useRef(reviewMatchPercent);
+  reviewMatchPercentRef.current = reviewMatchPercent;
+  const setReviewMatchPercent = useCallback(
+    (pct: number) => {
+      const clamped = Math.max(0, Math.min(100, Math.round(pct)));
+      setReviewMatchPercentState(clamped);
+      localStorage.setItem(
+        `${REVIEW_MATCH_PCT_KEY}:${gameKeyRef.current}`,
+        String(clamped),
+      );
+    },
+    [],
+  );
+
+  const [autoRejectMatchPercent, setAutoRejectMatchPercentState] = useState<
+    number
+  >(() =>
+    loadThreshold(
+      `${AUTO_REJECT_MATCH_PCT_KEY}:${gameKey}`,
+      DEFAULT_AUTO_REJECT_MATCH_PCT,
+    ),
+  );
   const autoRejectMatchPercentRef = useRef(autoRejectMatchPercent);
   autoRejectMatchPercentRef.current = autoRejectMatchPercent;
-  const setAutoRejectMatchPercent = useCallback((pct: number) => {
-    const clamped = Math.max(0, Math.min(100, Math.round(pct)));
-    setAutoRejectMatchPercentState(clamped);
-    localStorage.setItem(AUTO_REJECT_MATCH_PCT_KEY, String(clamped));
-  }, []);
+  const setAutoRejectMatchPercent = useCallback(
+    (pct: number) => {
+      const clamped = Math.max(0, Math.min(100, Math.round(pct)));
+      setAutoRejectMatchPercentState(clamped);
+      localStorage.setItem(
+        `${AUTO_REJECT_MATCH_PCT_KEY}:${gameKeyRef.current}`,
+        String(clamped),
+      );
+    },
+    [],
+  );
+
+  // Reload the active game's thresholds when the collection's game changes.
+  useEffect(() => {
+    setReviewMatchPercentState(
+      loadThreshold(
+        `${REVIEW_MATCH_PCT_KEY}:${gameKey}`,
+        DEFAULT_REVIEW_MATCH_PCT,
+      ),
+    );
+    setAutoRejectMatchPercentState(
+      loadThreshold(
+        `${AUTO_REJECT_MATCH_PCT_KEY}:${gameKey}`,
+        DEFAULT_AUTO_REJECT_MATCH_PCT,
+      ),
+    );
+  }, [gameKey, loadThreshold]);
 
   // Review queue: when the top match is low-confidence (or has close
   // alternatives), pause for an operator yes/no instead of auto-routing.

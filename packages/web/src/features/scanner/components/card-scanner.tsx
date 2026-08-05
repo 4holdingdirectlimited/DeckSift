@@ -56,6 +56,9 @@ export function CardScanner({ className, compact }: CardScannerProps) {
   );
   const [isFeeding, setIsFeeding] = useState(false);
   const [isClearingDevice, setIsClearingDevice] = useState(false);
+  // Feeder timeout retry guard: a single missed feed is often a hiccup
+  // (skewed card, roller slip) — retry once before pausing the line.
+  const feedRetryCountRef = useRef(0);
   const { hasCatchAll } = useBinConfigs();
   const {
     status,
@@ -196,10 +199,25 @@ export function CardScanner({ className, compact }: CardScannerProps) {
         // feeder ran its full duration without a card tripping module 1's IR -
         // a timeout, not a successful feed. Capturing here would search an
         // empty frame and can save garbage matches.
+        if (feedRetryCountRef.current < 1) {
+          feedRetryCountRef.current += 1;
+          toast.info("Feeder timeout — retrying once", {
+            description:
+              "No card tripped the sensor. Retrying before pausing the line.",
+          });
+          void reportSerialEvent({
+            command: "feeder",
+            sent: true,
+            response: parsed,
+          });
+          await new Promise((r) => setTimeout(r, 400));
+          return handleFeed();
+        }
+        feedRetryCountRef.current = 0;
         handlePause();
         toast.error("Feeder timeout", {
           description:
-            "No card reached the scanner. Check the hopper and the feeder, then try again.",
+            "No card reached the scanner after a retry. Check the hopper and the feeder, then try again.",
           duration: Infinity,
           dismissible: true,
         });
@@ -210,6 +228,7 @@ export function CardScanner({ className, compact }: CardScannerProps) {
         });
       } else {
         // Feeder confirmed a card reached module 1 - capture it now.
+        feedRetryCountRef.current = 0;
         captureCard();
       }
     } finally {

@@ -21,7 +21,8 @@ export function formatElapsed(ms: number): string {
 
 export function ScanStats() {
   const [expandedSets, setExpandedSets] = useState(false);
-  const { cards, elapsedMs, isTimerActive } = useScannedCards();
+  const { cards, elapsedMs, isTimerActive, scanRatePerMin, lastScanAt } =
+    useScannedCards();
   const { filters, toggleRarity, toggleColor, toggleSet } = useCardFilters();
 
   const stats = useMemo(() => computeStats(cards), [cards]);
@@ -33,6 +34,9 @@ export function ScanStats() {
       </div>
     );
   }
+
+  const secondsSinceLastScan =
+    lastScanAt == null ? null : (Date.now() - lastScanAt) / 1000;
 
   const visibleSets = expandedSets ? stats.sets : stats.sets.slice(0, 5);
 
@@ -53,11 +57,23 @@ export function ScanStats() {
       indicator: isTimerActive,
     },
     {
-      label: "Cards / hr",
+      label: "Live rate",
       value:
-        elapsedMs > 0
-          ? String(Math.round((cards.length / elapsedMs) * 3_600_000))
-          : "-",
+        scanRatePerMin > 0
+          ? `${scanRatePerMin}/min`
+          : secondsSinceLastScan != null && secondsSinceLastScan < 90
+            ? `~${Math.round(60 / Math.max(1, secondsSinceLastScan))}/min`
+            : "-",
+      indicator: scanRatePerMin > 0,
+    },
+    {
+      label: "Last scan",
+      value:
+        secondsSinceLastScan == null
+          ? "-"
+          : secondsSinceLastScan < 60
+            ? `${secondsSinceLastScan.toFixed(1)}s ago`
+            : formatElapsed(Math.round(secondsSinceLastScan * 1000)) + " ago",
     },
   );
 
