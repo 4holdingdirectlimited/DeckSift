@@ -2190,6 +2190,73 @@ one-command safety net, and a guided first-run path.
 
 ---
 
+## Item 50 — Integrate useful upstream additions (server + web)
+
+**Status:** implemented, committed (this commit).
+
+### Why
+
+Upstream (dishwasher-detergent/mault) advanced ~16 commits past our fork. We
+reviewed every diff and pulled in the changes that fit our local-only, no-auth,
+DeckSift-branded tree — the rest was cosmetic (icon swaps), not portable
+(auth/Neon), or upstream's own design files (3D models). The wins below
+improve response time during scanning, fix raw-value select labels, and round
+out the build docs.
+
+### What changed
+
+- **Server: generic adapter TTL cache** — new
+  `packages/server/src/lib/card-search/cache.ts` (`withCache` wrapper with
+  TTL + in-flight dedupe) applied to all five game adapters in `resolve.ts`
+  (mtg, gundam, pokemon, yugioh, digimon). Search results now cache for
+  15 min and concurrent identical lookups share one upstream request.
+- **Web: "Min. match" filter** — `minMatchPercent` added to `CardFilters`
+  (all three `EMPTY_FILTERS`), a new `components/ui/slider.tsx`, and a
+  Min. match slider in the card-filter popover that hides low-confidence
+  matches (`(1 - distance) * 100 >= threshold`).
+- **Web: grid performance** — card grid now paginates (96/page) and
+  `framer-motion`/`AnimatePresence` was removed from the card grid, card
+  item, and monitor grid. This was the main render bottleneck while
+  scanning with hundreds of cards (each scan re-triggered layout
+  animation across the whole grid). Newest-scan flash (`isNew`/
+  `newestScanId`) removed with it; scan feedback stays via stats + review
+  queue.
+- **Web: game-switch alert** — new `GameSwitchAlert` toast (amber,
+  dismissible) after switching collection games, reminding to re-adjust the
+  feeder tube wall; mounted in all three scanner layouts.
+- **Web: select label fixes** — `SelectValue` now renders the human label
+  (not the raw value) for condition field/operator/value selects, the
+  collection-switcher game select, and the collections page game select.
+- **Firmware/scan tuning:** `CARD_SETTLE_DELAY_MS` 300 → 500 (fewer
+  mid-slide/blurred captures).
+- **Docs:** "Flash the firmware" build phase moved earlier (before servo
+  mounting), IR sensor short-throw calibration note added, and a full
+  wiring diagram image added to the Build → Wiring page.
+
+### Behavior notes
+
+- The upstream global `Toaster` removal was **not** taken — we mount sonner's
+  `<Toaster />` exactly once and rely on it for toasts.
+- `AppLoadingGate` (full-screen splash) was **not** taken — our local,
+  single-org app loads fast and already has inline skeletons.
+- Pagination resets to page 0 on search/filter/sort/collection changes.
+
+### How to revert
+
+1. Revert `resolve.ts` to unwrapped adapters and delete `cache.ts`.
+2. Remove `minMatchPercent` from `CardFilters` + the three `EMPTY_FILTERS`,
+   the filter-sort block, the popover slider, and delete `slider.tsx`.
+3. Restore `isNew`/`newestScanId`/`AnimatePresence` in `card-grid.tsx`,
+   `scanned-card-item.tsx`, `monitor.tsx` if the animation is wanted back.
+4. Delete `GameSwitchAlert` and its three mounts; set
+   `CARD_SETTLE_DELAY_MS` back to 300.
+5. Remove the SelectValue children in `condition-row.tsx`,
+   `collection-switcher.tsx`, `collections.tsx`.
+6. Move the firmware phase back in `assembly.tsx`, drop the IR note, and
+   remove the wiring-diagram section + image from `wiring.tsx`.
+
+---
+
 *Template for future entries:*
 
 ## Item N — <short title> (area)

@@ -284,7 +284,12 @@ export default function CollectionsPage() {
                   <FieldLabel htmlFor="new-collection-game">Game</FieldLabel>
                   <Select value={field.value} onValueChange={field.onChange}>
                     <SelectTrigger id="new-collection-game">
-                      <SelectValue placeholder="Select a game..." />
+                      <SelectValue placeholder="Select a game...">
+                        {
+                          activeGames.find((g) => g.guid === field.value)
+                            ?.name
+                        }
+                      </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                       {activeGames.map((game) => (

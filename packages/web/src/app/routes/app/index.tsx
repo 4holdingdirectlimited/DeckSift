@@ -12,6 +12,7 @@ import { useScanShortcuts } from "@/features/scanner/api/use-scan-shortcuts";
 import { BinStatus } from "@/features/scanner/components/bin-status";
 import { CardScanner } from "@/features/scanner/components/card-scanner";
 import { DigitizeModeToggle } from "@/features/scanner/components/digitize-mode-toggle";
+import { GameSwitchAlert } from "@/features/scanner/components/game-switch-alert";
 import { ScanStats } from "@/features/scanner/components/scan-stats";
 import { ScannerDebug } from "@/features/scanner/components/scanner-debug";
 import { FirstRunChecklist } from "@/features/setup/components/first-run-checklist";
@@ -42,6 +43,7 @@ function MobileScanner() {
             <div className="flex flex-col gap-2">
               <FirstRunChecklist />
               <CollectionSwitcher />
+              <GameSwitchAlert />
               <PresetSelector readOnly />
               <DigitizeModeToggle />
               <BundlePanel />
@@ -82,6 +84,7 @@ export default function App() {
           <div className="flex flex-col gap-2 w-52 shrink-0 overflow-y-auto">
             <FirstRunChecklist />
             <CollectionSwitcher />
+            <GameSwitchAlert />
             <PresetSelector readOnly />
             <DigitizeModeToggle />
             <BundlePanel />
@@ -103,6 +106,7 @@ export default function App() {
       <section className="col-span-4 lg:col-span-3 xl:col-span-4 2xl:col-span-2 overflow-hidden flex flex-col h-full p-2 border-r gap-2 bg-sidebar/70">
         <FirstRunChecklist />
         <CollectionSwitcher />
+        <GameSwitchAlert />
         <PresetSelector readOnly />
         <DigitizeModeToggle />
         <BundlePanel />

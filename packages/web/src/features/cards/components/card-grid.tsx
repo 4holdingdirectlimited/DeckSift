@@ -24,15 +24,18 @@ import {
   IconArrowBackUp,
   IconArrowBarToDown,
   IconBolt,
+  IconChevronLeft,
+  IconChevronRight,
   IconCopy,
   IconDownload,
   IconFolders,
   IconShoppingBag,
 } from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
-import { AnimatePresence } from "framer-motion";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+
+const PAGE_SIZE = 96;
 
 export function CardGrid() {
   const {
@@ -80,19 +83,22 @@ export function CardGrid() {
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const [newestScanId, setNewestScanId] = useState<string | null>(null);
   const [openScanId, setOpenScanId] = useState<string | null>(null);
-  const prevCardCountRef = useRef(cards.length);
+  const [page, setPage] = useState(0);
+
+  const pageCount = Math.max(
+    1,
+    Math.ceil(filteredAndSorted.length / PAGE_SIZE),
+  );
+  const clampedPage = Math.min(page, pageCount - 1);
+  const pagedCards = filteredAndSorted.slice(
+    clampedPage * PAGE_SIZE,
+    (clampedPage + 1) * PAGE_SIZE,
+  );
 
   useEffect(() => {
-    if (cards.length > prevCardCountRef.current && cards.length > 0) {
-      setNewestScanId(cards[0].scanId);
-      const timer = setTimeout(() => setNewestScanId(null), 1200);
-      prevCardCountRef.current = cards.length;
-      return () => clearTimeout(timer);
-    }
-    prevCardCountRef.current = cards.length;
-  }, [cards]);
+    setPage(0);
+  }, [searchQuery, filters, sortKey, activeCollection?.guid]);
 
   const openIndex = openScanId
     ? filteredAndSorted.findIndex((c) => c.scanId === openScanId)
@@ -356,24 +362,44 @@ export function CardGrid() {
       )}
       <div className="p-2 flex-1">
         <div className="grid grid-cols-3 @md:grid-cols-4 @4xl:grid-cols-6 gap-2">
-          <AnimatePresence initial={false}>
-            {filteredAndSorted.map((card) => (
-              <ScannedCardItem
-                key={card.scanId}
-                card={card.card}
-                capturedImageUrl={card.capturedImageUrl}
-                onOpen={() => setOpenScanId(card.scanId)}
-                binNumber={card.binNumber}
-                isSelected={selectedIds.has(card.scanId)}
-                onToggleSelect={() => toggleSelect(card.scanId)}
-                isNew={card.scanId === newestScanId}
-                hasAlternatives={!!card.alternativeMatches?.length}
-                isFoil={card.isFoil}
-                isDownloaded={card.isDownloaded}
-              />
-            ))}
-          </AnimatePresence>
+          {pagedCards.map((card) => (
+            <ScannedCardItem
+              key={card.scanId}
+              card={card.card}
+              capturedImageUrl={card.capturedImageUrl}
+              onOpen={() => setOpenScanId(card.scanId)}
+              binNumber={card.binNumber}
+              isSelected={selectedIds.has(card.scanId)}
+              onToggleSelect={() => toggleSelect(card.scanId)}
+              hasAlternatives={!!card.alternativeMatches?.length}
+              isFoil={card.isFoil}
+              isDownloaded={card.isDownloaded}
+            />
+          ))}
         </div>
+        {pageCount > 1 && (
+          <div className="flex items-center justify-center gap-3 pt-4">
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => setPage((p) => Math.max(0, p - 1))}
+              disabled={clampedPage === 0}
+            >
+              <IconChevronLeft />
+            </Button>
+            <span className="text-sm text-muted-foreground">
+              Page {clampedPage + 1} of {pageCount}
+            </span>
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
+              disabled={clampedPage === pageCount - 1}
+            >
+              <IconChevronRight />
+            </Button>
+          </div>
+        )}
       </div>
 
       {(scanner?.isCameraActive || selectedIds.size > 0) && (

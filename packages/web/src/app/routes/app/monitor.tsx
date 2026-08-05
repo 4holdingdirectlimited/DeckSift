@@ -16,18 +16,15 @@ import { computeStats } from "@/features/scanner/lib/compute-stats";
 import { useIsMobile } from "@/hooks/use-is-mobile";
 import { FIELD_DEFINITIONS } from "@magic-vault/shared";
 import { IconCards, IconLoader2, IconWifiOff } from "@tabler/icons-react";
-import { AnimatePresence } from "framer-motion";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo } from "react";
 import { useParams } from "react-router-dom";
 
 function CardGrid({
   filteredAndSorted,
-  newestScanId,
   status,
   cardCount,
 }: {
   filteredAndSorted: ReturnType<typeof useCardFilterSort>["filteredAndSorted"];
-  newestScanId: string | null;
   status: string;
   cardCount: number;
 }) {
@@ -57,19 +54,16 @@ function CardGrid({
             No cards match the search query.
           </div>
         )}
-      <AnimatePresence initial={false}>
-        <div className="grid grid-cols-3 @md:grid-cols-4 @4xl:grid-cols-6 @5xl:grid-cols-8 gap-2 p-4">
-          {filteredAndSorted.map((card) => (
-            <ScannedCardItem
-              key={card.scanId}
-              card={card.card}
-              binNumber={card.binNumber}
-              isNew={card.scanId === newestScanId}
-              onOpen={() => {}}
-            />
-          ))}
-        </div>
-      </AnimatePresence>
+      <div className="grid grid-cols-3 @md:grid-cols-4 @4xl:grid-cols-6 @5xl:grid-cols-8 gap-2 p-4">
+        {filteredAndSorted.map((card) => (
+          <ScannedCardItem
+            key={card.scanId}
+            card={card.card}
+            binNumber={card.binNumber}
+            onOpen={() => {}}
+          />
+        ))}
+      </div>
     </>
   );
 }
@@ -102,20 +96,6 @@ export default function MonitorPage() {
     setFilters,
     activeFilterCount,
   } = useCardFilterSort(cards, fieldDefinitions);
-
-  const [newestScanId, setNewestScanId] = useState<string | null>(null);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const firstCardId = cards[0]?.scanId ?? null;
-
-  useEffect(() => {
-    if (!firstCardId) return;
-    if (timerRef.current) clearTimeout(timerRef.current);
-    setNewestScanId(firstCardId);
-    timerRef.current = setTimeout(() => setNewestScanId(null), 1200);
-    return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
-    };
-  }, [firstCardId]);
 
   const viewerAvatars = (
     <>
@@ -177,7 +157,6 @@ export default function MonitorPage() {
               <div className="overflow-y-auto flex-1 @container">
                 <CardGrid
                   filteredAndSorted={filteredAndSorted}
-                  newestScanId={newestScanId}
                   status={status}
                   cardCount={cards.length}
                 />
@@ -219,7 +198,6 @@ export default function MonitorPage() {
         </div>
         <CardGrid
           filteredAndSorted={filteredAndSorted}
-          newestScanId={newestScanId}
           status={status}
           cardCount={cards.length}
         />
