@@ -2,7 +2,7 @@
 
 Parts list and assembly instructions for the physical sorting unit: a hopper feeds cards one at a time through three stacked routing modules, each capable of dropping a card into one of two side bins or passing it down to the next module — seven bins total, driven by an Arduino Uno R4 Minima over I²C.
 
-- **Firmware:** `arduino/main/main.ino` (this folder)
+- **Firmware:** `arduino/main/main.ino` — **one universal sketch** for multiple boards (`board-config.h` abstracts EEPROM, I2C pins and interrupts). Tested targets: **Arduino Uno R4 Minima** and **ESP32-S3** (the DeckSift primary going forward — more flash/RAM headroom and native-USB Web Serial). Also compiles for RP2040/Pico and STM32 with no sketch changes.
 - **Enclosure:** `3d model/Card Sorter.f3d` (Fusion 360 source) or `3d model/card_sorter.3mf` (mesh, slicer-ready) — the original design by dishwasher-detergent. DeckSift's revised parts live alongside as `3d model/card_sorter_decksift.3mf` — both files are the same machine; use whichever matches your print setup. 3D files are CC BY-NC-SA 4.0 (see `3d model/LICENSE`).
 - **Calibration:** `/app/calibrate` in the web app
 - **Photo references:** the original interactive guide at [mault.xyz/build](https://mault.xyz/build) shows assembly photos for most steps (`/instructions/*.jpg` in the repo)

@@ -29,7 +29,7 @@ jobs:
       - run: pnpm lint
 
   firmware-compile:
-    name: Firmware compile (Uno R4 Minima)
+    name: Firmware compile (Uno R4 + ESP32-S3)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -38,11 +38,14 @@ jobs:
       # the current official Arduino action and handles core/library setup.
       - uses: arduino/compile-sketches@v1
         with:
-          fqbn: arduino:renesas_uno:minima
+          fqbn: |
+            arduino:renesas_uno:minima
+            esp32:esp32:esp32s3
           sketch-paths: |
             - arduino/main
           platforms: |
             - name: arduino:renesas_uno
+            - name: esp32:esp32
           libraries: |
             - name: ArduinoJson
               version: 7.4.3

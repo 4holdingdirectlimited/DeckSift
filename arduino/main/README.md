@@ -4,7 +4,8 @@ This folder contains the firmware and build documentation for the **DeckSift TCG
 
 | File | Purpose |
 | --- | --- |
-| `main.ino` | The firmware. Flashes to an Arduino Uno R4 Minima. |
+| `main.ino` | The firmware — **one universal sketch** that runs on several boards (see below). |
+| `board-config.h` | Board abstraction: EEPROM init, I2C pins, interrupt attach, IR pin defaults. |
 | `BUILD.md` | Complete build guide: bill of materials, wiring, assembly, first power-on, calibration. |
 | `SERIAL_PROTOCOL.md` | JSON command/response reference for talking to the firmware over USB serial. |
 
@@ -22,6 +23,20 @@ A hopper feeds cards one at a time through three stacked routing modules. Each m
 | (catch-all) | Bin 7 |
 
 Each module has **3 positional SG90 servos** (bottom trapdoor, paddle gate, pusher) plus an **IR sensor**; a **continuous-rotation SG90** runs the feeder. All servos are driven by one **PCA9685** over I²C. The web app sends `{"bin": N}` over USB serial and the Arduino runs the full routing sequence.
+
+## Supported boards (universal firmware)
+
+One sketch, several controllers — `board-config.h` hides the small
+differences (EEPROM emulation, I2C pins, interrupt attach), so you just pick
+the board in the Arduino IDE / PlatformIO and flash:
+
+| Board | Status | Notes |
+| --- | --- | --- |
+| **ESP32-S3** | ✅ Primary (CI-tested) | Plenty of flash/RAM; native-USB Web Serial works in Chrome/Edge. Default PCA9685 I2C on GPIO 8 (SDA) / 9 (SCL) — override with `-DI2C_SDA=n` if your wiring differs. |
+| **Arduino Uno R4 Minima** | ✅ Supported (CI-tested) | The original controller; real EEPROM. |
+| **RP2040 / Pico** | ✅ Compiles | Flash-emulated EEPROM (`EEPROM.begin`), any GPIO for IR. |
+| **STM32** | ✅ Compiles | Flash-emulated EEPROM; define the IR pins for your board if needed. |
+| **Classic Uno/Nano** | ⚠️ Too little RAM | Sketch needs ~6 KB SRAM; the ATmega328P has 2 KB. |
 
 ## Flashing the firmware
 

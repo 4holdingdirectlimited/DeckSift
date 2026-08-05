@@ -2498,6 +2498,55 @@ Arduino is re-loaded in minutes; and upstream's new commits were reviewed.
 
 ---
 
+## Item 55 — Universal firmware: one sketch, ESP32-S3 primary (firmware + CI + docs)
+
+**Status:** implemented, committed (this commit).
+
+### Why
+
+One machine design, several possible controllers. The sketch now compiles
+from a single source for multiple boards, with the Arduino IDE / PlatformIO
+picking the right compile-time path — and DeckSift moves to the **ESP32-S3**
+as the primary controller (more flash/RAM headroom, native-USB Web Serial,
+Wi-Fi later for the multi-machine plan).
+
+### What changed
+
+- **`arduino/main/board-config.h`** — new board-abstraction header. Hides:
+  EEPROM init (`EEPROM.begin(512)` on ESP32/RP2040 flash emulation, no-op on
+  hardware-EEPROM AVR/Renesas), PCA9685 I2C pins (ESP32-S3 default GPIO
+  8/9, overridable with `-DI2C_SDA/-DI2C_SCL`), interrupt attach
+  (`digitalPinToInterrupt` wrapped per core), and IR pin defaults (D2–D5
+  valid on every supported board, overridable per build).
+- **`main.ino`** — uses `board-config.h`; `while (!Serial)` replaced with a
+  5 s bounded wait (native-USB boards can't hang a headless boot);
+  `BOARD_I2C_BEGIN()` before `pwm.begin()`.
+- **Verified compiles** (this machine, arduino-cli): `arduino:renesas_uno:minima`
+  (80,676 B / 30 %) and `esp32:esp32:esp32s3` (335,801 B / 25 %).
+  RP2040/Pico + STM32 paths are compile-time branches (untested here — no
+  cores installed); classic Uno/Nano lacks the ~6 KB SRAM the sketch needs.
+- **CI** — `checks.yml` firmware job now builds both the Uno R4 and the
+  ESP32-S3 on every push.
+- **Docs** — BUILD.md / arduino README / in-app build guide updated for the
+  universal sketch + board table.
+
+### Behavior notes
+
+- Same serial protocol on every board — the web app is unchanged.
+- ESP32-S3 wiring note: PCA9685 SDA→GPIO8, SCL→GPIO9 by default; override
+  at build time if your machine differs.
+- Flash-emulated EEPROM (ESP32/RP2040) is wear-leveled; calibration saves
+  are infrequent so endurance is a non-issue.
+
+### How to revert
+
+1. Delete `board-config.h`; restore the direct `Wire.h`/`EEPROM.h` includes,
+   hardcoded IR pin defines, `while (!Serial);`, and the plain
+   `attachInterrupt(digitalPinToInterrupt(...))` call.
+2. Restore the single-board CI job.
+
+---
+
 *Template for future entries:*
 
 ## Item N — <short title> (area)

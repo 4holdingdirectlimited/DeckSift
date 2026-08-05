@@ -1,7 +1,6 @@
 #include <ArduinoJson.h>
-#include <Wire.h>
 #include <Adafruit_PWMServoDriver.h>
-#include <EEPROM.h>
+#include "board-config.h"  // board abstraction: EEPROM, I2C pins, IR pins, interrupts
 
 Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver();
 
@@ -26,19 +25,14 @@ Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver();
 #define LED_RED    3
 #define LED_ORANGE 4
 
-// IR sensor pins — one per module (active LOW: pin reads LOW when card is present)
-#define IR_PIN_MODULE1 2
-#define IR_PIN_MODULE2 3
-#define IR_PIN_MODULE3 4
+// IR sensors (active-LOW: pin reads LOW when a card is present). Pin numbers
+// live in board-config.h (same defaults across boards, overridable per build).
 #define IR_TIMEOUT_MS  3000  // max ms to wait for a card before aborting
 
 // Any module where a card sits at the gate continuously for this long with no
 // routing command in progress (e.g. the app never sent a bin command) is
 // reported as a jam. Only checked while idle (runMachine()).
 #define JAM_TIMEOUT_MS 20000
-
-// Hopper IR sensor — active LOW: pin reads LOW while cards remain in the feeder stack
-#define IR_PIN_HOPPER 5
 
 // Declared here (before any function) because the Arduino builder hoists
 // auto-generated function prototypes to the top of the file, above any type
@@ -1002,9 +996,13 @@ void handleCommand(const char* json) {
 
 void setup() {
   Serial.begin(9600);
-  while (!Serial);
+  // Bounded wait for native-USB boards (Uno R4, ESP32-S3 CDC, Pico) so a
+  // headless power-on never hangs; UART-bridge boards skip immediately.
+  unsigned long serialWaitStart = millis();
+  while (!Serial && millis() - serialWaitStart < 5000) {}
 
-  loadCalibration();  // restore tuned config before any servo moves
+  BOARD_EEPROM_BEGIN();  // no-op where EEPROM is hardware; begin() on flash-emulated boards
+  loadCalibration();     // restore tuned config before any servo moves
 
   // IR sensors: active LOW (internal pull-up, sensor pulls LOW when card present)
   pinMode(IR_PIN_MODULE1, INPUT_PULLUP);
@@ -1015,8 +1013,9 @@ void setup() {
   // Interrupt-driven module-1 detection: the feeder stops the instant the beam
   // is crossed, no polling. Module 2/3 sensors stay polled (they gate routing
   // waits, where a few ms of latency is fine).
-  attachInterrupt(digitalPinToInterrupt(IR_PIN_MODULE1), onModule1IR, CHANGE);
+  BOARD_IR_ATTACH();
 
+  BOARD_I2C_BEGIN();   // PCA9685 I2C bus (explicit SDA/SCL pins on ESP32)
   pwm.begin();
   pwm.setPWMFreq(50);
   delay(10);

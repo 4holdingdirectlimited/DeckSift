@@ -88,7 +88,7 @@ const PHASES: Phase[] = [
       },
       {
         key: "upload-sketch",
-        text: 'Select board "Arduino Uno R4 Minima", select the correct port, then upload arduino/main/main.ino.',
+        text: 'Select your board — "Arduino Uno R4 Minima" or "ESP32-S3" (the DeckSift primary; board-config.h abstracts the differences) — select the correct port, then upload arduino/main/main.ino.',
       },
       {
         key: "confirm-ready",
