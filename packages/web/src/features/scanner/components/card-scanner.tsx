@@ -83,6 +83,10 @@ export function CardScanner({ className, compact }: CardScannerProps) {
     setAllowDuplicates,
     reviewQueue,
     setReviewQueue,
+    reviewMatchPercent,
+    setReviewMatchPercent,
+    autoRejectMatchPercent,
+    setAutoRejectMatchPercent,
     pendingReview,
     confirmReview,
     rejectReview,
@@ -373,6 +377,8 @@ export function CardScanner({ className, compact }: CardScannerProps) {
           autoFeed={autoFeed}
           allowDuplicates={allowDuplicates}
           reviewQueue={reviewQueue}
+          reviewMatchPercent={reviewMatchPercent}
+          autoRejectMatchPercent={autoRejectMatchPercent}
           zoom={zoom}
           zoomRange={zoomRange}
           cameras={cameras}
@@ -388,6 +394,8 @@ export function CardScanner({ className, compact }: CardScannerProps) {
           onAutoFeedChange={setAutoFeed}
           onAllowDuplicatesChange={setAllowDuplicates}
           onReviewQueueChange={setReviewQueue}
+          onReviewMatchPercentChange={setReviewMatchPercent}
+          onAutoRejectMatchPercentChange={setAutoRejectMatchPercent}
         />
       </div>
     </div>

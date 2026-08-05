@@ -48,7 +48,7 @@ export const ScannedCardItem = memo(function ScannedCardItem({
           {isFoil && (
             <div
               className={cn(
-                "absolute top-1 z-20 rounded-full p-0.5 shadow-md bg-gradient-to-br from-fuchsia-400 via-cyan-400 to-amber-300",
+                "absolute top-1 z-20 rounded-full p-0.5 shadow-md bg-linear-to-br from-fuchsia-400 via-cyan-400 to-amber-300",
                 hasAlternatives ? "left-6" : "left-1",
               )}
               title="Foil"

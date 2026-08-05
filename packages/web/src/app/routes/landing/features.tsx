@@ -68,7 +68,7 @@ export function LandingFeatures() {
             key={feature.title}
             className="group flex flex-col gap-3 rounded-xl border bg-card p-5 transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md"
           >
-            <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-primary/20 via-primary/10 to-transparent text-primary ring-1 ring-primary/20">
+            <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-linear-to-br from-primary/20 via-primary/10 to-transparent text-primary ring-1 ring-primary/20">
               <feature.icon size={18} />
             </span>
             <div>

@@ -2257,6 +2257,53 @@ out the build docs.
 
 ---
 
+## Item 51 — Configurable match thresholds + per-game alert dismissal (web)
+
+**Status:** implemented, committed (this commit).
+
+### Why
+
+Item 50 brought upstream's view-only "Min. match" filter. The review queue
+had the same concept hardcoded (`REVIEW_DISTANCE = 0.18`, i.e. pause below
+82%), but different games score matches differently and a fixed threshold
+mis-fires on some TCGs. Making the runtime thresholds adjustable — and adding
+an auto-reject floor — turns the filter concept into automation.
+
+### What changed
+
+- **Review threshold slider** — Scanner menu → Scanner → "Review below %"
+  replaces the hardcoded 82% pause point. Persisted in localStorage
+  (`reviewMatchPercent`, default 82). Close-alternative matches still always
+  pause.
+- **Auto-reject floor slider** — "Auto-reject below %" (default 0 = off):
+  cards below the floor are routed straight to the catch-all bin without
+  pausing, keeping the line moving during unattended bundle runs. A toast
+  reports each auto-rejection. Persisted in localStorage
+  (`autoRejectMatchPercent`).
+- **Per-game alert dismissal** — the game-switch feeder-tube alert remembers
+  dismissed games (localStorage) so it only reappears when switching to a
+  game you haven't dismissed.
+- **Tailwind v4 lint fix** — `bg-gradient-to-br` → `bg-linear-to-br` (4 files)
+  to clear the remaining Zed diagnostic.
+
+### Behavior notes
+
+- Auto-rejected cards are never added to the collection and don't set the
+  duplicate guard, so a re-feed of the same card scans normally.
+- Both sliders live in the Scanner submenu next to "Review low-confidence"
+  and use the same drag pattern as the camera Zoom slider.
+
+### How to revert
+
+1. Restore the hardcoded `REVIEW_DISTANCE` check in `use-card-scanner.ts`
+   and remove the two persisted settings + auto-reject branch.
+2. Remove the two sliders from `scanner-menu.tsx` and their props through
+   `card-scanner.tsx`.
+3. Revert `game-switch-alert.tsx` to the always-show dismissal; restore
+   `bg-gradient-to-br` if wanted.
+
+---
+
 *Template for future entries:*
 
 ## Item N — <short title> (area)

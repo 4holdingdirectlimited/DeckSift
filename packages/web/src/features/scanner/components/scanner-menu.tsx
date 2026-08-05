@@ -24,6 +24,8 @@ interface ScannerMenuProps {
   autoFeed: boolean;
   allowDuplicates: boolean;
   reviewQueue: boolean;
+  reviewMatchPercent: number;
+  autoRejectMatchPercent: number;
   zoom: number;
   zoomRange: ZoomRange | null;
   cameras: MediaDeviceInfo[];
@@ -39,6 +41,8 @@ interface ScannerMenuProps {
   onAutoFeedChange: (enabled: boolean) => void;
   onAllowDuplicatesChange: (enabled: boolean) => void;
   onReviewQueueChange: (enabled: boolean) => void;
+  onReviewMatchPercentChange: (value: number) => void;
+  onAutoRejectMatchPercentChange: (value: number) => void;
 }
 
 export function ScannerMenu({
@@ -47,6 +51,8 @@ export function ScannerMenu({
   autoFeed,
   allowDuplicates,
   reviewQueue,
+  reviewMatchPercent,
+  autoRejectMatchPercent,
   zoom,
   zoomRange,
   cameras,
@@ -62,6 +68,8 @@ export function ScannerMenu({
   onAutoFeedChange,
   onAllowDuplicatesChange,
   onReviewQueueChange,
+  onReviewMatchPercentChange,
+  onAutoRejectMatchPercentChange,
 }: ScannerMenuProps) {
   return (
     <div className="absolute top-2 right-2 z-40">
@@ -158,6 +166,66 @@ export function ScannerMenu({
                   >
                     Review low-confidence
                   </DropdownMenuCheckboxItem>
+                  <div
+                    className="px-2 py-1.5 flex flex-col gap-1"
+                    onPointerDown={(e) => e.stopPropagation()}
+                  >
+                    <p className="text-xs text-muted-foreground flex items-center justify-between">
+                      Review below
+                      <span className="font-semibold text-foreground">
+                        {reviewMatchPercent}%
+                      </span>
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground w-7">0</span>
+                      <input
+                        type="range"
+                        min={0}
+                        max={100}
+                        step={1}
+                        value={reviewMatchPercent}
+                        onChange={(e) =>
+                          onReviewMatchPercentChange(Number(e.target.value))
+                        }
+                        className="flex-1 cursor-pointer accent-foreground"
+                      />
+                      <span className="text-xs text-muted-foreground w-7">100</span>
+                    </div>
+                    <p className="text-[10px] text-muted-foreground leading-tight">
+                      Matches below this pause for a yes/no.
+                    </p>
+                  </div>
+                  <div
+                    className="px-2 py-1.5 flex flex-col gap-1"
+                    onPointerDown={(e) => e.stopPropagation()}
+                  >
+                    <p className="text-xs text-muted-foreground flex items-center justify-between">
+                      Auto-reject below
+                      <span className="font-semibold text-foreground">
+                        {autoRejectMatchPercent === 0
+                          ? "Off"
+                          : `${autoRejectMatchPercent}%`}
+                      </span>
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground w-7">Off</span>
+                      <input
+                        type="range"
+                        min={0}
+                        max={100}
+                        step={1}
+                        value={autoRejectMatchPercent}
+                        onChange={(e) =>
+                          onAutoRejectMatchPercentChange(Number(e.target.value))
+                        }
+                        className="flex-1 cursor-pointer accent-foreground"
+                      />
+                      <span className="text-xs text-muted-foreground w-7">100</span>
+                    </div>
+                    <p className="text-[10px] text-muted-foreground leading-tight">
+                      Below this, route straight to catch-all, no pause.
+                    </p>
+                  </div>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={onCalibrate}>
                     Calibrate

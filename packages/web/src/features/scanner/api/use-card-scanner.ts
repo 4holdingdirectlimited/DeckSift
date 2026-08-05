@@ -31,6 +31,7 @@ import {
 } from "@magic-vault/shared";
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 
 // Singleton AudioContext - browsers cap concurrent contexts (~6).
 // Creating one per scan exhausts the limit quickly.
@@ -223,10 +224,52 @@ export function useCardScanner({
   const debugImageUrlRef = useRef<string | null>(null);
   const [allowDuplicates, setAllowDuplicates] = useState(true);
 
+  // Match-confidence thresholds for the review queue, persisted per-browser.
+  // "Review below" is where a low-confidence match pauses for a yes/no;
+  // "auto-reject below" skips the pause entirely and routes to the catch-all
+  // (0 = off). Different games score differently, so both are adjustable.
+  const REVIEW_MATCH_PCT_KEY = "reviewMatchPercent";
+  const AUTO_REJECT_MATCH_PCT_KEY = "autoRejectMatchPercent";
+  const DEFAULT_REVIEW_MATCH_PCT = 82;
+  const DEFAULT_AUTO_REJECT_MATCH_PCT = 0;
+
+  const [reviewMatchPercent, setReviewMatchPercentState] = useState<number>(
+    () => {
+      const raw = localStorage.getItem(REVIEW_MATCH_PCT_KEY);
+      const parsed = raw === null ? Number.NaN : Number(raw);
+      return Number.isFinite(parsed) && parsed >= 0 && parsed <= 100
+        ? parsed
+        : DEFAULT_REVIEW_MATCH_PCT;
+    },
+  );
+  const reviewMatchPercentRef = useRef(reviewMatchPercent);
+  reviewMatchPercentRef.current = reviewMatchPercent;
+  const setReviewMatchPercent = useCallback((pct: number) => {
+    const clamped = Math.max(0, Math.min(100, Math.round(pct)));
+    setReviewMatchPercentState(clamped);
+    localStorage.setItem(REVIEW_MATCH_PCT_KEY, String(clamped));
+  }, []);
+
+  const [autoRejectMatchPercent, setAutoRejectMatchPercentState] = useState<
+    number
+  >(() => {
+    const raw = localStorage.getItem(AUTO_REJECT_MATCH_PCT_KEY);
+    const parsed = raw === null ? Number.NaN : Number(raw);
+    return Number.isFinite(parsed) && parsed >= 0 && parsed <= 100
+      ? parsed
+      : DEFAULT_AUTO_REJECT_MATCH_PCT;
+  });
+  const autoRejectMatchPercentRef = useRef(autoRejectMatchPercent);
+  autoRejectMatchPercentRef.current = autoRejectMatchPercent;
+  const setAutoRejectMatchPercent = useCallback((pct: number) => {
+    const clamped = Math.max(0, Math.min(100, Math.round(pct)));
+    setAutoRejectMatchPercentState(clamped);
+    localStorage.setItem(AUTO_REJECT_MATCH_PCT_KEY, String(clamped));
+  }, []);
+
   // Review queue: when the top match is low-confidence (or has close
   // alternatives), pause for an operator yes/no instead of auto-routing.
   // Persisted per-browser so the trust default survives reloads.
-  const REVIEW_DISTANCE = 0.18;
   const REVIEW_QUEUE_KEY = "reviewQueue";
   const [reviewQueue, setReviewQueueState] = useState<boolean>(
     () => localStorage.getItem(REVIEW_QUEUE_KEY) !== "off",
@@ -323,11 +366,27 @@ export function useCardScanner({
             setDuplicateCard(card);
             updateStatus("duplicate");
           } else {
+            const confidencePct = (1 - card.distance) * 100;
+            // Far below the floor: asking is pointless, so keep the line
+            // moving and route the card to the catch-all bin instead of
+            // pausing for review.
+            if (
+              autoRejectMatchPercentRef.current > 0 &&
+              confidencePct < autoRejectMatchPercentRef.current
+            ) {
+              playNoMatchSound();
+              onNoMatchRef.current?.();
+              updateStatus("scanning");
+              toast.info("Low-confidence match auto-rejected", {
+                description: `${confidencePct.toFixed(0)}% match is below your auto-reject threshold — routed to the catch-all bin.`,
+              });
+              return;
+            }
             lastScannedCardIdRef.current = card.id;
             playMatchSound();
             const needsReview =
               reviewQueueRef.current &&
-              (card.distance >= REVIEW_DISTANCE ||
+              (confidencePct < reviewMatchPercentRef.current ||
                 alternativeMatches.length > 0);
             if (needsReview) {
               const pending: PendingReview = {
@@ -617,6 +676,10 @@ export function useCardScanner({
     setAllowDuplicates,
     reviewQueue,
     setReviewQueue,
+    reviewMatchPercent,
+    setReviewMatchPercent,
+    autoRejectMatchPercent,
+    setAutoRejectMatchPercent,
     pendingReview,
     confirmReview,
     rejectReview,

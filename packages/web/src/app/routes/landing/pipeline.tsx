@@ -59,7 +59,7 @@ export function LandingPipeline() {
                 <span className="absolute top-5 left-[3.25rem] hidden h-px w-[calc(100%-3.25rem)] bg-gradient-to-r from-primary/40 to-transparent md:block" />
               )}
               <div className="flex items-center gap-2.5">
-                <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-primary/20 via-primary/10 to-transparent text-primary ring-1 ring-primary/20">
+                <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-linear-to-br from-primary/20 via-primary/10 to-transparent text-primary ring-1 ring-primary/20">
                   <step.icon size={18} />
                 </span>
                 <span className="font-mono text-xs font-semibold text-muted-foreground">
