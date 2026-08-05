@@ -9,6 +9,7 @@ import { useCardScanner } from "@/features/scanner/api/use-card-scanner";
 import { useScannedCards } from "@/features/scanner/api/use-scanned-cards";
 import { useRegisterScannerIsland } from "@/features/scanner/api/use-scanner-island";
 import { useSerial, useSerialMessage } from "@/features/scanner/api/use-serial";
+import { MachineLeds } from "@/features/scanner/components/machine-leds";
 import { ScannerMenu } from "@/features/scanner/components/scanner-menu";
 import { ScannerOverlay } from "@/features/scanner/components/scanner-overlay";
 import { ReviewPanel } from "@/features/scanner/components/review-panel";
@@ -47,13 +48,17 @@ export function CardScanner({ className, compact }: CardScannerProps) {
     sendCommandWithResponse,
   } = useSerial();
 
-  // Scan light = firmware LED 5 (PCA9685 ch14), used for two-frame holo
-  // detection. Absent a serial connection the scanner falls back to
-  // single-frame heuristics.
+  // Scan light = firmware LED 1 (ch0), used for two-frame holo detection.
+  // Absent a serial connection the scanner falls back to single-frame
+  // heuristics. (LED 2/3/4 status lamps are driven by MachineLeds.)
   const toggleScanLight = useCallback(
-    (on: boolean) => sendCommand(JSON.stringify({ led: 5, on })),
+    (on: boolean) => sendCommand(JSON.stringify({ led: 1, on })),
     [sendCommand],
   );
+  // Machine-fault flag for the red status lamp: lit by jam/route errors,
+  // cleared when a new scan starts. Declared here, driven below (status is
+  // destructured from useCardScanner just after).
+  const [machineFaulted, setMachineFaulted] = useState(false);
   const [isFeeding, setIsFeeding] = useState(false);
   const [isClearingDevice, setIsClearingDevice] = useState(false);
   // Feeder timeout retry guard: a single missed feed is often a hiccup
@@ -105,6 +110,11 @@ export function CardScanner({ className, compact }: CardScannerProps) {
     toggleScanLight,
   });
 
+  // Clear the machine-fault lamp as soon as a new scan actually starts.
+  useEffect(() => {
+    if (status === "scanning" || status === "searching") setMachineFaulted(false);
+  }, [status]);
+
   useSerialMessage((msg) => {
     if (
       typeof msg === "object" &&
@@ -123,6 +133,7 @@ export function CardScanner({ className, compact }: CardScannerProps) {
         raw.bin === undefined &&
         SCANNABLE_STATUSES.includes(status)
       ) {
+        setMachineFaulted(true);
         toast.info("Card stuck at module 1 - forcing a scan", {
           description:
             "It was never identified, so we're scanning it automatically.",
@@ -131,6 +142,7 @@ export function CardScanner({ className, compact }: CardScannerProps) {
         return;
       }
 
+      setMachineFaulted(true);
       handlePause();
       toast.error("Card jam detected", {
         description: `Card stuck at module ${raw.module}${raw.bin ? ` (heading to bin ${raw.bin})` : ""}. Check the sorter and resume.`,
@@ -405,6 +417,15 @@ export function CardScanner({ className, compact }: CardScannerProps) {
             <span>search {lastScanTiming.searchMs.toFixed(0)}ms</span>
           </div>
         )}
+        <div className="absolute bottom-2 right-2 z-30 rounded-full bg-background/80 backdrop-blur-sm border px-2.5 py-1">
+          <MachineLeds
+            status={status}
+            isConnected={isConnected}
+            isReady={isReady}
+            isFeeding={isFeeding}
+            faulted={machineFaulted}
+          />
+        </div>
         <ScannerMenu
           isCameraActive={isCameraActive}
           isConnected={isConnected}

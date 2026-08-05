@@ -42,12 +42,11 @@ export function useCalibrationPage() {
 
   const servoDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const [ledStates, setLedStates] = useState<Record<1 | 2 | 3 | 4 | 5, boolean>>({
+  const [ledStates, setLedStates] = useState<Record<1 | 2 | 3 | 4, boolean>>({
     1: false,
     2: false,
     3: false,
     4: false,
-    5: false,
   });
 
   const [activeBin, setActiveBinState] = useState<number | null>(null);
@@ -124,7 +123,7 @@ export function useCalibrationPage() {
   );
 
   const handleLedToggle = useCallback(
-    (led: 1 | 2 | 3 | 4 | 5) => {
+    (led: 1 | 2 | 3 | 4) => {
       const next = !ledStates[led];
       sendCommand(JSON.stringify({ led, on: next }));
       setLedStates((prev) => ({ ...prev, [led]: next }));

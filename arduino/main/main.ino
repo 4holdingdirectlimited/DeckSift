@@ -6,16 +6,25 @@
 Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver();
 
 // PWM channel layout (PCA9685):
-//   ch0-3   = LEDs (1-indexed: LED 1 = ch0 ... LED 4 = ch3)
+//   ch0    = LED 1 — scan light (angled holo-detection light, toggled by the
+//            web app for two-frame foil scans)
+//   ch1    = LED 2 — green “operating” indicator
+//   ch2    = LED 3 — red “machine fault” indicator (jam / timeout)
+//   ch3    = LED 4 — orange “software/comms fault” indicator
 //   ch4-6   = Module 1 (bottom, paddle, pusher)
 //   ch7-9   = Module 2
 //   ch10-12 = Module 3
 //   ch13    = Feeder (360° continuous rotation servo)
-//   ch14    = Scan light (LED 5) — angled holo-detection light, toggled by the
-//             web app for two-frame foil scans
 #define NUM_MODULES 3
 #define MODULE_CHANNEL_OFFSET 4
 #define FEEDER_CHANNEL 13
+
+// Status LEDs (1-indexed). LED 1 is the scan light; 2-4 are status lamps the
+// firmware drives itself (and the web app mirrors in the UI).
+#define LED_SCAN   1
+#define LED_GREEN  2
+#define LED_RED    3
+#define LED_ORANGE 4
 
 // IR sensor pins — one per module (active LOW: pin reads LOW when card is present)
 #define IR_PIN_MODULE1 2
@@ -56,6 +65,10 @@ enum Phase {
   PH_TEST_LED_OFF, // LED op.ledIndex off (100ms)
   PH_CLEAR_OPEN,   // all bottoms open (DELAY_PUSH)
 };
+
+void setLed(int led, bool on) {
+  pwm.setPin(led - 1, on ? 4095 : 0);
+}
 
 int irPin(int module) {
   if (module == 1) return IR_PIN_MODULE1;
@@ -124,9 +137,9 @@ struct ModuleConfig {
 };
 
 ModuleConfig moduleConfig[NUM_MODULES] = {
-  {150, 307, 150, 307, 150, 307, 460},
-  {150, 307, 150, 307, 150, 307, 460},
-  {150, 307, 150, 307, 150, 307, 460},
+  {300, 310, 300, 310, 295, 300, 305},
+  {300, 310, 300, 310, 295, 300, 305},
+  {300, 310, 300, 310, 295, 300, 305},
 };
 
 struct FeederConfig {
@@ -139,7 +152,7 @@ struct FeederConfig {
                        // stopping right at the sensor's beam
 };
 
-FeederConfig feederConfig = {400, 3000, 0, 50, 150};
+FeederConfig feederConfig = {315, 3000, 0, 50, 150};
 
 // Routing delays (ms) — runtime-tunable via {"setTimingConfig": ...} and
 // persisted to EEPROM with saveConfig, so commissioning tunes them from the
@@ -171,13 +184,16 @@ struct PersistedCalibration {
 // Factory defaults — keep in sync with the moduleConfig/feederConfig
 // initializers above; resetConfig restores these.
 void setFactoryDefaults() {
+  // Small-travel safe defaults (borrowed from upstream's fix): pulses are all
+  // within a few µs of each other so a freshly-flashed board barely moves its
+  // servos — it cannot over-travel and strip a gear before calibration.
   ModuleConfig factoryModules[NUM_MODULES] = {
-    {150, 307, 150, 307, 150, 307, 460},
-    {150, 307, 150, 307, 150, 307, 460},
-    {150, 307, 150, 307, 150, 307, 460},
+    {300, 310, 300, 310, 295, 300, 305},
+    {300, 310, 300, 310, 295, 300, 305},
+    {300, 310, 300, 310, 295, 300, 305},
   };
   memcpy(moduleConfig, factoryModules, sizeof(moduleConfig));
-  feederConfig.speed = 400;
+  feederConfig.speed = 315;
   feederConfig.duration = 3000;
   feederConfig.pulseDuration = 0;
   feederConfig.pauseDuration = 50;
@@ -283,6 +299,7 @@ void checkModuleJams() {
     if (!moduleJamAlerted[m] && millis() - modulePresentSince[m] > JAM_TIMEOUT_MS) {
       moduleJamAlerted[m] = true;
       jamAbortRequested = true;
+      setLed(LED_RED, true);
       JsonDocument res;
       res["error"] = "jam";
       res["module"] = m;
@@ -322,6 +339,7 @@ int getServoOffset(const char* servo) {
 void clearOp() {
   op.kind = OP_NONE;
   op.phase = PH_NONE;
+  setLed(LED_GREEN, false);
 }
 
 void beginOp(OpKind kind, unsigned long budgetMs) {
@@ -337,6 +355,8 @@ void beginOp(OpKind kind, unsigned long budgetMs) {
   op.hasReplyId = g_hasCmdId;
   cancelRequested = false;
   jamAbortRequested = false;
+  setLed(LED_GREEN, true);   // an operation is running
+  setLed(LED_RED, false);    // a fresh command clears the fault lamp
 }
 
 // Reply to the command that started the op (not the most recent command — a
@@ -373,6 +393,7 @@ void finishFeedEmpty() {
 }
 
 void finishOpError(const char* msg) {
+  setLed(LED_RED, true);
   JsonDocument res;
   res["error"] = msg;
   replyOpJson(res);
@@ -674,9 +695,11 @@ void runMachine() {
 void handleCommand(const char* json) {
   JsonDocument doc;
   if (deserializeJson(doc, json)) {
+    setLed(LED_ORANGE, true);  // bad JSON = software/comms fault
     Serial.println("{\"error\":\"invalid JSON\"}");
     return;
   }
+  setLed(LED_ORANGE, false);  // a valid command means comms recovered
 
   // Optional numeric "id" — echoed on every reply to this command so the web
   // app can correlate the response (see replyJson/replyLiteral).
@@ -783,14 +806,14 @@ void handleCommand(const char* json) {
   // {"led": 1, "on": true} — control LED by position (1..4) or the scan light (5)
   if (doc["led"].is<int>()) {
     int led = doc["led"].as<int>();
-    if (led < 1 || led > 5) {
-      replyLiteral("{\"error\":\"led must be 1 to 5\"}");
+    if (led < 1 || led > 4) {
+      replyLiteral("{\"error\":\"led must be 1 to 4\"}");
       return;
     }
     bool on = doc["on"] | false;
-    // LEDs 1-4 live on ch0-3; the scan light is LED 5 on spare ch14.
-    int channel = led <= 4 ? led - 1 : 14;
-    pwm.setPin(channel, on ? 4095 : 0);
+    // LEDs 1-4 live on ch0-3 (LED 1 = scan light). No spare-channel LED 5
+    // anymore — ch14 is free for future hardware.
+    setLed(led, on);
 
     JsonDocument res;
     res["status"] = "ok";
@@ -900,6 +923,19 @@ void handleCommand(const char* json) {
     return;
   }
 
+  // {"getTimingConfig": true} — reply with the current routing delays (used
+  // by the calibration backup/restore in the web app).
+  if (doc["getTimingConfig"].is<bool>() && doc["getTimingConfig"].as<bool>()) {
+    JsonDocument res;
+    res["status"] = "ok";
+    JsonObject t = res["timing"].to<JsonObject>();
+    t["cardEnterMs"] = timingConfig.cardEnterMs;
+    t["paddleMs"] = timingConfig.paddleMs;
+    t["pushMs"] = timingConfig.pushMs;
+    replyJson(res);
+    return;
+  }
+
   // {"setTimingConfig": {"cardEnterMs": 300, "paddleMs": 300, "pushMs": 600}}
   // Runtime-tunable routing delays — no re-flash needed, persisted via
   // saveConfig. Clamped to sane bounds so a bad value can't brick a route.
@@ -985,6 +1021,7 @@ void setup() {
   pwm.setPWMFreq(50);
   delay(10);
   setAllNeutral();
+  for (int led = LED_SCAN; led <= LED_ORANGE; led++) setLed(led, false);
   Serial.println("{\"status\":\"ready\",\"proto\":2}");
 
   // Report cards already resting at a module gate on boot (e.g. power loss
@@ -1015,6 +1052,7 @@ void loop() {
       inputBuffer[inputBufferLen++] = c;
     } else {
       inputBufferLen = 0;  // oversized line — discard
+      setLed(LED_ORANGE, true);
       Serial.println("{\"error\":\"line too long\"}");
     }
   }

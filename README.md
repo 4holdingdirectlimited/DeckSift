@@ -254,6 +254,11 @@ original [MAULT](https://mault.xyz) project, released under the MIT License. The
 original is the sorter we built from, and it stays credited in the app footers,
 the `/build` guide, and this file.
 
+**3D model files** (`3d model/`) are licensed separately under
+**CC BY-NC-SA 4.0** by Kenneth Bass — see `3d model/LICENSE`. The software in
+this repository is licensed under the DeckSift License (personal use free,
+commercial by license).
+
 **DeckSift work — 4holdingdirectlimited.** Everything else: the fully-local
 software stack (no hosted services, no logins, on-device vision, local card
 storage), the firmware modifications (command-id correlation, jam detection,

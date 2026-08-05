@@ -15,6 +15,7 @@ import {
 } from "@/features/calibration/api/module-configs";
 import { useCalibrationPage } from "@/features/calibration/api/use-calibration-page";
 import { BinRoutingControls } from "@/features/calibration/components/bin-routing-controls";
+import { CalibrationBackupPanel } from "@/features/calibration/components/calibration-backup-panel";
 import { FeederCalibrationPanel } from "@/features/calibration/components/feeder-calibration-panel";
 import { IrSensorPanel } from "@/features/calibration/components/ir-sensor-panel";
 import { LedControls } from "@/features/calibration/components/led-controls";
@@ -263,6 +264,10 @@ export default function CalibratePage() {
 
       <div className="flex flex-col gap-2">
         <RoutingTimingPanel isConnected={isConnected} />
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <CalibrationBackupPanel isConnected={isConnected} />
       </div>
 
       <div className="flex flex-col gap-2">

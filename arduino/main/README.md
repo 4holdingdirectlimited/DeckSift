@@ -53,7 +53,7 @@ This cycles every bottom and paddle open, sweeps all pushers left then right, re
 
 - **IR sensors** (active-LOW, internal pull-up): Module 1 gate → `D2`, Module 2 gate → `D3`, Module 3 gate → `D4`, Hopper throat → `D5`
 - **PCA9685** I²C to Arduino `SDA`/`SCL`, logic `VCC` → `5V`, `GND` → `GND`
-- **PCA9685 channels**: `0–3` = LEDs 1–4, `4–6` = Module 1 (bottom, paddle, pusher), `7–9` = Module 2, `10–12` = Module 3, `13` = Feeder, `14` = **scan light** (LED 5, the angled holo-detection light)
+- **PCA9685 channels**: `0` = LED 1 (scan light), `1` = LED 2 (green, operating), `2` = LED 3 (red, fault), `3` = LED 4 (orange, comms fault), `4–6` = Module 1 (bottom, paddle, pusher), `7–9` = Module 2, `10–12` = Module 3, `13` = Feeder, `14–15` spare
 - **Servo power**: external 5 V PSU (4–10 A) into PCA9685 `V+`, with the PSU ground tied to **both** PCA9685 `GND` and Arduino `GND` (common ground is mandatory)
 
 ## Webcam

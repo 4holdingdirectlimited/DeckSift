@@ -3,7 +3,7 @@
 Parts list and assembly instructions for the physical sorting unit: a hopper feeds cards one at a time through three stacked routing modules, each capable of dropping a card into one of two side bins or passing it down to the next module — seven bins total, driven by an Arduino Uno R4 Minima over I²C.
 
 - **Firmware:** `arduino/main/main.ino` (this folder)
-- **Enclosure:** `3d model/Card Sorter.f3d` (Fusion 360 source) or `3d model/card_sorter.3mf` (mesh, slicer-ready) — the original design by dishwasher-detergent, in the upstream repo
+- **Enclosure:** `3d model/Card Sorter.f3d` (Fusion 360 source) or `3d model/card_sorter.3mf` (mesh, slicer-ready) — the original design by dishwasher-detergent. DeckSift's revised parts live alongside as `3d model/card_sorter_decksift.3mf` — both files are the same machine; use whichever matches your print setup. 3D files are CC BY-NC-SA 4.0 (see `3d model/LICENSE`).
 - **Calibration:** `/app/calibrate` in the web app
 - **Photo references:** the original interactive guide at [mault.xyz/build](https://mault.xyz/build) shows assembly photos for most steps (`/instructions/*.jpg` in the repo)
 - **Revised print kit (planned):** DeckSift will add a Bambu Lab quantity kit that organizes the same parts for faster, more efficient printing than the original layout — see `custom/PLAN.md`. The repo currently carries the original `3d model/` files only.
@@ -18,7 +18,7 @@ Quantities match the firmware exactly — 3 modules × 3 servos, 1 feeder, 4 IR 
 
 | Qty | Part | Notes |
 | --- | --- | --- |
-| 1 | White LED + 100–220 Ω resistor (scan light) | Optional but recommended for holo detection — wired to PCA9685 ch14 (firmware LED 5). See “Scan light” wiring below. |
+| 1 | White LED + 100–220 Ω resistor (scan light) | Optional but recommended for holo detection — wired to PCA9685 ch0 (firmware LED 1). See “Scan light” wiring below. |
 | 1 | Arduino Uno R4 Minima (ABX0080) | Runs `main.ino`; USB connection to the host computer for Web Serial |
 | 1 | Adafruit PCA9685 16-channel 12-bit PWM/servo driver | I²C servo driver — drives all 10 servos |
 | 9 | SG90 micro servo, positional (180°) | 3 per module × 3 modules — bottom trapdoor, paddle gate, pusher |
@@ -96,7 +96,10 @@ All four read **active-LOW** (pin goes low when a card is present) using the Ard
 
 | Ch. | Assignment |
 | --- | --- |
-| 0–3 | LED indicators 1–4 (firmware `{"led":1..4}`) |
+| 0 | **LED 1 — scan light** (firmware `{"led":1,"on":bool}`) — angled holo-detection light |
+| 1 | LED 2 — green “operating” indicator (firmware-driven) |
+| 2 | LED 3 — red “machine fault” indicator (firmware-driven) |
+| 3 | LED 4 — orange “software/comms fault” indicator (firmware-driven) |
 | 4 | Module 1 — bottom |
 | 5 | Module 1 — paddle |
 | 6 | Module 1 — pusher |
@@ -107,14 +110,14 @@ All four read **active-LOW** (pin goes low when a card is present) using the Ard
 | 11 | Module 3 — paddle |
 | 12 | Module 3 — pusher |
 | 13 | Feeder (continuous rotation) |
-| 14 | **Scan light** (firmware `{"led":5,"on":bool}`) — angled holo-detection light |
+| 14 | Spare |
 | 15 | Spare |
 
 ### Scan light
 
 The scan light is a white LED mounted at an **angle to the card** (roughly
 30–45° off the camera axis) so its reflection grazes the foil surface. The web
-app toggles it (firmware LED 5 / PCA9685 ch14) between two captures: a frame
+app toggles it (firmware LED 1 / PCA9685 ch0) between two captures: a frame
 with the light off, then a frame with it on. Holo cards change **color**
 between the frames (diffraction grating); matte cards only get brighter. The
 light-on frame is also the better-lit image for card matching itself.

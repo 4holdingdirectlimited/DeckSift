@@ -108,16 +108,26 @@ Opens every module's bottom trapdoor at once so any card resting in the mechanis
 {"status":"cleared"}
 ```
 
-### LEDs (channels 0–3) + scan light (ch14)
+### LEDs (channels 0–3)
 
 ```json
-{"led": 1, "on": true}
-{"led": 5, "on": true}   // scan light — holo-detection light on ch14
+{"led": 1, "on": true}   // LED 1 = scan light (ch0)
+{"led": 2, "on": true}   // LED 2 = green “operating” (ch1)
+{"led": 3, "on": true}   // LED 3 = red “machine fault” (ch2)
+{"led": 4, "on": true}   // LED 4 = orange “software/comms fault” (ch3)
 ```
 
-`led` is 1–5. LEDs 1–4 are the indicator LEDs on channels 0–3; **LED 5 is the
-scan light** on spare channel 14, driven by the web app for two-frame holo
-scans (frame with light off → toggle → frame with light on). Replies:
+`led` is 1–4, mapped to channels 0–3.
+
+- **LED 1 (ch0) — scan light** — the angled holo-detection light, driven by
+  the web app for two-frame foil scans (frame with light off → toggle → frame
+  with light on).
+- **LEDs 2–4 (ch1–3) — status lamps** — the firmware drives these itself
+  (green while an operation runs, red on jam/timeout/fault, orange on bad
+  JSON or an oversized line). The web app mirrors the same state in the UI
+  and re-asserts it over serial.
+
+Replies:
 
 ```json
 {"status":"ok","led":1,"on":true}

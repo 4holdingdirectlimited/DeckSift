@@ -2430,6 +2430,74 @@ identical to fp32 on this GPU (item 52), so embedding stays fp32.
 
 ---
 
+## Item 54 — LED remap + status lamps, calibration backup, upstream review (firmware + web + repo)
+
+**Status:** implemented, committed (this commit).
+
+### Why
+
+LED 5 (the spare-channel scan light) was never wired by anyone — the original
+build leaves ch14 free. Moving the scan light to LED 1 (ch0) frees the
+redundant channel and makes the LED section of the upstream PR cleaner. The
+remaining three LEDs now do real work as status lamps, mirrored in the
+browser; the calibration can be backed up to a file on the host so a replaced
+Arduino is re-loaded in minutes; and upstream's new commits were reviewed.
+
+### What changed
+
+- **LED remap** — LED 1 (ch0) is now the **scan light** (was LED 5/ch14, now
+  removed). Firmware validates `led` 1–4, maps to ch0–3, and drives status
+  lamps itself: **LED 2 green** (operation running), **LED 3 red** (jam/
+  timeout/fault), **LED 4 orange** (bad JSON / oversized line). All lamps
+  reset on boot and clear on the next valid command/op.
+- **Browser LED status** — new `MachineLeds` component in the scanner shows
+  green/red/orange lamps with labels, derives state from scanner status +
+  connection + a fault flag (lit on jam/route errors, cleared on the next
+  scan), and re-asserts the physical lamps over serial on change.
+- **Calibration backup/restore** — new `CalibrationBackupPanel` on
+  `/app/calibrate`: **Export JSON** downloads the full calibration (module
+  servo pulses + feeder + routing timing) as `decksift-calibration.json`;
+  **Import JSON** pushes it to a fresh board (setConfig/setFeederConfig/
+  setTimingConfig + saveConfig to EEPROM) and back into the server DB. New
+  firmware `{"getTimingConfig": true}` command supports the read-back.
+- **Safe servo defaults** (from upstream) — factory module pulses are now
+  within a few µs of each other (300/310, 295/300/305) so a freshly-flashed
+  board cannot over-travel and strip a gear before calibration; feeder speed
+  default 315.
+- **Upstream review + copies** — upstream advanced 5 commits (61c67e7):
+  adopted the safe defaults + serial sent-command logging; copied
+  upstream's `3d model/LICENSE` (CC BY-NC-SA 4.0, noted in README Credits)
+  and saved upstream's changed files (`main.ino`, `use-serial.tsx`,
+  `use-feeder-config.tsx`, `use-module-configs.tsx`, `README.md`) into the
+  `files for review/` folder for review before integration. Their
+  pre-test toast-error changes use an older serial API (not portable to our
+  id-correlated layer) — left in the review folder.
+- **Hosts/HTTPS** — `scripts/add-decksift-hosts.cmd` (admin helper) added;
+  `https://decksift.local:5173` now resolves + serves (SSL setup from item
+  53; hosts entry added on this machine).
+
+### Behavior notes
+
+- Wiring change: the scan light moves from PCA9685 ch14 to **ch0**; LEDs
+  2–4 occupy ch1–3. Ch14–15 are now spare.
+- The web mirrors firmware LED logic but does not own it — lamps work even
+  without the browser connected.
+- Calibration exports are plain JSON; keep one per machine. Module/feeder
+  configs also live in the server DB and auto-apply on connect; timing is
+  firmware-only, so Export/Import is the safety net for it.
+
+### How to revert
+
+1. Revert main.ino LED mapping (restore LED 5/ch14 scan light, remove
+   status-lamp logic); revert the web `led: 1` scan light + delete
+   `machine-leds.tsx`.
+2. Delete `calibration-backup-panel.tsx` + its mount + firmware
+   `getTimingConfig`.
+3. Restore old module/feeder defaults.
+4. Delete `3d model/LICENSE` and the `files for review/` copies if unwanted.
+
+---
+
 *Template for future entries:*
 
 ## Item N — <short title> (area)

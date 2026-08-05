@@ -1,5 +1,4 @@
 import { reportSerialEvent } from "@/features/notifications/api/notification-settings";
-import { EXPECTED_PROTO_VERSION } from "@/features/scanner/constants";
 import type {
   SerialContextValue,
   SerialMessageListener,
@@ -16,15 +15,6 @@ import { toast } from "sonner";
 
 export type { SerialMessageListener } from "@/features/scanner/types";
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
-interface PendingWaiter {
-  match: (msg: unknown) => boolean;
-  resolve: (msg: unknown, raw: string) => void;
-}
-
 const SerialContext = createContext<SerialContextValue | null>(null);
 
 export function SerialProvider({ children }: { children: React.ReactNode }) {
@@ -37,8 +27,7 @@ export function SerialProvider({ children }: { children: React.ReactNode }) {
   const writableRef = useRef<WritableStream<Uint8Array> | null>(null);
   const writeQueueRef = useRef<Promise<void>>(Promise.resolve());
   const bufferRef = useRef("");
-  const pendingRef = useRef<PendingWaiter[]>([]);
-  const nextCmdIdRef = useRef(1);
+  const pendingRef = useRef<Array<(line: string) => void>>([]);
   const listenersRef = useRef(new Set<SerialMessageListener>());
   const disconnectingRef = useRef<Promise<void> | null>(null);
   const preTestHookRef = useRef<(() => Promise<void>) | null>(null);
@@ -70,17 +59,13 @@ export function SerialProvider({ children }: { children: React.ReactNode }) {
                 for (const listener of listenersRef.current) {
                   listener(parsed);
                 }
-
-                // Deliver the message to every waiter whose predicate matches
-                // (e.g. waiters expecting a specific command id), then drop it.
-                const remaining: PendingWaiter[] = [];
-                for (const waiter of pendingRef.current) {
-                  if (waiter.match(parsed)) waiter.resolve(parsed, trimmed);
-                  else remaining.push(waiter);
-                }
-                pendingRef.current = remaining;
               } catch {
                 console.warn("[Serial] Non-JSON message:", trimmed);
+              }
+
+              const pending = pendingRef.current.shift();
+              if (pending) {
+                pending(trimmed);
               }
             }
           }
@@ -99,56 +84,24 @@ export function SerialProvider({ children }: { children: React.ReactNode }) {
 
   const waitForLine = useCallback((timeoutMs: number): Promise<string> => {
     return new Promise<string>((resolve) => {
-      let settled = false;
+      let wrapper: ((line: string) => void) | null = null;
 
-      const finish = (line: string) => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timer);
+      const timeout = setTimeout(() => {
+        if (wrapper) {
+          const idx = pendingRef.current.indexOf(wrapper);
+          if (idx !== -1) pendingRef.current.splice(idx, 1);
+        }
+        resolve("");
+      }, timeoutMs);
+
+      wrapper = (line: string) => {
+        clearTimeout(timeout);
         resolve(line);
       };
 
-      const waiter: PendingWaiter = {
-        // "Next line wins" semantics — used to consume the boot message on
-        // connect (commands themselves are matched by id).
-        match: () => true,
-        resolve: (_msg, raw) => finish(raw),
-      };
-
-      pendingRef.current.push(waiter);
-      const timer = setTimeout(() => {
-        pendingRef.current = pendingRef.current.filter((w) => w !== waiter);
-        finish("");
-      }, timeoutMs);
+      pendingRef.current.push(wrapper);
     });
   }, []);
-
-  const waitForId = useCallback(
-    (id: number, timeoutMs: number): Promise<unknown | null> => {
-      return new Promise<unknown | null>((resolve) => {
-        let settled = false;
-
-        const finish = (msg: unknown | null) => {
-          if (settled) return;
-          settled = true;
-          clearTimeout(timer);
-          resolve(msg);
-        };
-
-        const waiter: PendingWaiter = {
-          match: (msg) => isRecord(msg) && msg.id === id,
-          resolve: (msg) => finish(msg),
-        };
-
-        pendingRef.current.push(waiter);
-        const timer = setTimeout(() => {
-          pendingRef.current = pendingRef.current.filter((w) => w !== waiter);
-          finish(null);
-        }, timeoutMs);
-      });
-    },
-    [],
-  );
 
   const sendCommand = useCallback((data: string): Promise<boolean> => {
     if (!portRef.current || !writableRef.current) return Promise.resolve(false);
@@ -174,15 +127,19 @@ export function SerialProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const sendTest = useCallback(async (): Promise<boolean> => {
-    const id = nextCmdIdRef.current++;
-    const sent = await sendCommand(JSON.stringify({ test: true, id }) + "\n");
+    const sent = await sendCommand(JSON.stringify({ test: true }) + "\n");
     if (!sent) return false;
 
-    const response = await waitForId(id, 10000);
+    const response = await waitForLine(10000);
     if (!response) return false;
 
-    return isRecord(response) && response.status === "test_complete";
-  }, [sendCommand, waitForId]);
+    try {
+      const parsed = JSON.parse(response);
+      return parsed.status === "test_complete";
+    } catch {
+      return false;
+    }
+  }, [sendCommand, waitForLine]);
 
   const disconnect = useCallback(() => {
     const port = portRef.current;
@@ -197,8 +154,8 @@ export function SerialProvider({ children }: { children: React.ReactNode }) {
     setIsReady(false);
 
     // Reject any outstanding waiters
-    for (const waiter of pendingRef.current) {
-      waiter.resolve(null, "");
+    for (const pending of pendingRef.current) {
+      pending("");
     }
     pendingRef.current = [];
     bufferRef.current = "";
@@ -261,23 +218,9 @@ export function SerialProvider({ children }: { children: React.ReactNode }) {
       });
 
       (async () => {
-        // Consume the Arduino's boot message and check the protocol version,
-        // so an app/firmware mismatch surfaces here instead of failing
-        // silently on the first command.
-        const bootLine = await waitForLine(5000);
+        // Consume the Arduino's boot message before sending the test
+        await waitForLine(5000);
         if (!portRef.current) return;
-        if (bootLine) {
-          try {
-            const boot: unknown = JSON.parse(bootLine);
-            if (isRecord(boot) && boot.proto !== EXPECTED_PROTO_VERSION) {
-              toast.warning("Firmware version mismatch", {
-                description: `Arduino reports protocol ${String(boot.proto)}; this app expects ${EXPECTED_PROTO_VERSION}. Flash the matching main.ino.`,
-              });
-            }
-          } catch {
-            // Non-JSON boot output — nothing to verify, continue
-          }
-        }
         if (preTestHookRef.current) {
           await preTestHookRef.current();
         }
@@ -369,11 +312,6 @@ export function SerialProvider({ children }: { children: React.ReactNode }) {
           await fn();
         }
       : fn;
-    // Return an unsubscribe so React StrictMode double-effects (and any
-    // re-registration) can't chain the hook twice per connect.
-    return () => {
-      preTestHookRef.current = previous;
-    };
   }, []);
 
   const sendCommandWithNewline = useCallback(
@@ -381,109 +319,39 @@ export function SerialProvider({ children }: { children: React.ReactNode }) {
     [sendCommand],
   );
 
+  const receiveResponse = useCallback(
+    (timeoutMs = 5000) => waitForLine(timeoutMs),
+    [waitForLine],
+  );
+
   const binBusyRef = useRef(false);
 
   const sendBin = useCallback(
     async (binNumber: number): Promise<unknown | null> => {
       if (!portRef.current || !writableRef.current) return null;
-
-      // The firmware executes commands serially, so a second route request
-      // arriving while one is in flight must wait rather than be dropped -
-      // dropping it made callers treat a concurrent request as a routing
-      // failure and disable auto-feed. Bounded wait; still fail if the
-      // in-flight command never clears.
-      const busyDeadline = Date.now() + 20000;
-      while (binBusyRef.current) {
-        if (Date.now() > busyDeadline) return null;
-        await new Promise((resolve) => setTimeout(resolve, 50));
-      }
+      if (binBusyRef.current) return null;
 
       binBusyRef.current = true;
       try {
-        const id = nextCmdIdRef.current++;
         const sent = await sendCommand(
-          JSON.stringify({ bin: binNumber, id }) + "\n",
+          JSON.stringify({ bin: binNumber }) + "\n",
         );
         if (!sent) return null;
 
-        // Correlate on the echoed command id so asynchronous messages (jam
-        // alerts, boot "ready") can never be mistaken for this command's
-        // response.
-        return await waitForId(id, 15000);
+        const response = await waitForLine(15000);
+        if (!response) return null;
+
+        try {
+          return JSON.parse(response);
+        } catch {
+          console.warn("[Serial] Non-JSON response:", response);
+          return null;
+        }
       } finally {
         binBusyRef.current = false;
       }
     },
-    [sendCommand, waitForId],
-  );
-
-  const sendCommandWithResponse = useCallback(
-    async (
-      data: Record<string, unknown>,
-      timeoutMs = 5000,
-      retries = 0,
-    ): Promise<unknown | null> => {
-      if (!portRef.current || !writableRef.current) return null;
-
-      // Bounded retry with linear backoff for idempotent commands only (e.g.
-      // clearDevice). Callers must NOT request retries for commands that have
-      // side effects if executed twice (bin routing) — a lost ACK could mean
-      // the command actually ran.
-      let attempt = 0;
-      while (true) {
-        const id = nextCmdIdRef.current++;
-        const sent = await sendCommand(JSON.stringify({ ...data, id }) + "\n");
-        if (sent) {
-          const response = await waitForId(id, timeoutMs);
-          if (response !== null || attempt >= retries) return response;
-        } else if (attempt >= retries) {
-          return null;
-        }
-        attempt += 1;
-        await new Promise((resolve) => setTimeout(resolve, 300 * attempt));
-      }
-    },
-    [sendCommand, waitForId],
-  );
-
-  // Device heartbeat: pings the firmware every 10 s so a hung board (stuck
-  // servo, watchdog timeout) is surfaced within seconds instead of waiting out
-  // a 15 s bin timeout. Id-correlated, so asynchronous messages can't fake a
-  // pong. Warns once per unresponsive stretch, clears on recovery.
-  useEffect(() => {
-    if (!isConnected || !isReady) return;
-    let warned = false;
-    let toastId: string | number | undefined;
-    const interval = setInterval(() => {
-      // The firmware executes commands serially: a route/feed blocks loop()
-      // for its whole budget (up to 15 s), so a ping written mid-route would
-      // only be answered after it finishes and would falsely time out. Skip
-      // the ping while a bin command is in flight instead.
-      if (binBusyRef.current) return;
-      void sendCommandWithResponse({ ping: true }, 5000).then((pong) => {
-        if (pong) {
-          if (warned && toastId !== undefined) {
-            toast.dismiss(toastId);
-          }
-          warned = false;
-          return;
-        }
-        if (warned) return;
-        warned = true;
-        toastId = toast.warning("Device unresponsive", {
-          description:
-            "No response from the sorter. Check the USB connection and power.",
-          duration: Infinity,
-          dismissible: true,
-        });
-      });
-    }, 10000);
-    return () => clearInterval(interval);
-  }, [isConnected, isReady, sendCommandWithResponse]);
-
-  const sendFeed = useCallback(
-    () => sendCommandWithResponse({ feeder: true }, 10000),
-    [sendCommandWithResponse],
+    [sendCommand, waitForLine],
   );
 
   return (
@@ -496,8 +364,7 @@ export function SerialProvider({ children }: { children: React.ReactNode }) {
         sendBin,
         sendTest,
         sendCommand: sendCommandWithNewline,
-        sendCommandWithResponse,
-        sendFeed,
+        receiveResponse,
         subscribe,
         registerPreTestHook,
       }}
