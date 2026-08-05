@@ -2,7 +2,7 @@
 
 A TCG card scanner and physical sorter that runs **entirely on your own machine** — no hosted services, no logins, no cloud. A webcam identifies cards via on-device AI embeddings, a rule engine decides which bin each card belongs in, and an Arduino-driven feeder and servo mechanism physically routes the card there.
 
-DeckSift is a fork of [MAULT](https://mault.xyz) by [dishwasher-detergent](https://github.com/dishwasher-detergent/mault). The v1 machine's Fusion 3D design, build photos, and firmware base come from the original project (MIT — full credit in [Credits](#credits)); DeckSift adds a fully-local, single-user software stack, firmware hardening, and a revised Bambu Lab print kit with print-optimized part organization.
+DeckSift is a fork of [MAULT](https://mault.xyz) by [dishwasher-detergent](https://github.com/dishwasher-detergent/mault). The v1 machine's Fusion 3D design, build photos, and firmware base come from the original project (MIT — full credit in [Credits](#credits)); DeckSift adds a fully-local, single-user software stack and firmware hardening. A revised Bambu Lab print kit (print-optimized part organization) is planned — see `custom/PLAN.md`.
 
 **License:** free for personal use. Commercial use (selling DeckSift or building it into a product) requires a license from 4holdingdirectlimited — see [LICENSE](LICENSE). The MAULT-derived portions remain MIT. See [Credits](#credits).
 
@@ -70,7 +70,7 @@ packages/
 └── web/      @magic-vault/web    - React SPA (scanner, bins, collections, library, admin, build guide)
 arduino/      Firmware + build docs (arduino/main/main.ino, BUILD.md, SERIAL_PROTOCOL.md)
 3d model/     Printable enclosure/module design (Fusion 360 + .3mf)
-custom/       Our docs: CHANGES.md (all modifications), SETUP.md (local runbook), TCGS.md, PLAN.md
+custom/       Our docs: CHANGES.md (all modifications), SETUP.md (local runbook), TCGS.md, PLAN.md, HARDWARE_V2.md, PRODUCT.md
 drizzle/      Generated SQL migrations
 scripts/      Local helpers: start-server.cmd, start-web.cmd, local-db.mjs, backup-db.mjs,
               arduino-compile.sh
@@ -246,8 +246,8 @@ the `/build` guide, and this file.
 software stack (no hosted services, no logins, on-device vision, local card
 storage), the firmware modifications (command-id correlation, jam detection,
 watchdog timing, EEPROM calibration, scan light), and the revised Bambu Lab
-print kit that reorganizes the original parts for faster, more efficient
-printing. The full change log is in `custom/CHANGES.md`.
+print kit (planned — print-optimized part organization, see `custom/PLAN.md`).
+The full change log is in `custom/CHANGES.md`.
 
 **License.** DeckSift is free for personal use; commercial use is by license from
 4holdingdirectlimited (see [LICENSE](LICENSE)). The MAULT-derived portions

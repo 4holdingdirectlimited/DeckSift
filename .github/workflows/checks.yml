@@ -1,5 +1,5 @@
 # CI checks for the fork: typecheck the web app and compile the firmware on
-# every push to master/custom and on pull requests.
+# every push to custom and on pull requests.
 #
 # Note: GitHub disables Actions on forks by default — enable them at
 # Settings -> Actions -> General -> "Allow all actions and reusable workflows".
@@ -8,7 +8,7 @@ name: Checks
 
 on:
   push:
-    branches: [master, custom]
+    branches: [custom]
   pull_request:
 
 jobs:

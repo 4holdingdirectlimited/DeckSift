@@ -100,6 +100,19 @@ loop-level supervisor is the practical option).
   `arduino/main/BUILD.md`).
 - Consider a soft-start for the feeder (ramp pulse instead of slam to full speed).
 
+## Revised Bambu Lab print kit (planned)
+
+DeckSift's own contribution to the *printable* side of the v1 machine: a
+Bambu Lab quantity kit that reorganizes the original parts (same geometry,
+from `3d model/`) into faster, more efficient print batches — fewer
+color/material changes and better bed utilization. Not yet in the repo; the
+original `Card Sorter.f3d` / `card_sorter.3mf` files remain the canonical
+parts, with full credit to the original designer (see `README.md` Credits).
+
+- [ ] Produce the quantity sheet + reorganized plate layout for Bambu Studio
+- [ ] Add the kit files under `3d model/` alongside the originals
+- [ ] Wire the kit into the `/build` guide and `arduino/main/BUILD.md`
+
 ## Suggested order of work
 
 1. ~~Fixed serial buffer + oversized-line error (5)~~ ✅

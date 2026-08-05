@@ -6,7 +6,7 @@ Parts list and assembly instructions for the physical sorting unit: a hopper fee
 - **Enclosure:** `3d model/Card Sorter.f3d` (Fusion 360 source) or `3d model/card_sorter.3mf` (mesh, slicer-ready) — the original design by dishwasher-detergent, in the upstream repo
 - **Calibration:** `/app/calibrate` in the web app
 - **Photo references:** the original interactive guide at [mault.xyz/build](https://mault.xyz/build) shows assembly photos for most steps (`/instructions/*.jpg` in the repo)
-- **Revised print kit:** DeckSift adds a Bambu Lab quantity kit that organizes the same parts for faster, more efficient printing than the original layout
+- **Revised print kit (planned):** DeckSift will add a Bambu Lab quantity kit that organizes the same parts for faster, more efficient printing than the original layout — see `custom/PLAN.md`. The repo currently carries the original `3d model/` files only.
 
 ---
 

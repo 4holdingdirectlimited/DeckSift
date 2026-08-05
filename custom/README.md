@@ -2,7 +2,8 @@
 
 This folder is the home for **our** modifications to DeckSift — everything
 that makes this build different from the upstream MAULT project. The upstream
-project stays pristine on `master`; all of our work lives on the `custom` branch.
+project is tracked as the `upstream` git remote (`dishwasher-detergent/mault`);
+all of our work lives on the `custom` branch (the repo default).
 
 ## How this project is organized
 
@@ -30,8 +31,13 @@ belong next to the sketch.
 
 ## Git workflow
 
-- `master` — mirrors upstream (`dishwasher-detergent/mault`). Never commit custom work here.
-- `custom` — our changes. Sync from upstream with `git merge master` when on `custom`.
+- `custom` — the only active branch (also the GitHub default). All DeckSift
+  work lives here.
+- `upstream` — a read-only remote pointing at `dishwasher-detergent/mault`;
+  `git fetch upstream` then `git merge upstream/master` (or selective
+  file-level integration — see `CHANGES.md` Item 50) brings in anything new.
+- There is no `master` branch in this repo — the pre-rename work line that
+  briefly lived there was fully superseded by `custom` and deleted.
 
 ## Status
 
@@ -54,7 +60,9 @@ deliverables, all on the `custom` branch:
   needs threshold calibration on the real rig (`PLAN.md`)
 - **Firmware** — command-id ACK correlation, jam detection on all modules,
   boot recovery, EEPROM calibration persistence, stage-1 watchdog
-  (1, 4–6, 10); non-blocking state machine + pipelining still planned (`PLAN.md`)
+  (1, 4–6, 10); full non-blocking state machine + interrupt-driven IR
+  feeding delivered (49); pipeline feed (start next card while the
+  previous one is still routing) still planned (`PLAN.md`)
 - **Tooling & CI** — typecheck, firmware compile, CI checks (2)
 
 Machine-specific operational details live in `SETUP.md`.

@@ -2025,7 +2025,7 @@ DeckSift team.
   build photos, and firmware base stays explicit and prominent (footers,
   `/build` guide, README Credits, `arduino/main` docs): "the sorter we built
   from" by dishwasher-detergent (MIT). The DeckSift work — software stack,
-  firmware modifications, revised Bambu Lab print kit — is credited to
+  firmware modifications, planned revised Bambu Lab print kit — is credited to
   4holdingdirectlimited.
 - **"Report an issue"** — build guide footer/nav now point at
   `4holdingdirectlimited/DeckSift/issues` instead of the upstream repo.
