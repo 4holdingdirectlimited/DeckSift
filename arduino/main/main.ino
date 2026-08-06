@@ -308,6 +308,41 @@ void connectWifi() {
   WiFi.begin(wifiSsid, wifiPassword);
 }
 
+// Shared "we just got an IP" startup: record the address, start mDNS + OTA
+// once, and announce the address. Called from checkWifi() on every first
+// connect AND from setup()'s bounded wait, so a boot-time connection gets the
+// full stack too — the web app auto-fills the Wi-Fi IP from this announce.
+void onWifiConnected() {
+  wifiConnected = true;
+  String ip = WiFi.localIP().toString();
+  strncpy(wifiIp, ip.c_str(), sizeof(wifiIp) - 1);
+  wifiIp[sizeof(wifiIp) - 1] = '\0';
+  if (!otaStarted) {
+    // Flash the orange comms LED during an OTA update so it's obvious a
+    // network flash is in progress.
+    ArduinoOTA.onStart([]() { setLed(LED_ORANGE, true); });
+    ArduinoOTA.onEnd([]() { setLed(LED_ORANGE, false); });
+    ArduinoOTA.onError([](ota_error_t) { setLed(LED_ORANGE, false); });
+    ArduinoOTA.begin();
+    otaStarted = true;
+  }
+  if (!mdnsStarted) {
+    // Start mDNS LAST: on this core ArduinoOTA.begin() re-initializes mDNS
+    // with an esp32-<mac> hostname, which would otherwise clobber the
+    // decksift-board.local name registered here. OTA's _arduino._tcp service
+    // stays; only the hostname needs re-asserting.
+    MDNS.begin(WIFI_HOSTNAME);
+    MDNS.addService("ws", "tcp", WIFI_WS_PORT);
+    mdnsStarted = true;
+  }
+  JsonDocument res;
+  res["status"] = "wifi";
+  res["ip"] = wifiIp;
+  String line;
+  serializeJson(res, line);
+  transportSend(line.c_str());
+}
+
 // Called from loop(): tracks connect state, announces the assigned IP once
 // ({"status":"wifi","ip":"..."} — the web app auto-fills it), and retries
 // a lost link without blocking the machine. mDNS + OTA are started lazily on
@@ -316,32 +351,7 @@ void connectWifi() {
 void checkWifi() {
   if (!wifiEnabled) return;
   if (WiFi.status() == WL_CONNECTED) {
-    if (!wifiConnected) {
-      wifiConnected = true;
-      String ip = WiFi.localIP().toString();
-      strncpy(wifiIp, ip.c_str(), sizeof(wifiIp) - 1);
-      wifiIp[sizeof(wifiIp) - 1] = '\0';
-      if (!mdnsStarted) {
-        MDNS.begin(WIFI_HOSTNAME);
-        MDNS.addService("ws", "tcp", WIFI_WS_PORT);
-        mdnsStarted = true;
-      }
-      if (!otaStarted) {
-        // Flash the orange comms LED during an OTA update so it's obvious a
-        // network flash is in progress.
-        ArduinoOTA.onStart([]() { setLed(LED_ORANGE, true); });
-        ArduinoOTA.onEnd([]() { setLed(LED_ORANGE, false); });
-        ArduinoOTA.onError([](ota_error_t) { setLed(LED_ORANGE, false); });
-        ArduinoOTA.begin();
-        otaStarted = true;
-      }
-      JsonDocument res;
-      res["status"] = "wifi";
-      res["ip"] = wifiIp;
-      String line;
-      serializeJson(res, line);
-      transportSend(line.c_str());
-    }
+    if (!wifiConnected) onWifiConnected();
     return;
   }
   if (wifiConnected) {
@@ -949,13 +959,14 @@ void handleCommand(const char* json) {
     }
     if (doc["led"].is<int>()) {
       int led = doc["led"].as<int>();
-      if (led < 1 || led > 5) {
-        replyLiteral("{\"error\":\"led must be 1 to 5\"}");
+      if (led < 1 || led > 4) {
+        replyLiteral("{\"error\":\"led must be 1 to 4\"}");
         return;
       }
       bool on = doc["on"] | false;
-      int channel = led <= 4 ? led - 1 : 14;
-      pwm.setPin(channel, on ? 4095 : 0);
+      // LEDs 1-4 live on ch0-3 (LED 1 = scan light); same mapping as the
+      // idle path. The old spare-channel LED 5 is gone.
+      setLed(led, on);
       JsonDocument res;
       res["status"] = "ok";
       res["led"] = led;
@@ -1236,6 +1247,11 @@ void setup() {
   // credentials saved after boot work too; mDNS + OTA start lazily on the
   // first successful connection in checkWifi().
   loadWifi();
+  // Start the network stack BEFORE the WebSocket server: on the ESP32 core 3.x
+  // NetworkServer::begin() creates a socket immediately, and that dereferences
+  // lwIP state that only exists after esp_netif_init() (WiFi.mode()) has run —
+  // reorder these and the board assert-faults in a boot loop.
+  WiFi.mode(WIFI_STA);
   webSocket.begin();
   webSocket.onEvent(onWsEvent);
   if (wifiSsid[0] != '\0') {
@@ -1245,10 +1261,7 @@ void setup() {
       delay(100);
     }
     if (WiFi.status() == WL_CONNECTED) {
-      wifiConnected = true;
-      String ip = WiFi.localIP().toString();
-      strncpy(wifiIp, ip.c_str(), sizeof(wifiIp) - 1);
-      wifiIp[sizeof(wifiIp) - 1] = '\0';
+      onWifiConnected();  // full stack: mDNS, OTA, and the IP announce
     }
   }
 #endif

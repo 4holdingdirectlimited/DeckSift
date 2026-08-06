@@ -2683,7 +2683,7 @@ R4's hardware EEPROM had been masking.
 
 ## Item 59 — Wi-Fi / WebSocket / OTA for ESP32-S3 + DevKitC-1 wiring guide (firmware + web + docs + CI)
 
-**Status:** implemented, committed (this commit).
+**Status:** implemented, committed (`d2d5534`); **OTA verified on live hardware** 2026-08-06.
 
 ### Why
 
@@ -2768,9 +2768,26 @@ until now it only ever talked over USB. The user asked for three things:
   doesn't overlap the calibration block at addr 0.
 - **Multi-machine** — change `WIFI_HOSTNAME` per rig so mDNS names don't
   collide; each board is then reachable at its own `ws://<name>.local:81`.
-- **Not yet tested on live Wi-Fi hardware** — firmware compiles + protocol
-  verified over USB; the Wi-Fi join/WebSocket/OTA path needs a live network
-  test (machine commissioning step).
+- **Tested on live Wi-Fi hardware** (ESP32-S3-DevKitC-1, 2026-08-06):
+  - Board joined the LAN, `decksift-board.local` resolved, and arduino-cli
+    discovered the OTA network port (`192.168.1.37`).
+  - **OTA upload verified end-to-end, twice** (both A/B slots): the full
+    protocol ran — UDP invitation → device TCP connect-back → 1,004,960-byte
+    chunked stream → device MD5 verify → final `OK` → automatic reboot. After
+    each flash the app partition was dumped from flash and matched the uploaded
+    image byte-for-byte, and the board rebooted into it (Wi-Fi reconnect +
+    `ready` on serial). The orange comms LED is on during the flash.
+  - **Boot-order fix found during testing:** `WiFi.mode()` must run BEFORE
+    run BEFORE `webSocket.begin()` on core 3.x — `NetworkServer::begin()`
+    dereferences lwIP state that only exists after `esp_netif_init()`; the
+    reverse order assert-faults in a boot loop. `onWifiConnected()` is now
+    shared between `setup()`'s bounded wait and `checkWifi()`.
+  - **CLI gotcha (Windows)**: `arduino-cli upload` to the network port fails
+    with "No response from device" because Windows Firewall silently drops the
+    device's TCP connect-back to `espota.exe` (no inbound allow rule — the
+    Arduino IDE and `node.exe` have one, which is why IDE OTA and tool-level
+    replicas work). Fix (admin):
+    `New-NetFirewallRule -DisplayName "ESP32 OTA (espota)" -Direction Inbound -Action Allow -Program "C:\Users\<you>\AppData\Local\Arduino15\packages\esp32\hardware\esp32\<core>\tools\espota.exe" -Profile Any`.
 
 ### How to revert
 

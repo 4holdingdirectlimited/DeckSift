@@ -379,7 +379,7 @@ The firmware can emit these without a request:
 | `{"error":"aborted: jam detected","aborted":true}` | An operation was aborted mid-way (jam reported or watchdog deadline) and all servos returned to neutral |
 | `{"error":"invalid JSON"}` | Line failed to parse |
 | `{"error":"unknown command"}` | Valid JSON but no recognized field |
-| `{"error":"bin must be 1-7"}` / `{"error":"module must be 1-3"}` / `{"error":"servo must be bottom, paddle, or pusher"}` / `{"error":"invalid position"}` / `{"error":"led must be 1 to 5"}` / `{"error":"ssid must be 1-32 characters"}` / `{"error":"password must be at most 63 characters"}` | Bad arguments |
+| `{"error":"bin must be 1-7"}` / `{"error":"module must be 1-3"}` / `{"error":"servo must be bottom, paddle, or pusher"}` / `{"error":"invalid position"}` / `{"error":"led must be 1 to 4"}` / `{"error":"ssid must be 1-32 characters"}` / `{"error":"password must be at most 63 characters"}` | Bad arguments |
 
 ## Notes
 

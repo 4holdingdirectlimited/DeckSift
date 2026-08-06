@@ -78,8 +78,8 @@ Other recommended settings for both:
 | Setting | Value | Why |
 | --- | --- | --- |
 | Board | **ESP32S3 Dev Module** | Generic S3 board |
-| Flash Size | **16 MB** (if your module has it) or **8 MB** | Match your module — larger = room for OTA later |
-| Partition Scheme | **Default 4 MB with spiffs** (fine) | The sketch is ~350 KB; any scheme works |
+| Flash Size | **16 MB** (if your module has it) or **8 MB** | Match your module — the 4 MB default scheme already has dual 1.25 MB OTA app slots, so extra flash only buys bigger SPIFFS, not OTA headroom |
+| Partition Scheme | **Default 4 MB with spiffs** | The ESP32 build is ~1 MB (76% of the 1.25 MB app slot) — keep a scheme with **dual OTA slots** (this one is OTA-verified). Avoid "no OTA"/minimal schemes |
 | CPU Frequency | **240 MHz** | Default |
 | I2C pins | GPIO **8** (SDA) / **9** (SCL) | PCA9685 bus — override with `-DI2C_SDA=n` if your wiring differs |
 | Upload Speed | **921600** | Faster flashing |
@@ -118,6 +118,12 @@ over the LAN and the Arduino IDE pushes updates over the network:
 4. OTA: in the Arduino IDE, select the board's network port
    (**Sketch → Upload Using a Network Port**). The orange comms LED lights
    while a network flash runs.
+
+> **arduino-cli on Windows:** `arduino-cli upload -p <ip> …` fails with
+> “No response from device” until you allow `espota.exe` through Windows
+> Firewall (inbound TCP — the device connects back to the tool mid-flash).
+> The Arduino IDE already has this rule; run once as admin:
+> `New-NetFirewallRule -DisplayName "ESP32 OTA (espota)" -Direction Inbound -Action Allow -Program "$env:LOCALAPPDATA\Arduino15\packages\esp32\hardware\esp32\<core>\tools\espota.exe" -Profile Any`
 
 Multi-rig setups: change `WIFI_HOSTNAME` in `main.ino` per board (e.g.
 `decksift-board-2`) so they don't collide on mDNS. See `SERIAL_PROTOCOL.md`

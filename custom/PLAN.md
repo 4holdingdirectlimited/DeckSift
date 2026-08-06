@@ -1,5 +1,11 @@
 # Plan — faster + more robust card sorter (Arduino Uno R4 Minima)
 
+> **Status: historical roadmap.** Everything under "Where the current firmware
+> falls short" is shipped — the firmware is now a non-blocking state machine
+> with EEPROM calibration, interrupt-driven IR and Wi-Fi/WebSocket/OTA (see
+> `custom/CHANGES.md` items 49–59). Kept as the record of the v1 plan and the
+> still-open physical commissioning checklist below.
+
 Goal: keep the existing Arduino hardware and make the machine **faster** (higher
 throughput, less dead time between cards) and **more robust** (no silent hangs,
 no lost calibration, recovers from jams/timeouts cleanly).
@@ -152,7 +158,7 @@ problem. Software pre-reqs are noted inline.
      physical: verify the reject bin (catch-all bin 7) is where you expect and
      that bin routing lines up with the machine.
 5. **Holo detection** (classifier thresholds need calibration):
-   - The two-frame scan light is built (firmware LED 5 / PCA9685 ch14,
+   - The two-frame scan light is built (firmware LED 1 / PCA9685 ch0,
      smart skip if clearly matte). Wire the LED (see BUILD.md) and calibrate
      `FOIL_SECOND_FRAME_THRESHOLD` / `FOIL_DIFF_THRESHOLD` on real captures.
    - Collect labeled scans (manual foil toggle) during early runs; train the
