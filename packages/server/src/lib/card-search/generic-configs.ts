@@ -166,3 +166,244 @@ export const digimonConfig: GenericGameConfig = {
     return card;
   },
 };
+
+// ─── Disney Lorcana (lorcana-api.com) ─────────────────────────────────────────
+// Verified endpoints (2026-08): /cards/all returns the complete catalog
+// (2,694 cards across 13 sets, official Ravensburger artwork, no pagination
+// needed — every card in one response). /cards/fetch accepts ?page=N but does
+// NOT filter by name, so search is done client-side over the catalog via
+// searchFilter (15-min cache makes repeat searches cheap). Fields: Unique_ID
+// (e.g. "AOV-001"), Set_ID/Set_Name/Set_Num, Name, Rarity, Type,
+// Classifications, Cost, Inkable, Lore, Strength, Willpower, Body_Text,
+// Color, Artist, Card_Num, Image.
+
+export const lorcanaConfig: GenericGameConfig = {
+  key: "lorcana",
+  label: "Disney Lorcana (lorcana-api.com)",
+  searchUrl: "https://api.lorcana-api.com/cards/all",
+  bulkUrl: "https://api.lorcana-api.com/cards/all",
+  searchFilter: (cards, query) => {
+    const needle = query.trim().toLowerCase();
+    if (!needle) return cards;
+    return cards.filter((c) =>
+      (str(c, "Name") ?? "").toLowerCase().includes(needle),
+    );
+  },
+  cardId: (raw) => str(raw, "Unique_ID") ?? "",
+  nameOf: (raw) => str(raw, "Name") ?? "",
+  setCode: (raw) => str(raw, "Set_ID") ?? "",
+  imageUrl: (raw) => str(raw, "Image"),
+  toCard: (raw): PlayingCard => {
+    const id = str(raw, "Unique_ID") ?? "";
+    const card = baseCard();
+    card.id = id;
+    card.oracle_id = id;
+    card.name = str(raw, "Name") ?? "";
+    card.type_line = [str(raw, "Type"), str(raw, "Classifications")]
+      .filter(Boolean)
+      .join(" - ");
+    card.oracle_text = str(raw, "Body_Text") ?? undefined;
+    card.cmc = num(raw, "Cost") ?? 0;
+    card.power =
+      num(raw, "Strength") != null ? String(num(raw, "Strength")) : undefined;
+    card.toughness =
+      num(raw, "Willpower") != null ? String(num(raw, "Willpower")) : undefined;
+    const color = str(raw, "Color");
+    card.colors = color ? [color] : [];
+    card.color_identity = card.colors;
+    card.keywords = [
+      str(raw, "Classifications"),
+      raw.Inkable === true ? "inkable" : "non-inkable",
+    ].filter((k): k is string => !!k);
+    card.image_uris = imageUris(str(raw, "Image"));
+    // Lorcana rarities: Common/Uncommon/Rare/Super Rare/Legendary/Epic/
+    // Enchanted/Iconic (lowercased to match the field definitions + bundles).
+    card.rarity = (str(raw, "Rarity") ?? "").toLowerCase();
+    card.set = str(raw, "Set_ID") ?? "";
+    card.set_id = card.set;
+    card.set_name = str(raw, "Set_Name") ?? "";
+    card.collector_number =
+      num(raw, "Card_Num") != null ? String(num(raw, "Card_Num")) : "";
+    card.artist = str(raw, "Artist") ?? "";
+    return card;
+  },
+};
+
+/** CamelCase rarity codes ("SuperRare") → spaced lowercase ("super rare"). */
+function spacedRarity(raw: string | undefined): string {
+  return (raw ?? "")
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .toLowerCase()
+    .trim();
+}
+
+// ─── One Piece Card Game (punk-records dataset) ────────────────────────────────
+// Verified 2026-08: english/index/cards_by_id.json is a JSON OBJECT keyed by
+// card id (e.g. "EB01-001") — resultPath converts it to an array. 4,672 cards,
+// every one with an image on the official Bandai CDN (en.onepiece-cardgame.com).
+// Static file, so search is filtered client-side via searchFilter.
+
+export const onePieceConfig: GenericGameConfig = {
+  key: "onepiece",
+  label: "One Piece Card Game (punk-records dataset)",
+  searchUrl:
+    "https://raw.githubusercontent.com/buhbbl/punk-records/main/english/index/cards_by_id.json",
+  bulkUrl:
+    "https://raw.githubusercontent.com/buhbbl/punk-records/main/english/index/cards_by_id.json",
+  resultPath: (json) => Object.values((json as Record<string, unknown>) ?? {}),
+  searchFilter: (cards, query) => {
+    const needle = query.trim().toLowerCase();
+    if (!needle) return cards;
+    return cards.filter((c) =>
+      (str(c, "name") ?? "").toLowerCase().includes(needle),
+    );
+  },
+  cardId: (raw) => str(raw, "card_id") ?? "",
+  nameOf: (raw) => str(raw, "name") ?? "",
+  setCode: (raw) => (str(raw, "card_id") ?? "").split("-")[0] ?? "",
+  imageUrl: (raw) => str(raw, "img_url"),
+  toCard: (raw): PlayingCard => {
+    const id = str(raw, "card_id") ?? "";
+    const card = baseCard();
+    card.id = id;
+    card.oracle_id = id;
+    card.name = str(raw, "name") ?? "";
+    card.type_line = [str(raw, "category"), (str(raw, "types") ?? "")]
+      .filter(Boolean)
+      .join(" - ");
+    card.oracle_text = (str(raw, "keywords") ?? "") || undefined;
+    card.cmc = num(raw, "cost") ?? 0;
+    card.power =
+      num(raw, "power") != null ? String(num(raw, "power")) : undefined;
+    card.toughness =
+      num(raw, "counter") != null ? String(num(raw, "counter")) : undefined;
+    const colors = raw.colors;
+    card.colors = Array.isArray(colors)
+      ? colors.map(String)
+      : colors
+        ? [String(colors)]
+        : [];
+    card.color_identity = card.colors;
+    card.image_uris = imageUris(str(raw, "img_url"));
+    card.rarity = spacedRarity(str(raw, "rarity"));
+    card.set = (id.split("-")[0] ?? "").toUpperCase();
+    card.set_id = card.set;
+    card.collector_number = id;
+    return card;
+  },
+};
+
+// ─── Star Wars: Unlimited (swu-cards-json dataset) ─────────────────────────────
+// Verified 2026-08: data/v1/all-cards.json — 9,058 cards, 9,057 with official
+// FFG CDN art (cdn.starwarsunlimited.com). Multi-locale: name/front_image_url/
+// rules_text are objects keyed by locale — the accessors pick .en. The file is
+// 53 MB, so search fetches + filters it client-side (15-min cache per query).
+
+export const starWarsConfig: GenericGameConfig = {
+  key: "starwars",
+  label: "Star Wars: Unlimited (swu-cards-json dataset)",
+  searchUrl:
+    "https://raw.githubusercontent.com/Team-Zura/swu-cards-json/main/data/v1/all-cards.json",
+  bulkUrl:
+    "https://raw.githubusercontent.com/Team-Zura/swu-cards-json/main/data/v1/all-cards.json",
+  searchFilter: (cards, query) => {
+    const needle = query.trim().toLowerCase();
+    if (!needle) return cards;
+    return cards.filter((c) => {
+      const name = (c.name as { en?: string } | undefined)?.en ?? "";
+      return name.toLowerCase().includes(needle);
+    });
+  },
+  cardId: (raw) => String(raw.serial_code ?? raw.id ?? ""),
+  nameOf: (raw) => (raw.name as { en?: string } | undefined)?.en ?? "",
+  setCode: (raw) => (raw.set as { code?: string } | undefined)?.code ?? "",
+  imageUrl: (raw) =>
+    (raw.front_image_url as { en?: string } | undefined)?.en,
+  toCard: (raw): PlayingCard => {
+    const id = String(raw.serial_code ?? raw.id ?? "");
+    const card = baseCard();
+    const name = (raw.name as { en?: string } | undefined)?.en ?? "";
+    card.id = id;
+    card.oracle_id = id;
+    card.name = name;
+    card.type_line = str(raw, "type") ?? "";
+    card.oracle_text =
+      (raw.rules_text as { en?: string } | undefined)?.en || undefined;
+    card.cmc = num(raw, "cost") ?? 0;
+    card.power =
+      num(raw, "power") != null ? String(num(raw, "power")) : undefined;
+    card.toughness =
+      num(raw, "hp") != null ? String(num(raw, "hp")) : undefined;
+    const aspects = raw.aspects;
+    card.colors = Array.isArray(aspects) ? aspects.map(String) : [];
+    card.color_identity = card.colors;
+    card.keywords = Array.isArray(raw.keywords)
+      ? raw.keywords.map(String)
+      : [];
+    card.image_uris = imageUris(
+      (raw.front_image_url as { en?: string } | undefined)?.en,
+    );
+    card.rarity = (str(raw, "rarity") ?? "").toLowerCase();
+    card.set = (raw.set as { code?: string } | undefined)?.code ?? "";
+    card.set_id = card.set;
+    card.set_name = (raw.set as { name?: string } | undefined)?.name ?? "";
+    card.collector_number = str(raw, "number") ?? "";
+    card.artist = str(raw, "artist") ?? "";
+    return card;
+  },
+};
+
+// ─── Union Arena (union-arena-tcg-data dataset) ────────────────────────────────
+// Verified 2026-08: cards/en/general.json — 541 cards, all with official Bandai
+// art (www.unionarena-tcg.com CDN). Rarity codes stay as-is, lowercased
+// (c/u/r/sr/ur + the ★ parallel variants). Static file → client-side search.
+
+export const unionArenaConfig: GenericGameConfig = {
+  key: "unionarena",
+  label: "Union Arena (union-arena-tcg-data dataset)",
+  searchUrl:
+    "https://raw.githubusercontent.com/apitcg/union-arena-tcg-data/main/cards/en/general.json",
+  bulkUrl:
+    "https://raw.githubusercontent.com/apitcg/union-arena-tcg-data/main/cards/en/general.json",
+  searchFilter: (cards, query) => {
+    const needle = query.trim().toLowerCase();
+    if (!needle) return cards;
+    return cards.filter((c) =>
+      (str(c, "name") ?? "").toLowerCase().includes(needle),
+    );
+  },
+  cardId: (raw) => str(raw, "id") ?? "",
+  nameOf: (raw) => str(raw, "name") ?? "",
+  setCode: (raw) => (str(raw, "id") ?? "").split("-")[0] ?? "",
+  imageUrl: (raw) =>
+    (raw.images as { large?: string } | undefined)?.large ??
+    (raw.images as { small?: string } | undefined)?.small,
+  toCard: (raw): PlayingCard => {
+    const id = str(raw, "id") ?? "";
+    const card = baseCard();
+    card.id = id;
+    card.oracle_id = id;
+    card.name = str(raw, "name") ?? "";
+    card.type_line = [str(raw, "type"), str(raw, "affinity")]
+      .filter(Boolean)
+      .join(" - ");
+    card.oracle_text = [str(raw, "effect"), str(raw, "trigger")]
+      .filter(Boolean)
+      .join("\n\n") || undefined;
+    card.cmc = num(raw, "ap") ?? 0;
+    card.power =
+      num(raw, "bp") != null ? String(num(raw, "bp")) : undefined;
+    card.image_uris = imageUris(
+      (raw.images as { large?: string } | undefined)?.large ??
+        (raw.images as { small?: string } | undefined)?.small,
+    );
+    // UA rarity codes ("C", "U", "R", "SR", "SR★", …) stay as codes,
+    // lowercased — matches the seeded field definitions.
+    card.rarity = (str(raw, "rarity") ?? "").toLowerCase();
+    card.set = (id.split("-")[0] ?? "").toUpperCase();
+    card.set_id = card.set;
+    card.set_name = (raw.set as { name?: string } | undefined)?.name ?? "";
+    card.collector_number = id;
+    return card;
+  },
+};

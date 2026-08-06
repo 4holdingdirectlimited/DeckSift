@@ -4,7 +4,14 @@ import { pokemonAdapter } from "../pokemon/search";
 import { scryfallAdapter } from "../scryfall/search";
 import { withCache } from "./cache";
 import { createSearchAdapter } from "./generic";
-import { digimonConfig, yugiohConfig } from "./generic-configs";
+import {
+  digimonConfig,
+  lorcanaConfig,
+  onePieceConfig,
+  starWarsConfig,
+  unionArenaConfig,
+  yugiohConfig,
+} from "./generic-configs";
 import type { CardSearchAdapter } from "./types";
 
 const RAW_ADAPTERS: Record<string, CardSearchAdapter> = {
@@ -13,6 +20,10 @@ const RAW_ADAPTERS: Record<string, CardSearchAdapter> = {
   pokemon: pokemonAdapter,
   yugioh: createSearchAdapter(yugiohConfig),
   digimon: createSearchAdapter(digimonConfig),
+  lorcana: createSearchAdapter(lorcanaConfig),
+  onepiece: createSearchAdapter(onePieceConfig),
+  starwars: createSearchAdapter(starWarsConfig),
+  unionarena: createSearchAdapter(unionArenaConfig),
 };
 
 const ADAPTERS_BY_GAME_KEY: Record<string, CardSearchAdapter> = {
@@ -21,6 +32,10 @@ const ADAPTERS_BY_GAME_KEY: Record<string, CardSearchAdapter> = {
   pokemon: withCache(pokemonAdapter),
   yugioh: withCache(createSearchAdapter(yugiohConfig)),
   digimon: withCache(createSearchAdapter(digimonConfig)),
+  lorcana: withCache(createSearchAdapter(lorcanaConfig)),
+  onepiece: withCache(createSearchAdapter(onePieceConfig)),
+  starwars: withCache(createSearchAdapter(starWarsConfig)),
+  unionarena: withCache(createSearchAdapter(unionArenaConfig)),
 };
 
 /**

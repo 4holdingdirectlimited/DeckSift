@@ -12,6 +12,14 @@ export interface GenericGameConfig {
   headers?: Record<string, string>;
   /** Search URL with {q} placeholder (query is URL-encoded). */
   searchUrl: string;
+  /** Optional client-side filter for sources whose API can't filter by name
+   *  (e.g. Lorcana returns the whole catalog for every query). Receives the
+   *  full search-response card list; return the matches. When absent, the
+   *  response is used as-is. */
+  searchFilter?: (
+    cards: Record<string, unknown>[],
+    query: string,
+  ) => Record<string, unknown>[];
   /** Optional exact-id lookup URL with {id} placeholder. When absent,
    *  searchById falls back to filtering the bulk catalog. */
   searchByIdUrl?: string;
@@ -22,6 +30,10 @@ export interface GenericGameConfig {
   resultPath?: (json: unknown) => unknown[];
   /** Stable card id used for sync dedupe + hydration lookups. */
   cardId: (raw: Record<string, unknown>) => string;
+  /** Extracts the display name for the DB `name` column. Defaults to the
+   *  lowercase "name" field (most sources); sources with differently-cased
+   *  fields (e.g. Lorcana's "Name") override this. */
+  nameOf?: (raw: Record<string, unknown>) => string;
   setCode: (raw: Record<string, unknown>) => string;
   /** Absolute image URL for embedding during sync. */
   imageUrl: (raw: Record<string, unknown>) => string | undefined;
@@ -197,7 +209,9 @@ export function createSearchAdapter(cfg: GenericGameConfig): CardSearchAdapter {
     if (!response.ok) {
       return { message: `Failed to fetch from ${cfg.label}.`, success: false };
     }
-    const cards = extractCards(cfg, await response.json()).slice(0, MAX_SEARCH_RESULTS).map(cfg.toCard);
+    let list = extractCards(cfg, await response.json());
+    if (cfg.searchFilter) list = cfg.searchFilter(list, query);
+    const cards = list.slice(0, MAX_SEARCH_RESULTS).map(cfg.toCard);
     if (cards.length === 0) {
       return { message: `No cards were found with the query: ${query}`, success: false };
     }
@@ -223,7 +237,7 @@ export function createSyncSource(cfg: GenericGameConfig): SyncSource {
     if (!res.ok) throw new Error(`${cfg.label} catalog fetch failed: ${res.status}`);
     return extractCards(cfg, await res.json()).map((raw) => ({
       id: cfg.cardId(raw),
-      name: str(raw, "name") ?? "",
+      name: cfg.nameOf ? cfg.nameOf(raw) : (str(raw, "name") ?? ""),
       setCode: cfg.setCode(raw),
       imageUrl: cfg.imageUrl(raw),
       // Store the NORMALIZED card so hydration serves the right shape.

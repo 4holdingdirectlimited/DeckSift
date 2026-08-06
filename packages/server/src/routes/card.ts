@@ -390,6 +390,10 @@ const ALLOWED_IMAGE_HOSTS = new Set([
   "assets.tcgdex.net",
   "images.ygoprodeck.com",
   "images.digimoncard.io",
+  "api.lorcana.ravensburger.com",
+  "en.onepiece-cardgame.com",
+  "cdn.starwarsunlimited.com",
+  "www.unionarena-tcg.com",
 ]);
 
 router.get("/image-proxy", async (c) => {

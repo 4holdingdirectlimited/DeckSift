@@ -102,6 +102,64 @@ const GAMES: GameSeed[] = [
       "hyper rare",
     ],
   },
+  {
+    key: "lorcana",
+    name: "Disney Lorcana",
+    dataSourceUrl: "https://api.lorcana-api.com/cards/all",
+    rarities: [
+      "common",
+      "uncommon",
+      "rare",
+      "super rare",
+      "legendary",
+      "epic",
+      "enchanted",
+      "iconic",
+    ],
+  },
+  {
+    key: "onepiece",
+    name: "One Piece Card Game",
+    dataSourceUrl:
+      "https://raw.githubusercontent.com/buhbbl/punk-records/main/english/index/cards_by_id.json",
+    rarities: [
+      "common",
+      "uncommon",
+      "rare",
+      "super rare",
+      "secret rare",
+      "treasure rare",
+      "special",
+      "leader",
+      "promo",
+    ],
+  },
+  {
+    key: "starwars",
+    name: "Star Wars: Unlimited",
+    dataSourceUrl:
+      "https://raw.githubusercontent.com/Team-Zura/swu-cards-json/main/data/v1/all-cards.json",
+    rarities: ["common", "uncommon", "rare", "legendary", "special"],
+  },
+  {
+    key: "unionarena",
+    name: "Union Arena",
+    dataSourceUrl:
+      "https://raw.githubusercontent.com/apitcg/union-arena-tcg-data/main/cards/en/general.json",
+    rarities: [
+      "c",
+      "u",
+      "r",
+      "sr",
+      "ur",
+      "c★",
+      "u★",
+      "r★",
+      "sr★",
+      "sr★★",
+      "sr★★★",
+    ],
+  },
 ];
 
 /** FIELD_DEFINITIONS with the rarity options replaced for the given game. */

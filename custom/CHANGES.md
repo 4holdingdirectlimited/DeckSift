@@ -2803,6 +2803,76 @@ until now it only ever talked over USB. The user asked for three things:
 
 ---
 
+## Item 60 — Four new TCGs: Lorcana, One Piece, Star Wars: Unlimited, Union Arena (server + docs)
+
+**Status:** implemented, uncommitted.
+
+### Why
+
+The project's goal is 20 functioning, currently-popular TCGs. Lorcana, One
+Piece, Star Wars: Unlimited and Union Arena are four of the highest-ranked
+games that were still missing, and each turned out to have a verifiable data
+source (a hosted API for Lorcana; community GitHub datasets with official
+artwork for the other three).
+
+### What changed
+
+- **`generic.ts`** — new optional `searchFilter` hook (client-side name filter
+  over a full-catalog search response — needed by every static-file source,
+  which can't filter server-side) and `nameOf` accessor (sources with
+  differently-cased or locale-object name fields).
+- **`generic-configs.ts`** — four configs, each verified live against its
+  source before wiring:
+  - `lorcanaConfig` — `api.lorcana-api.com/cards/all`, 2,694 cards, official
+    Ravensburger art (API can't filter by name → `searchFilter`).
+  - `onePieceConfig` — punk-records `english/index/cards_by_id.json`, 4,672
+    cards, official Bandai CDN art; object-shaped dataset → `resultPath`
+    converts; rarities normalized (`SuperRare` → `super rare`).
+  - `starWarsConfig` — swu-cards-json `data/v1/all-cards.json`, 9,058 cards,
+    official FFG CDN art; multi-locale fields (`name.en`, `front_image_url.en`,
+    `rules_text.en`) via accessors. Note: 53 MB catalog.
+  - `unionArenaConfig` — union-arena-tcg-data `cards/en/general.json`, 541
+    cards, official Bandai art; rarity codes kept as-is (c/u/r/sr/ur + ★).
+- **Registration** — `resolve.ts` (search) + `sync-job.ts` (sync sources —
+  show up in Admin → Sync automatically) for all four; `routes/card.ts`
+  image-proxy allowlist adds `api.lorcana.ravensburger.com`,
+  `en.onepiece-cardgame.com`, `cdn.starwarsunlimited.com`,
+  `www.unionarena-tcg.com`; `seed-local.ts` game rows with per-game rarity
+  field definitions.
+- **Verified end-to-end** — adapter search + sync catalog fetch tested against
+  each live source; server restarted and `GET /api/admin/sync/sources` lists
+  all four. Syncs are one click each in Admin (Lorcana ≈ 30 min GPU, One
+  Piece ≈ 45 min, SWU ≈ 90 min, UA ≈ 5 min).
+- **Re-verified 2026-08** — every other candidate on the top-20 list still
+  lacks an accessible image-bearing data source (see `custom/TCGS.md` for the
+  per-game blocker table): One Piece's REST API is key-gated (request
+  access), Flesh & Blood / Duel Masters datasets ship no image URLs,
+  fabdb.net is unreachable, and Dragon Ball / Vanguard / Weiss Schwarz /
+  FFTCG / Hololive have no public dataset with art at all.
+
+### Behavior notes
+
+- Rarities normalize to per-game names matching the seeded field definitions
+  (One Piece: `super rare`/`secret rare`/`treasure rare`/…; SWU:
+  common/uncommon/rare/legendary/special; UA keeps its `★` parallel codes).
+- None of the four sources carry price data — value-based bin rules won't
+  fire (same as Digimon/Gundam/Pokémon).
+- The static-file sources fetch the full catalog per search-cache-miss (15-min
+  TTL); SWU's 53 MB makes its first search slow (~30–60 s), subsequent ones
+  instant.
+
+### How to revert
+
+1. Remove the four configs from `generic-configs.ts`, their entries in
+   `resolve.ts` and `sync-job.ts`, the allowlist entries in `routes/card.ts`,
+   and the seed rows in `seed-local.ts`.
+2. Delete the `lorcana`/`onepiece`/`starwars`/`unionarena` game rows in the DB
+   (or re-seed after removal).
+3. Revert the `searchFilter`/`nameOf` additions in `generic.ts` (only the
+   static-file sources use them).
+
+---
+
 *Template for future entries:*
 
 ## Item N — <short title> (area)

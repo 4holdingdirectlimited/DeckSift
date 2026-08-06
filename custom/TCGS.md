@@ -24,6 +24,10 @@ differences live entirely in the **card data adapters**.
 | Pokémon | TCGdex | ✅ built-in adapter, synced (21,756 rows, full card data) |
 | **Yu-Gi-Oh!** | YGOPRODeck (`db.ygoprodeck.com/api/v7`) | ✅ generic config, endpoints verified (search + byId + images) — synced (14,477 rows) |
 | **Digimon** | digimoncard.io (`search.php`) | ✅ generic config, endpoints verified (search + bulk + images) — synced (4,373 rows with images; the rest of the ~9k catalog lacks usable artwork) |
+| **Lorcana** | lorcana-api.com (`api.lorcana-api.com/cards/all`) | ✅ generic config, added 2026-08 (2,694 cards, 13 sets, official Ravensburger art, search filtered client-side via `searchFilter` — the API has no name-search) — sync pending |
+| **One Piece** | punk-records dataset (`english/index/cards_by_id.json`) | ✅ generic config, added 2026-08 (4,672 cards, official Bandai CDN art) — sync pending |
+| **Star Wars: Unlimited** | swu-cards-json dataset (`data/v1/all-cards.json`) | ✅ generic config, added 2026-08 (9,058 cards, official FFG CDN art — note: 53 MB catalog) — sync pending |
+| **Union Arena** | union-arena-tcg-data (`cards/en/general.json`) | ✅ generic config, added 2026-08 (541 cards, official Bandai CDN art; rarity codes stay as codes — c/u/r/sr/ur + ★ variants) — sync pending |
 
 All five games' `card_data` is populated, so library browsing, detail
 hydration, and bundle/chase CSV exports work fully offline.
@@ -66,16 +70,16 @@ each of these a small, independent addition.
 | 1 | Pokémon | TCGdex | ✅ done |
 | 2 | Magic: The Gathering | Scryfall | ✅ done |
 | 3 | Yu-Gi-Oh! | YGOPRODeck | ✅ done |
-| 4 | One Piece Card Game | community JSON (GitHub datasets); no official API | dataset import (see above) |
+| 4 | One Piece Card Game | punk-records GitHub dataset (official Bandai art) | ✅ done (2026-08) |
 | 5 | Dragon Ball Super / Super Fusion World | community sites (dbscards); no official API | dataset import (see above) |
-| 6 | Disney Lorcana | community APIs (lorcana-focused); none official | source research needed |
-| 7 | Flesh and Blood | fabdb.net API (unreachable from this machine 2026-08) | re-verify / dataset import |
+| 6 | Disney Lorcana | lorcana-api.com (community API, official Ravensburger artwork) | ✅ done (2026-08) |
+| 7 | Flesh and Blood | fabdb.net API (unreachable from this machine 2026-08); fab-cube dataset has **no image URLs** | blocked on images — revisit if fabdb returns |
 | 8 | Digimon | digimoncard.io | ✅ done |
-| 9 | Star Wars Unlimited | swudb.com (site is a SPA — API unconfirmed) | verify endpoint |
+| 9 | Star Wars Unlimited | swu-cards-json dataset (official FFG art) | ✅ done (2026-08) |
 | 10 | Cardfight!! Vanguard | no reliable public API | source research needed |
 | 11 | Gundam | gundam-gcg.com | ✅ done |
-| 12 | Weiss Schwarz | no reliable public API | source research needed |
-| 13 | Union Arena | no public API (Bandai) | source research needed |
+| 12 | Weiss Schwarz | no reliable public API (per-series sim data only) | source research needed |
+| 13 | Union Arena | union-arena-tcg-data dataset (official Bandai art) | ✅ done (2026-08) |
 | 14 | Final Fantasy TCG | community deck sites; no clean API | source research needed |
 | 15 | Hololive Official Card Game | no public API | source research needed |
 | 16 | Shadowverse Evolve | no public API | source research needed |
@@ -98,11 +102,27 @@ Notes:
 
 ## Recommended next games
 
-1. **One Piece** and **Dragon Ball Super** (user's stated targets) — needs the
-   community source research; the config architecture is ready.
-2. **Flesh and Blood** (fabdb) — likely the fastest add if the endpoint checks
-   out.
-3. Anything else from the table on demand — one config + one sync each.
+**Integrated 2026-08 (all verified live):** Lorcana (2,694), One Piece
+(4,672), Star Wars: Unlimited (9,058), Union Arena (541) — each is a generic
+config; run its sync once from Admin (Settings → Games must have a matching
+game row — the seeder adds them).
+
+Still needing a data source (all re-verified 2026-08; the blocker is almost
+always **images** — a dataset without art can't feed the embedding pipeline):
+
+| Game | Status / blocker |
+| --- | --- |
+| Dragon Ball Super | `dbscards.com` static; no GitHub dataset with images found |
+| Flesh and Blood | fab-cube dataset is complete but **no image URLs**; `fabdb.net` unreachable |
+| Cardfight!! Vanguard | no dataset with images found |
+| Weiss Schwarz | only per-anime-series sim data, no unified EN catalog with images |
+| Final Fantasy TCG | ffdecks is a SPA; no dataset found |
+| Hololive | fan databases only, no stable image-bearing JSON |
+| Shadowverse Evolve | sim-client code exists, no shipped dataset |
+| Duel Masters | `duel-masters-json` has data but **no image URLs** |
+| Altered TCG | per-set card DB with an IMAGES dir, but no combined file/URL pattern verified |
+| WIXOSS | tiny 0-star dataset, unverified |
+| MetaZoo | discontinued |
 
 ## Future: TCGplayer integration (digitize → price → list)
 
