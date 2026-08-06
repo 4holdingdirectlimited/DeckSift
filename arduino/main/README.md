@@ -8,8 +8,9 @@ This folder contains the firmware and build documentation for the **DeckSift TCG
 | `board-config.h` | Board abstraction: EEPROM init/commit, I2C pins, interrupt attach, IR pin defaults. |
 | `BOM.txt` | **Printable shopping list** — every part, screw, and tool with quantities. |
 | `CONTROLLERS.md` | Per-board wiring, logic levels, power, and honest support status. |
+| `WIRING_S3.md` | **Pin-by-pin ESP32-S3 DevKitC-1 wiring guide** (header layout, PCA9685, IR, LEDs, power). |
 | `BUILD.md` | Complete build guide: bill of materials, wiring, assembly, first power-on, calibration. |
-| `SERIAL_PROTOCOL.md` | JSON command/response reference for talking to the firmware over USB serial. |
+| `SERIAL_PROTOCOL.md` | JSON command/response reference for talking to the firmware over USB serial (and Wi-Fi). |
 
 > Upstream source (the machine's original design): [github.com/dishwasher-detergent/mault](https://github.com/dishwasher-detergent/mault) · interactive build guide: [mault.xyz/build](https://mault.xyz/build) · 3D models: `3d model/Card Sorter.f3d` (Fusion 360) and `3d model/card_sorter.3mf` (slicer-ready) in the upstream repo. The firmware here is DeckSift's modified version of that base.
 
@@ -51,6 +52,8 @@ the board in the Arduino IDE / PlatformIO and flash:
 2. Install the required libraries via **Library Manager**:
    - **ArduinoJson**
    - **Adafruit PWM Servo Driver** (also pulls in Adafruit BusIO)
+   - **WebSockets** (only needed to compile the ESP32 build — used for the
+     Wi-Fi/WebSocket transport + OTA; other boards ignore it)
 3. Select your board + COM port (settings below), open and upload `main.ino`.
 4. Open the **Serial Monitor at 9600 baud** — after the board resets you should see:
 
@@ -98,6 +101,27 @@ monitor_speed = 9600
 
 > Uno R4 / RP2040 / STM32 need no special settings — Web Serial works via
 their built-in USB serial.
+
+### ESP32-S3 — Wi-Fi, WebSocket & OTA (optional)
+
+The ESP32 build can join your Wi-Fi network so the browser talks to the board
+over the LAN and the Arduino IDE pushes updates over the network:
+
+1. Flash the firmware over USB as above, then connect in the web app
+   (**Connect Device**) and open **Calibrate → Wi-Fi & OTA**.
+2. Enter your network SSID + password and hit **Save & Connect**. The board
+   stores them in EEPROM and joins the network; it announces its IP
+   (`{"status":"wifi","ip":…}`) which the panel auto-fills.
+3. Click **Connect** next to the board address — the browser now drives the
+   machine over Wi-Fi (`ws://decksift-board.local:81`), so the USB data cable
+   can be unplugged (keep USB for power, or power from the 5 V PSU rail).
+4. OTA: in the Arduino IDE, select the board's network port
+   (**Sketch → Upload Using a Network Port**). The orange comms LED lights
+   while a network flash runs.
+
+Multi-rig setups: change `WIFI_HOSTNAME` in `main.ino` per board (e.g.
+`decksift-board-2`) so they don't collide on mDNS. See `SERIAL_PROTOCOL.md`
+for the Wi-Fi commands.
 
 ## Quick test after first power-on
 

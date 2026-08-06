@@ -5,6 +5,10 @@ controllers. This page is the honest wiring guide per board: **compiling is
 not the same as being wired right**, and the 3.3 V boards need different
 connections than the 5 V Arduino.
 
+> **ESP32-S3 DevKitC-1 owners:** a complete pin-by-pin wiring guide for the
+> common CH343-bridged dev board is in [`WIRING_S3.md`](WIRING_S3.md) — header
+> layout, PCA9685, IR sensors, LEDs, power, and flashing.
+
 ## Support status (be honest about what's verified)
 
 | Board | Compiles | Flashing docs | Wiring verified on hardware |
@@ -98,6 +102,12 @@ build_flags =
     Verified on a CH343 dev board.
   - **Native USB only** (no bridge chip): enable **USB CDC On Boot** so
     `Serial` maps to the native USB port.
+- **ESP32-S3 — Wi-Fi / WebSocket / OTA (optional, additive):** with saved
+  credentials the firmware joins your LAN (mDNS `decksift-board.local`,
+  WebSocket port 81) and accepts Arduino IDE network updates. The browser can
+  then drive the machine over Wi-Fi instead of USB. Configure from the app at
+  Calibrate → **Wi-Fi & OTA**; protocol details in `SERIAL_PROTOCOL.md`.
+  Boards without Wi-Fi (Uno R4, Pico, STM32) are unaffected.
 - **RP2040 / STM32**: native USB CDC enumerates as a serial port — no extra
   settings. STM32 "USB on Boot" is enabled by default on most generic boards.
 - Uno R4: real EEPROM, no special settings.

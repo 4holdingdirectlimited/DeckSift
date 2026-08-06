@@ -2681,6 +2681,111 @@ R4's hardware EEPROM had been masking.
 
 ---
 
+## Item 59 — Wi-Fi / WebSocket / OTA for ESP32-S3 + DevKitC-1 wiring guide (firmware + web + docs + CI)
+
+**Status:** implemented, committed (this commit).
+
+### Why
+
+The ESP32-S3 is DeckSift's primary controller and a Wi-Fi-capable chip, but
+until now it only ever talked over USB. The user asked for three things:
+
+1. **Wi-Fi + OTA** — a browser UI to send SSID/password to the board once, so
+   it joins the LAN, gets power via USB, and receives OTA updates + serial
+   communications over Wi-Fi instead of USB. Designed to scale to multiple
+   machines later (one hostname per rig).
+2. **Must not break the USB flow** — boards without Wi-Fi (Uno R4, Pico,
+   STM32) and the existing Web Serial path must keep working untouched.
+3. **Full wiring schematic for the exact board in hand** — a CH343-bridged
+   ESP32-S3-DevKitC-1 dev board — against known pinouts.
+
+### What changed
+
+**Firmware — `arduino/main/main.ino` (all ESP32 code `#if ARDUINO_ARCH_ESP32`-guarded)**
+- **Transport abstraction** — new `transportSend()`: every line the firmware
+  emits (replies, boot `ready`, async jam alerts) goes to USB serial AND is
+  broadcast to any connected WebSocket client. All reply sites
+  (`replyJson`, `replyLiteral`, `replyOpJson`, jam alert, `recovered`,
+  `ready`, errors) now route through it. Non-ESP32 boards compile to a
+  serial-only `transportSend` — zero behavior change.
+- **Wi-Fi persistence** — new `PersistedWifi` EEPROM block at addr 128
+  (separate from calibration at addr 0, magic+version guarded so stale data
+  is ignored), saved with `BOARD_EEPROM_COMMIT()` (flash-emulated EEPROM
+  needs commit).
+- **New commands** — `{"wifi":{"ssid":…,"password":…}}` (save + connect in
+  the background), `{"getWifi":true}` (saved SSID, connected state, IP,
+  hostname, ws port), `{"wifiForget":true}` (erase + disconnect). All three
+  are handled before the busy guard, so they work mid-operation.
+- **Wi-Fi lifecycle** — boot: bounded connect wait (10 s) if credentials
+  exist, then mDNS (`decksift-board.local`) + WebSocket server (port 81) +
+  ArduinoOTA. Loop: `webSocket.loop()`, `ArduinoOTA.handle()`, and
+  `checkWifi()` (announces `{"status":"wifi","ip":…}` once, retries a
+  lost link every 10 s). OTA flashes light the orange comms LED.
+- **WS handshake** — on client connect the firmware mirrors the boot line
+  `{"status":"ready","proto":2}`, so the web app's connect flow (ready →
+  proto check → mechanical test) is identical on both transports.
+
+**Web app**
+- `use-serial.tsx` — the provider is now transport-agnostic: message
+  processing extracted into `processLine()`, shared by the USB reader and a
+  new `WebSocket` path. New `connectWs(url)` + `isWs` exposed on the
+  context; `sendCommand`/`sendBin`/`sendCommandWithResponse` fall through to
+  the WebSocket when open; `disconnect()` closes both transports.
+- New **Wi-Fi & OTA panel** (`features/calibration/components/wifi-panel.tsx`,
+  mounted on the Calibrate page): SSID/password + Save & Connect, Forget,
+  live status (saved network, connected, IP), auto-fill of the board address
+  from the firmware's `{"status":"wifi",…}` announcement, and a
+  Connect/Disconnect control for the browser ↔ board WebSocket link.
+
+**Docs**
+- `arduino/main/WIRING_S3.md` — **new**: pin-by-pin DevKitC-1 wiring guide
+  (J1/J2 header tables, PCA9685, IR sensors, LEDs, servo rail, power,
+  flashing, checklist). Linked from `CONTROLLERS.md`.
+- `SERIAL_PROTOCOL.md` — Wi-Fi/WebSocket transport section + the three Wi-Fi
+  commands + error-table additions.
+- `CONTROLLERS.md` — DevKitC-1 link + Wi-Fi note in boot/serial section.
+- `arduino/main/README.md` — WebSockets library in the install list, Wi-Fi &
+  OTA walkthrough, `WIRING_S3.md` in the file table.
+- `.github/workflows/checks.yml` — WebSockets 2.7.2 added to the CI
+  firmware-compile libraries so the ESP32 build keeps compiling in CI.
+
+### Behavior notes
+
+- **Backward compatible.** No Wi-Fi configured → no `WiFi.begin()`, no mDNS,
+  no WebSocket server, no OTA — the board behaves exactly as before (Uno R4
+  and friends compile without the Wi-Fi code entirely). Web Serial is
+  unchanged.
+- **Compile-verified on hardware cores** — ESP32-S3 (`esp32:esp32:esp32s3`),
+  Uno R4 (`arduino:renesas_uno:minima`), STM32 (`STMicroelectronics:stm32:GenF4`)
+  all build. RP2040 fails locally with a pre-existing `SrcWrapper.h`
+  core-install issue (fails identically on the previous commit — unrelated
+  to this change; CI does not compile RP2040).
+- **Wi-Fi is async** — after `{"wifi":…}` the board joins in the background;
+  the panel polls `getWifi` so the user sees the IP appear. OTA is done from
+  the Arduino IDE (Upload Using a Network Port), not the browser.
+- **EEPROM cost** — one extra flash write per Wi-Fi save (commit()); Wi-Fi
+  is configured rarely, so endurance is a non-issue. Wi-Fi block at addr 128
+  doesn't overlap the calibration block at addr 0.
+- **Multi-machine** — change `WIFI_HOSTNAME` per rig so mDNS names don't
+  collide; each board is then reachable at its own `ws://<name>.local:81`.
+- **Not yet tested on live Wi-Fi hardware** — firmware compiles + protocol
+  verified over USB; the Wi-Fi join/WebSocket/OTA path needs a live network
+  test (machine commissioning step).
+
+### How to revert
+
+1. Firmware: delete the `#if ARDUINO_ARCH_ESP32` transport block and restore
+   the `Serial.println`/`serializeJson(…, Serial)` sites — or simpler, keep
+   `transportSend` but make it serial-only everywhere. Remove the Wi-Fi
+   commands + setup/loop Wi-Fi blocks.
+2. Web: remove `connectWs`/`isWs` from `use-serial.tsx` + `types.ts`, and
+   delete `wifi-panel.tsx` + its mount in `calibrate.tsx`.
+3. Docs/CI: revert `SERIAL_PROTOCOL.md`, `CONTROLLERS.md`, `README.md`, and
+   drop WebSockets from `checks.yml` (only needed for the ESP32 build).
+4. Delete `WIRING_S3.md` if unwanted.
+
+---
+
 *Template for future entries:*
 
 ## Item N — <short title> (area)

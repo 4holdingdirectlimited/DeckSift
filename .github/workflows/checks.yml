@@ -51,5 +51,7 @@ jobs:
               version: 7.4.3
             - name: Adafruit PWM Servo Driver Library
               version: 3.0.3
+            - name: WebSockets
+              version: 2.7.2
           enable-deltas-report: false
           enable-warnings-report: false

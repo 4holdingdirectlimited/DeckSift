@@ -73,7 +73,11 @@ export type SerialMessageListener = (message: unknown) => void;
 export interface SerialContextValue {
   isConnected: boolean;
   isReady: boolean;
+  /** True when the current connection is over WebSocket (Wi-Fi), false for USB Web Serial. */
+  isWs: boolean;
   connect: () => Promise<void>;
+  /** Connect to the board over Wi-Fi — pass a ws://host:port URL (firmware serves on port 81). */
+  connectWs: (url: string) => Promise<boolean>;
   disconnect: () => Promise<void>;
   sendBin: (binNumber: number) => Promise<unknown | null>;
   sendTest: () => Promise<boolean>;

@@ -2,6 +2,15 @@
 #include <Adafruit_PWMServoDriver.h>
 #include "board-config.h"  // board abstraction: EEPROM, I2C pins, IR pins, interrupts
 
+// Wi-Fi / WebSocket / OTA transport — ESP32 only; other boards compile
+// without it (guarded so the sketch stays universal).
+#if defined(ARDUINO_ARCH_ESP32)
+#include <WiFi.h>
+#include <WebSocketsServer.h>
+#include <ArduinoOTA.h>
+#include <ESPmDNS.h>
+#endif
+
 Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver();
 
 // PWM channel layout (PCA9685):
@@ -227,7 +236,154 @@ void saveCalibration() {
 char inputBuffer[INPUT_BUFFER_MAX + 1];
 int inputBufferLen = 0;
 
-// Request/response correlation. A command may carry an optional numeric "id";
+// ─── Wi-Fi transport (ESP32 only) ───────────────────────────────────────────
+// Optional and additive: boards without Wi-Fi (Uno R4, Pico, STM32) compile
+// without it. On ESP32 the firmware joins your LAN so the browser can talk to
+// it over WebSockets and the Arduino IDE can push OTA updates over the
+// network — USB Web Serial keeps working exactly as before.
+#if defined(ARDUINO_ARCH_ESP32)
+
+#define WIFI_HOSTNAME          "decksift-board"  // decksift-board.local; change per machine for multi-rig setups
+#define WIFI_WS_PORT           81                // ws://decksift-board.local:81
+#define WIFI_EEPROM_ADDR       128               // separate EEPROM block from calibration (addr 0)
+#define WIFI_MAGIC             0x4457            // "DW"
+#define WIFI_VERSION           1
+#define WIFI_RECONNECT_MS      10000             // retry a lost link every 10 s
+#define WIFI_CONNECT_TIMEOUT_MS 10000            // bounded connect wait at boot
+
+struct PersistedWifi {
+  uint16_t magic;
+  uint8_t version;
+  char ssid[33];
+  char password[65];
+};
+
+WebSocketsServer webSocket(WIFI_WS_PORT);
+bool wsClientConnected = false;
+bool wifiEnabled = false;
+bool wifiConnected = false;
+bool mdnsStarted = false;
+bool otaStarted = false;
+char wifiSsid[33] = "";
+char wifiPassword[65] = "";
+char wifiIp[16] = "";
+unsigned long lastWifiReconnectMs = 0;
+
+// Every line the firmware emits (replies, boot "ready", async jam alerts)
+// goes to USB serial AND is broadcast to any WebSocket client. Both transports
+// speak the same id-correlated protocol, so the web app's serial layer cannot
+// tell the difference — and a Serial Monitor can stay open beside a Wi-Fi
+// session without confusing anything.
+void transportSend(const char* line) {
+  Serial.println(line);
+  if (wsClientConnected) webSocket.broadcastTXT(line);
+}
+
+void loadWifi() {
+  PersistedWifi stored;
+  EEPROM.get(WIFI_EEPROM_ADDR, stored);
+  if (stored.magic == WIFI_MAGIC && stored.version == WIFI_VERSION) {
+    strncpy(wifiSsid, stored.ssid, sizeof(wifiSsid) - 1);
+    strncpy(wifiPassword, stored.password, sizeof(wifiPassword) - 1);
+  }
+}
+
+void saveWifi() {
+  PersistedWifi data;
+  data.magic = WIFI_MAGIC;
+  data.version = WIFI_VERSION;
+  strncpy(data.ssid, wifiSsid, sizeof(data.ssid) - 1);
+  strncpy(data.password, wifiPassword, sizeof(data.password) - 1);
+  data.ssid[sizeof(data.ssid) - 1] = '\0';
+  data.password[sizeof(data.password) - 1] = '\0';
+  EEPROM.put(WIFI_EEPROM_ADDR, data);
+  BOARD_EEPROM_COMMIT();  // flash-emulated EEPROM (ESP32) needs commit()
+}
+
+void connectWifi() {
+  if (wifiSsid[0] == '\0') return;
+  wifiEnabled = true;
+  WiFi.mode(WIFI_STA);
+  WiFi.setHostname(WIFI_HOSTNAME);
+  WiFi.begin(wifiSsid, wifiPassword);
+}
+
+// Called from loop(): tracks connect state, announces the assigned IP once
+// ({"status":"wifi","ip":"..."} — the web app auto-fills it), and retries
+// a lost link without blocking the machine. mDNS + OTA are started lazily on
+// the first successful connection so credentials saved after boot (the normal
+// first-run flow) get the full stack too.
+void checkWifi() {
+  if (!wifiEnabled) return;
+  if (WiFi.status() == WL_CONNECTED) {
+    if (!wifiConnected) {
+      wifiConnected = true;
+      String ip = WiFi.localIP().toString();
+      strncpy(wifiIp, ip.c_str(), sizeof(wifiIp) - 1);
+      wifiIp[sizeof(wifiIp) - 1] = '\0';
+      if (!mdnsStarted) {
+        MDNS.begin(WIFI_HOSTNAME);
+        MDNS.addService("ws", "tcp", WIFI_WS_PORT);
+        mdnsStarted = true;
+      }
+      if (!otaStarted) {
+        // Flash the orange comms LED during an OTA update so it's obvious a
+        // network flash is in progress.
+        ArduinoOTA.onStart([]() { setLed(LED_ORANGE, true); });
+        ArduinoOTA.onEnd([]() { setLed(LED_ORANGE, false); });
+        ArduinoOTA.onError([](ota_error_t) { setLed(LED_ORANGE, false); });
+        ArduinoOTA.begin();
+        otaStarted = true;
+      }
+      JsonDocument res;
+      res["status"] = "wifi";
+      res["ip"] = wifiIp;
+      String line;
+      serializeJson(res, line);
+      transportSend(line.c_str());
+    }
+    return;
+  }
+  if (wifiConnected) {
+    wifiConnected = false;
+    wifiIp[0] = '\0';
+  }
+  if (millis() - lastWifiReconnectMs > WIFI_RECONNECT_MS) {
+    lastWifiReconnectMs = millis();
+    WiFi.disconnect();
+    WiFi.begin(wifiSsid, wifiPassword);
+  }
+}
+
+// WebSocket client events. On connect we mirror the boot handshake so the web
+// app's connect flow (wait for "ready" → protocol check → mechanical test)
+// works identically over USB and Wi-Fi.
+void onWsEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t length) {
+  switch (type) {
+    case WStype_CONNECTED:
+      wsClientConnected = true;
+      webSocket.sendTXT(num, "{\"status\":\"ready\",\"proto\":2}");
+      break;
+    case WStype_TEXT:
+      if (payload != nullptr && length > 0) {
+        handleCommand((char*)payload);  // same JSON protocol as serial
+      }
+      break;
+    case WStype_DISCONNECTED:
+      wsClientConnected = false;
+      break;
+    default:
+      break;
+  }
+}
+#else
+// Boards without Wi-Fi: every line goes only to USB serial.
+void transportSend(const char* line) {
+  Serial.println(line);
+}
+#endif
+
+// ─── Request/response correlation. A command may carry an optional numeric "id";
 // every reply to that command then echoes it, so the web app can match
 // responses to requests even while the firmware emits asynchronous messages
 // (e.g. the jam alert) in between. Messages that are NOT replies to a command
@@ -237,20 +393,22 @@ bool g_hasCmdId = false;
 
 void replyJson(JsonDocument& res) {
   if (g_hasCmdId) res["id"] = g_cmdId;
-  serializeJson(res, Serial);
-  Serial.println();
+  String line;
+  serializeJson(res, line);
+  transportSend(line.c_str());
 }
 
 void replyLiteral(const char* json) {
   if (!g_hasCmdId) {
-    Serial.println(json);
+    transportSend(json);
     return;
   }
   JsonDocument res;
   deserializeJson(res, json);
   res["id"] = g_cmdId;
-  serializeJson(res, Serial);
-  Serial.println();
+  String line;
+  serializeJson(res, line);
+  transportSend(line.c_str());
 }
 
 int getChannel(int module, int servoOffset) {
@@ -298,8 +456,9 @@ void checkModuleJams() {
       JsonDocument res;
       res["error"] = "jam";
       res["module"] = m;
-      serializeJson(res, Serial);  // async — deliberately no command id
-      Serial.println();
+      String line;
+      serializeJson(res, line);
+      transportSend(line.c_str());  // async — deliberately no command id
     }
   }
 }
@@ -358,8 +517,9 @@ void beginOp(OpKind kind, unsigned long budgetMs) {
 // ping could have arrived mid-operation).
 void replyOpJson(JsonDocument& res) {
   if (op.hasReplyId) res["id"] = op.replyId;
-  serializeJson(res, Serial);
-  Serial.println();
+  String line;
+  serializeJson(res, line);
+  transportSend(line.c_str());
 }
 
 void finishOpOkRouted() {
@@ -691,7 +851,7 @@ void handleCommand(const char* json) {
   JsonDocument doc;
   if (deserializeJson(doc, json)) {
     setLed(LED_ORANGE, true);  // bad JSON = software/comms fault
-    Serial.println("{\"error\":\"invalid JSON\"}");
+    transportSend("{\"error\":\"invalid JSON\"}");
     return;
   }
   setLed(LED_ORANGE, false);  // a valid command means comms recovered
@@ -716,6 +876,68 @@ void handleCommand(const char* json) {
     replyLiteral("{\"status\":\"ok\"}");
     return;
   }
+
+#if defined(ARDUINO_ARCH_ESP32)
+  // {"wifi":{"ssid":"...","password":"..."}} — store credentials (EEPROM)
+  // and join the network in the background. Safe while the machine runs.
+  if (!doc["wifi"].isNull()) {
+    JsonObject w = doc["wifi"].as<JsonObject>();
+    if (w.isNull()) {
+      replyLiteral("{\"error\":\"wifi must be an object\"}");
+      return;
+    }
+    const char* ssid = w["ssid"] | "";
+    const char* password = w["password"] | "";
+    if (strlen(ssid) == 0 || strlen(ssid) > 32) {
+      replyLiteral("{\"error\":\"ssid must be 1-32 characters\"}");
+      return;
+    }
+    if (strlen(password) > 63) {
+      replyLiteral("{\"error\":\"password must be at most 63 characters\"}");
+      return;
+    }
+    strncpy(wifiSsid, ssid, sizeof(wifiSsid) - 1);
+    wifiSsid[sizeof(wifiSsid) - 1] = '\0';
+    strncpy(wifiPassword, password, sizeof(wifiPassword) - 1);
+    wifiPassword[sizeof(wifiPassword) - 1] = '\0';
+    saveWifi();
+    connectWifi();
+    JsonDocument res;
+    res["status"] = "ok";
+    JsonObject wf = res["wifi"].to<JsonObject>();
+    wf["saved"] = true;
+    wf["ssid"] = wifiSsid;
+    replyJson(res);
+    return;
+  }
+
+  // {"getWifi": true} — saved network + current connection state
+  if (doc["getWifi"].is<bool>() && doc["getWifi"].as<bool>()) {
+    JsonDocument res;
+    res["status"] = "ok";
+    JsonObject wf = res["wifi"].to<JsonObject>();
+    wf["ssid"] = wifiSsid;
+    wf["connected"] = wifiConnected;
+    if (wifiConnected) wf["ip"] = wifiIp;
+    wf["hostname"] = WIFI_HOSTNAME;
+    wf["wsPort"] = WIFI_WS_PORT;
+    replyJson(res);
+    return;
+  }
+
+  // {"wifiForget": true} — erase credentials and disconnect from the network
+  if (doc["wifiForget"].is<bool>() && doc["wifiForget"].as<bool>()) {
+    wifiSsid[0] = '\0';
+    wifiPassword[0] = '\0';
+    wifiEnabled = false;
+    wifiConnected = false;
+    wifiIp[0] = '\0';
+    saveWifi();
+    WiFi.disconnect(true);
+    replyLiteral("{\"status\":\"ok\"}");
+    return;
+  }
+#endif
 
   // While an operation is running, most commands would fight the machine (a
   // servo move mid-route physically yanks a servo). Diagnostics that don't
@@ -1005,6 +1227,32 @@ void setup() {
   BOARD_EEPROM_BEGIN();  // no-op where EEPROM is hardware; begin() on flash-emulated boards
   loadCalibration();     // restore tuned config before any servo moves
 
+#if defined(ARDUINO_ARCH_ESP32)
+  // Wi-Fi + OTA (ESP32 only): join the configured network, then answer
+  // WebSocket commands and accept Arduino IDE OTA updates over Wi-Fi. If no
+  // credentials are saved (or the network is unreachable), the board just
+  // keeps working over USB — Wi-Fi is strictly additive. The WebSocket server
+  // is always started (it has no network to serve until Wi-Fi connects), so
+  // credentials saved after boot work too; mDNS + OTA start lazily on the
+  // first successful connection in checkWifi().
+  loadWifi();
+  webSocket.begin();
+  webSocket.onEvent(onWsEvent);
+  if (wifiSsid[0] != '\0') {
+    connectWifi();
+    unsigned long connectStart = millis();
+    while (WiFi.status() != WL_CONNECTED && millis() - connectStart < WIFI_CONNECT_TIMEOUT_MS) {
+      delay(100);
+    }
+    if (WiFi.status() == WL_CONNECTED) {
+      wifiConnected = true;
+      String ip = WiFi.localIP().toString();
+      strncpy(wifiIp, ip.c_str(), sizeof(wifiIp) - 1);
+      wifiIp[sizeof(wifiIp) - 1] = '\0';
+    }
+  }
+#endif
+
   // IR sensors: active LOW (internal pull-up, sensor pulls LOW when card present)
   pinMode(IR_PIN_MODULE1, INPUT_PULLUP);
   pinMode(IR_PIN_MODULE2, INPUT_PULLUP);
@@ -1022,7 +1270,7 @@ void setup() {
   delay(10);
   setAllNeutral();
   for (int led = LED_SCAN; led <= LED_ORANGE; led++) setLed(led, false);
-  Serial.println("{\"status\":\"ready\",\"proto\":2}");
+  transportSend("{\"status\":\"ready\",\"proto\":2}");
 
   // Report cards already resting at a module gate on boot (e.g. power loss
   // mid-run) so the operator can clear the device before the first feed.
@@ -1031,8 +1279,9 @@ void setup() {
       JsonDocument res;
       res["error"] = "recovered";
       res["module"] = m;
-      serializeJson(res, Serial);
-      Serial.println();
+      String line;
+      serializeJson(res, line);
+      transportSend(line.c_str());
     }
   }
 }
@@ -1053,9 +1302,18 @@ void loop() {
     } else {
       inputBufferLen = 0;  // oversized line — discard
       setLed(LED_ORANGE, true);
-      Serial.println("{\"error\":\"line too long\"}");
+      transportSend("{\"error\":\"line too long\"}");
     }
   }
 
   runMachine();
+
+#if defined(ARDUINO_ARCH_ESP32)
+  // Wi-Fi housekeeping: process WebSocket frames, keep OTA alive, reconnect.
+  if (wifiEnabled) {
+    webSocket.loop();
+    if (otaStarted) ArduinoOTA.handle();
+    checkWifi();
+  }
+#endif
 }

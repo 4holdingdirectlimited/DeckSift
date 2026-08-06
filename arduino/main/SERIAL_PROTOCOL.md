@@ -2,7 +2,20 @@
 
 The firmware communicates over USB serial at **9600 baud**, one JSON object per line. The web app uses the Web Serial API; anything can talk to it (Serial Monitor, scripts, etc.).
 
+On ESP32-S3 boards the same protocol is also served over a **WebSocket on port 81** when Wi-Fi is configured (see [Wi-Fi / WebSocket transport](#wi-fi--websocket-transport-esp32-s3-only) below) — both transports speak the same JSON, so the web app can drive the machine over USB or Wi-Fi interchangeably.
+
 **Frame format:** newline- (`\n` or `\r`) terminated JSON. Lines longer than 256 characters are discarded.
+
+## Wi-Fi / WebSocket transport (ESP32-S3 only)
+
+The ESP32 firmware build can join your LAN and serve the identical JSON protocol over a WebSocket:
+
+- **Configure once:** send `{"wifi":{"ssid":"…","password":"…"}}` (usually over USB on first setup). The credentials are stored in EEPROM and the board joins the network on every boot.
+- **Address:** the board registers mDNS as `decksift-board.local` and listens for WebSockets on **port 81** — `ws://decksift-board.local:81` (use the IP if mDNS isn't available). Change `WIFI_HOSTNAME` in the sketch per machine for multi-rig setups.
+- **Handshake:** when a WebSocket client connects, the firmware sends the same `{"status":"ready","proto":2}` boot line it sends on USB reset, so the web app's connect flow (ready → protocol check → mechanical test) is identical on both transports.
+- **Replies:** every line the firmware emits (command replies, boot ready, async jam alerts) goes to USB serial **and** is broadcast to any connected WebSocket client. Id-correlated replies keep the two transports unambiguous.
+- **OTA:** with Wi-Fi configured, the Arduino IDE can flash updates over the network (Sketch → Upload Using a Network Port). The orange comms LED is lit during an OTA update.
+- **Not breaking USB:** boards without Wi-Fi (Uno R4, Pico, STM32) compile without this section; the USB flow is unchanged.
 
 ## Command ids (request/response correlation)
 
@@ -314,6 +327,46 @@ Replies (booleans are `true` = card present):
 
 `ir[0..2]` = modules 1–3, `hopper` = cards remain in the feeder stack.
 
+### Configure Wi-Fi (ESP32-S3 only)
+
+```json
+{"wifi":{"ssid":"MyWiFi","password":"secret"}}
+```
+
+Stores the credentials in EEPROM and joins the network in the background
+(safe while the machine is running). `ssid` must be 1–32 chars, `password`
+≤ 63 chars. Replies:
+
+```json
+{"status":"ok","wifi":{"saved":true,"ssid":"MyWiFi"}}
+```
+
+Once connected the firmware announces its address over both transports:
+
+```json
+{"status":"wifi","ip":"192.168.1.50"}
+```
+
+### Read Wi-Fi status (ESP32-S3 only)
+
+```json
+{"getWifi": true}
+```
+
+Replies with the saved network and current connection state:
+
+```json
+{"status":"ok","wifi":{"ssid":"MyWiFi","connected":true,"ip":"192.168.1.50","hostname":"decksift-board","wsPort":81}}
+```
+
+### Forget Wi-Fi (ESP32-S3 only)
+
+```json
+{"wifiForget": true}
+```
+
+Erases the credentials from EEPROM and disconnects from the network. Replies `{"status":"ok"}`.
+
 ## Events & errors
 
 The firmware can emit these without a request:
@@ -326,10 +379,13 @@ The firmware can emit these without a request:
 | `{"error":"aborted: jam detected","aborted":true}` | An operation was aborted mid-way (jam reported or watchdog deadline) and all servos returned to neutral |
 | `{"error":"invalid JSON"}` | Line failed to parse |
 | `{"error":"unknown command"}` | Valid JSON but no recognized field |
-| `{"error":"bin must be 1-7"}` / `{"error":"module must be 1-3"}` / `{"error":"servo must be bottom, paddle, or pusher"}` / `{"error":"invalid position"}` / `{"error":"led must be 1 to 5"}` | Bad arguments |
+| `{"error":"bin must be 1-7"}` / `{"error":"module must be 1-3"}` / `{"error":"servo must be bottom, paddle, or pusher"}` / `{"error":"invalid position"}` / `{"error":"led must be 1 to 5"}` / `{"error":"ssid must be 1-32 characters"}` / `{"error":"password must be at most 63 characters"}` | Bad arguments |
 
 ## Notes
 
+- **Transports:** every line goes to USB serial; on ESP32 with Wi-Fi it is also
+  broadcast to WebSocket clients (port 81, mDNS `decksift-board.local`). See
+  the [Wi-Fi section](#wi-fi--websocket-transport-esp32-s3-only) at the top.
 - Motion waits are **interruptible** — the jam watch runs *during* operations
   (not just between them), and each command has a watchdog budget
   (`commandGuardStart`). On a jam or deadline the operation aborts to neutral

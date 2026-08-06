@@ -23,6 +23,7 @@ import { ModuleCalibrationGrid } from "@/features/calibration/components/module-
 import { RoutingTimingPanel } from "@/features/calibration/components/routing-timing-panel";
 import { ScanRegionCalibrationPanel } from "@/features/calibration/components/scan-region-calibration-panel";
 import { ServoDiagnostics } from "@/features/calibration/components/servo-diagnostics";
+import { WifiPanel } from "@/features/calibration/components/wifi-panel";
 import { IconClockHour3, IconDeviceUsb, IconDeviceUsbFilled } from "@tabler/icons-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
@@ -198,6 +199,8 @@ export default function CalibratePage() {
       </div>
 
       <ServoDiagnostics />
+
+      <WifiPanel />
 
       <LedControls
         ledStates={ledStates}

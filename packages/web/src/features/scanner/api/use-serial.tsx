@@ -30,7 +30,9 @@ const SerialContext = createContext<SerialContextValue | null>(null);
 export function SerialProvider({ children }: { children: React.ReactNode }) {
   const [isConnected, setIsConnected] = useState(false);
   const [isReady, setIsReady] = useState(false);
+  const [isWs, setIsWs] = useState(false);
   const portRef = useRef<SerialPort | null>(null);
+  const wsRef = useRef<WebSocket | null>(null);
   const readerRef = useRef<ReadableStreamDefaultReader<Uint8Array> | null>(
     null,
   );
@@ -44,6 +46,30 @@ export function SerialProvider({ children }: { children: React.ReactNode }) {
   const preTestHookRef = useRef<(() => Promise<void>) | null>(null);
 
   const decoderRef = useRef(new TextDecoder());
+
+  // A transport-agnostic message pipeline: parse one incoming JSON line and
+  // deliver it to subscribers + id-matched waiters. Used by both the USB serial
+  // reader and the WebSocket message handler, so the two transports are
+  // indistinguishable to every consumer of this provider.
+  const processLine = useCallback((trimmed: string) => {
+    try {
+      const parsed = JSON.parse(trimmed);
+      for (const listener of listenersRef.current) {
+        listener(parsed);
+      }
+
+      // Deliver the message to every waiter whose predicate matches
+      // (e.g. waiters expecting a specific command id), then drop it.
+      const remaining: PendingWaiter[] = [];
+      for (const waiter of pendingRef.current) {
+        if (waiter.match(parsed)) waiter.resolve(parsed, trimmed);
+        else remaining.push(waiter);
+      }
+      pendingRef.current = remaining;
+    } catch {
+      console.warn("[Serial] Non-JSON message:", trimmed);
+    }
+  }, []);
 
   const startReading = useCallback(
     async (
@@ -64,24 +90,7 @@ export function SerialProvider({ children }: { children: React.ReactNode }) {
               const trimmed = line.trim();
               if (!trimmed) continue;
               console.log("[Serial] ←", trimmed); // eslint-disable-line no-console -- hardware debug trace
-
-              try {
-                const parsed = JSON.parse(trimmed);
-                for (const listener of listenersRef.current) {
-                  listener(parsed);
-                }
-
-                // Deliver the message to every waiter whose predicate matches
-                // (e.g. waiters expecting a specific command id), then drop it.
-                const remaining: PendingWaiter[] = [];
-                for (const waiter of pendingRef.current) {
-                  if (waiter.match(parsed)) waiter.resolve(parsed, trimmed);
-                  else remaining.push(waiter);
-                }
-                pendingRef.current = remaining;
-              } catch {
-                console.warn("[Serial] Non-JSON message:", trimmed);
-              }
+              processLine(trimmed);
             }
           }
         }
@@ -94,7 +103,7 @@ export function SerialProvider({ children }: { children: React.ReactNode }) {
         onEnd?.();
       }
     },
-    [],
+    [processLine],
   );
 
   const waitForLine = useCallback((timeoutMs: number): Promise<string> => {
@@ -151,6 +160,19 @@ export function SerialProvider({ children }: { children: React.ReactNode }) {
   );
 
   const sendCommand = useCallback((data: string): Promise<boolean> => {
+    // Wi-Fi transport: WebSocket is full-duplex, so no write queue needed.
+    const ws = wsRef.current;
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      try {
+        console.log("[WiFi] →", data.trim()); // eslint-disable-line no-console -- hardware debug trace
+        ws.send(data);
+        return Promise.resolve(true);
+      } catch {
+        return Promise.resolve(false);
+      }
+    }
+
+    // USB transport: serial writes are serialized through a promise queue.
     if (!portRef.current || !writableRef.current) return Promise.resolve(false);
 
     return new Promise<boolean>((resolve) => {
@@ -187,14 +209,17 @@ export function SerialProvider({ children }: { children: React.ReactNode }) {
   const disconnect = useCallback(() => {
     const port = portRef.current;
     const reader = readerRef.current;
+    const ws = wsRef.current;
 
     // Clear refs and state immediately
     portRef.current = null;
     readerRef.current = null;
     writableRef.current = null;
+    wsRef.current = null;
     writeQueueRef.current = Promise.resolve();
     setIsConnected(false);
     setIsReady(false);
+    setIsWs(false);
 
     // Reject any outstanding waiters
     for (const waiter of pendingRef.current) {
@@ -214,6 +239,12 @@ export function SerialProvider({ children }: { children: React.ReactNode }) {
       if (port) {
         try {
           await port.close();
+        } catch {}
+      }
+
+      if (ws) {
+        try {
+          ws.close();
         } catch {}
       }
     })();
@@ -308,7 +339,7 @@ export function SerialProvider({ children }: { children: React.ReactNode }) {
     if (disconnectingRef.current) {
       await disconnectingRef.current;
     }
-    if (portRef.current) return;
+    if (portRef.current || wsRef.current) return;
 
     let port: SerialPort;
     try {
@@ -320,6 +351,100 @@ export function SerialProvider({ children }: { children: React.ReactNode }) {
 
     await openPort(port);
   }, [openPort]);
+
+  // Connect over Wi-Fi: the board (ESP32 with saved credentials) serves the
+  // same id-correlated JSON protocol over a WebSocket on port 81. The firmware
+  // mirrors the boot handshake on connect, so the post-connect flow below is
+  // identical to the USB path.
+  const connectWs = useCallback(
+    async (url: string): Promise<boolean> => {
+      if (disconnectingRef.current) {
+        await disconnectingRef.current;
+      }
+      if (portRef.current || wsRef.current) return false;
+
+      let ws: WebSocket;
+      try {
+        ws = new WebSocket(url);
+      } catch {
+        return false;
+      }
+      wsRef.current = ws;
+      setIsConnected(true);
+      setIsWs(true);
+
+      ws.onmessage = (event) => {
+        const text = typeof event.data === "string" ? event.data : "";
+        const lines = text.split("\n");
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed) continue;
+          console.log("[WiFi] ←", trimmed); // eslint-disable-line no-console -- hardware debug trace
+          processLine(trimmed);
+        }
+      };
+      ws.onclose = () => {
+        if (wsRef.current === ws) {
+          console.warn("[WiFi] Connection closed");
+          disconnect();
+        }
+      };
+
+      const opened = await new Promise<boolean>((resolve) => {
+        if (ws.readyState === WebSocket.OPEN) {
+          resolve(true);
+          return;
+        }
+        ws.onopen = () => resolve(true);
+        ws.onerror = () => resolve(false);
+      });
+      if (!opened) {
+        disconnect();
+        return false;
+      }
+
+      // Same handshake as the USB path: consume the boot "ready" line, check
+      // the protocol version, then run the mechanical test.
+      (async () => {
+        const bootLine = await waitForLine(5000);
+        if (!portRef.current && !wsRef.current) return;
+        if (bootLine) {
+          try {
+            const boot: unknown = JSON.parse(bootLine);
+            if (isRecord(boot) && boot.proto !== EXPECTED_PROTO_VERSION) {
+              toast.warning("Firmware version mismatch", {
+                description: `Board reports protocol ${String(boot.proto)}; this app expects ${EXPECTED_PROTO_VERSION}. Flash the matching main.ino.`,
+              });
+            }
+          } catch {
+            // Non-JSON boot output — nothing to verify, continue
+          }
+        }
+        if (preTestHookRef.current) {
+          await preTestHookRef.current();
+        }
+        if (!portRef.current && !wsRef.current) return;
+        toast.info("Testing device…");
+        const ok = await sendTest();
+        if (!portRef.current && !wsRef.current) return;
+        if (ok) {
+          toast.success("Device ready (Wi-Fi)");
+        } else {
+          toast.error("Device test failed", {
+            description: "Connected but got no response. Check the board is powered and on the same network.",
+          });
+          void reportSerialEvent({
+            command: "test",
+            sent: true,
+            response: null,
+          });
+        }
+      })();
+
+      return true;
+    },
+    [disconnect, processLine, waitForLine, sendTest],
+  );
 
   // Detect physical USB unplug
   useEffect(() => {
@@ -385,7 +510,10 @@ export function SerialProvider({ children }: { children: React.ReactNode }) {
 
   const sendBin = useCallback(
     async (binNumber: number): Promise<unknown | null> => {
-      if (!portRef.current || !writableRef.current) return null;
+      const ws = wsRef.current;
+      const transportOpen = Boolean(portRef.current && writableRef.current) ||
+        (ws !== null && ws.readyState === WebSocket.OPEN);
+      if (!transportOpen) return null;
 
       // The firmware executes commands serially, so a second route request
       // arriving while one is in flight must wait rather than be dropped -
@@ -423,7 +551,10 @@ export function SerialProvider({ children }: { children: React.ReactNode }) {
       timeoutMs = 5000,
       retries = 0,
     ): Promise<unknown | null> => {
-      if (!portRef.current || !writableRef.current) return null;
+      const ws = wsRef.current;
+      const transportOpen = Boolean(portRef.current && writableRef.current) ||
+        (ws !== null && ws.readyState === WebSocket.OPEN);
+      if (!transportOpen) return null;
 
       // Bounded retry with linear backoff for idempotent commands only (e.g.
       // clearDevice). Callers must NOT request retries for commands that have
@@ -491,7 +622,9 @@ export function SerialProvider({ children }: { children: React.ReactNode }) {
       value={{
         isConnected,
         isReady,
+        isWs,
         connect,
+        connectWs,
         disconnect,
         sendBin,
         sendTest,

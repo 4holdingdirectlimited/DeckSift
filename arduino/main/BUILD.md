@@ -66,6 +66,12 @@ Quantities match the firmware exactly — 3 modules × 3 servos, 1 feeder, 4 IR 
 
 Everything hangs off one I²C bus (PCA9685) and four digital input pins (IR sensors). The PCA9685's logic side runs off the Arduino's 5 V; its `V+` servo rail must come from the external supply, and **that supply's ground must be tied back to the Arduino's ground** — a floating servo ground is the most common reason a freshly wired unit won't move.
 
+> **ESP32-S3 (DeckSift's primary controller):** the tables below show the Uno
+> R4 reference wiring. For the ESP32-S3-DevKitC-1, see
+> **[`WIRING_S3.md`](WIRING_S3.md)** — pin-by-pin header layout, 3.3 V logic
+> rules, and the exact GPIO numbers (`board-config.h` defaults). The logic
+> supply on the S3 is **3.3 V** (never 5 V into a GPIO).
+
 ### I²C bus
 
 | PCA9685 pin | Arduino Uno R4 Minima |
