@@ -78,9 +78,16 @@ export function ScannedCardsProvider({
     return () => clearInterval(id);
   }, []);
   const scanRatePerMin = useMemo(
-    () =>
-      scanTimesRef.current.filter((t) => t >= Date.now() - 60_000).length,
-    // Recompute when a scan lands or the window slides.
+    () => {
+      // Intentional triggers, not values read by the computation: the ref-based
+      // 60 s window must recompute when a scan lands (lastScanAt) or the 5 s
+      // tick slides the window (nowTick). Referencing them here makes the
+      // trigger dependency explicit for react-hooks/exhaustive-deps.
+      void lastScanAt;
+      void nowTick;
+      return scanTimesRef.current.filter((t) => t >= Date.now() - 60_000)
+        .length;
+    },
     [lastScanAt, nowTick],
   );
 
@@ -791,7 +798,7 @@ export function ScannedCardsProvider({
 
       commitScan(record, routeBin?.binNumber);
     },
-    [commitScan, pauseForFullBin],
+    [commitScan, pauseForFullBin, recordScanTime],
   );
 
   const sendCatchAllBin = useCallback(() => {

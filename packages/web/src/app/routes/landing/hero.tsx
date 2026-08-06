@@ -91,7 +91,7 @@ export function LandingHero() {
   return (
     <section className="relative overflow-hidden">
       {/* Backdrop: subtle grid + soft radial glow */}
-      <div className="absolute inset-0 -z-10 bg-grid opacity-60 [mask-image:radial-gradient(ellipse_60%_60%_at_50%_0%,black,transparent)]" />
+      <div className="absolute inset-0 -z-10 bg-grid opacity-60 mask-[radial-gradient(ellipse_60%_60%_at_50%_0%,black,transparent)]" />
       <div className="absolute inset-0 -z-10 bg-[radial-gradient(ellipse_50%_45%_at_50%_-5%,color-mix(in_oklch,var(--primary)_14%,transparent),transparent)]" />
 
       <div className="mx-auto grid max-w-6xl items-center gap-12 px-4 pt-16 pb-14 md:grid-cols-2 md:pt-24">
@@ -188,7 +188,7 @@ export function LandingHero() {
                   </div>
                 )}
                 <div className="scan-beam" />
-                <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent p-2">
+                <div className="absolute inset-x-0 bottom-0 bg-linear-to-t from-black/70 to-transparent p-2">
                   <p className="truncate font-mono text-[10px] font-medium text-white">
                     {heroCard
                       ? `${getCardFaceName(heroCard)} · ${heroCard.set.toUpperCase()} #${heroCard.collector_number}`

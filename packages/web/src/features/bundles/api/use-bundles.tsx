@@ -190,7 +190,7 @@ export function BundlesProvider({ children }: { children: React.ReactNode }) {
         });
       }
     },
-    [refresh],
+    [refresh, refreshRuns],
   );
 
   const updateConfig = useCallback(
@@ -249,7 +249,7 @@ export function BundlesProvider({ children }: { children: React.ReactNode }) {
         });
       }
     },
-    [refresh],
+    [refresh, refreshRuns],
   );
 
   const abortRun = useCallback(
