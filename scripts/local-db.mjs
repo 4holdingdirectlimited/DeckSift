@@ -18,8 +18,17 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, writeFileSync, appendFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
+import { fileURLToPath } from "node:url";
 
-const POSTGRES_DIR = join("C:", "Mault Revised", ".local", "postgres");
+// Local state (postgres data, certs, backups) lives in .local/ NEXT TO the
+// repo (i.e. the folder containing the clone) — matches vite.config.ts's
+// cert lookup and this machine's existing install. Override the whole
+// location with DECKSIFT_LOCAL_DIR if you want it inside the repo instead.
+const REPO_PARENT = fileURLToPath(new URL("../../", import.meta.url));
+const LOCAL_DIR = process.env.DECKSIFT_LOCAL_DIR
+  ? join(process.env.DECKSIFT_LOCAL_DIR)
+  : join(REPO_PARENT, ".local");
+const POSTGRES_DIR = join(LOCAL_DIR, "postgres");
 const BIN_DIR = join(POSTGRES_DIR, "win32-x64", "bin");
 const DATA_DIR = join(POSTGRES_DIR, "data");
 const RUN_DIR = join(POSTGRES_DIR, "run");

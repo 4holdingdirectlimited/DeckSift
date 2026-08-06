@@ -79,7 +79,7 @@ scripts/      Local helpers: start-server.cmd, start-web.cmd, local-db.mjs, back
 
 ## Getting started
 
-**Prerequisites:** Windows (or Linux/macOS with adjustments), [pnpm 9](https://pnpm.io), Node 20+, and a portable PostgreSQL + pgvector install (see below). The browser must support the [Web Serial API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Serial_API) (Chrome/Edge) for hardware control.
+**Prerequisites:** Windows (or Linux/macOS with adjustments), [pnpm 9](https://pnpm.io), Node 20.6+ (the run scripts use `--env-file`), and a portable PostgreSQL + pgvector install (see below). The browser must support the [Web Serial API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Serial_API) (Chrome/Edge) for hardware control.
 
 ```bash
 pnpm install
@@ -95,14 +95,20 @@ curl -L -o postgres.zip \
   https://github.com/YukeonWayne/pg_pgvector_binary/releases/download/v18.4-pgvector0.8.3-win32-x64/postgres-18.4-pgvector-0.8.3-win32-x64.zip
 ```
 
-Extract it anywhere (e.g. `C:\Mault Revised\.local\postgres`), then initialize and start:
+Extract it to `<workspace>/.local/postgres` (the helper scripts look there —
+`<workspace>` is the folder *containing* your clone, e.g. `C:\Users\you`
+when you cloned to `C:\Users\you\decksift`; override with `DECKSIFT_LOCAL_DIR`
+if you'd rather keep local state inside the repo), then initialize and start:
 
 ```bash
-PGBIN="<extracted>/win32-x64/bin"
-"$PGBIN/initdb" -D "<extracted>/data" -U postgres -A trust -E UTF8 --locale=C
+PGBIN="<workspace>/.local/postgres/win32-x64/bin"
+"$PGBIN/initdb" -D "<workspace>/.local/postgres/data" -U postgres -A trust -E UTF8 --locale=C
 # Start detached (Windows):
-powershell -NoProfile -Command "Start-Process -FilePath '<extracted>\win32-x64\bin\postgres.exe' -ArgumentList '\"-D\" \"<extracted>\data\" \"-p\" \"5433\" \"-c\" \"listen_addresses=127.0.0.1\" \"-c\" \"shared_buffers=1GB\"' -WindowStyle Hidden"
+powershell -NoProfile -Command "Start-Process -FilePath '<workspace>\.local\postgres\win32-x64\bin\postgres.exe' -ArgumentList '\"-D\" \"<workspace>\.local\postgres\data\" \"-p\" \"5433\" \"-c\" \"listen_addresses=127.0.0.1\" \"-c\" \"shared_buffers=1GB\"' -WindowStyle Hidden"
 ```
+
+(`node scripts/local-db.mjs start` replaces the manual Start-Process line once
+Postgres is set up — it launches the server with the same settings.)
 
 Create the database and apply the local bootstrap (creates the pgvector extension, the RLS role, and the `auth_is_org_member()` function). Run it **before** `db:migrate` and **again after**:
 
@@ -140,9 +146,9 @@ node scripts/backup-db.mjs restore <file>  # restore (wipes current data)
 # One-time seed: games, default collection, bin set, default bundle config
 cd packages/server && npx tsx --env-file ../../.env scripts/seed-local.ts
 
-# Start the stack (two detached processes)
-powershell Start-Process -FilePath "C:\Mault Revised\mault\scripts\start-server.cmd" -WindowStyle Hidden
-powershell Start-Process -FilePath "C:\Mault Revised\mault\scripts\start-web.cmd" -WindowStyle Hidden
+# Start the stack (two detached processes) — from the repo root:
+powershell Start-Process -FilePath ".\scripts\start-server.cmd" -WindowStyle Hidden
+powershell Start-Process -FilePath ".\scripts\start-web.cmd" -WindowStyle Hidden
 ```
 
 Open **https://decksift.local:5173** (preferred) or **http://localhost:5173** — no login, it opens straight to the scanner.
@@ -167,8 +173,15 @@ In the web app, go to **Admin → Sync** and run the sync for each game you'll u
 
 ### 4. Flash the firmware + calibrate
 
-1. Open `arduino/main/main.ino` in the Arduino IDE, install **ArduinoJson** + **Adafruit PWM Servo Driver**, select **Arduino Uno R4 Minima**, and upload.
-2. Open **http://localhost:5173**, connect the Arduino via **Web Serial**, then calibrate at `/app/calibrate` (drag the scan region, tune servo positions) and run the hardware diagnostics to verify servos and the scan light.
+1. Flash `arduino/main/main.ino` — the **ESP32-S3 is the primary board**
+   (native-USB Web Serial, optional Wi-Fi/WebSocket/OTA). Libraries:
+   **ArduinoJson**, **Adafruit PWM Servo Driver**, and **WebSockets** (ESP32
+   build only). See `arduino/main/WIRING_S3.md` for the DevKitC-1 wiring and
+   `arduino/main/README.md` for the Tools-menu settings (Uno R4 / RP2040 /
+   STM32 equivalents in `arduino/main/CONTROLLERS.md`).
+2. Open **http://localhost:5173**, connect the board via **Web Serial**, then
+   calibrate at `/app/calibrate` (drag the scan region, tune servo positions)
+   and run the hardware diagnostics to verify servos and the scan light.
 3. Load cards, connect the camera (see [Webcam](#webcam)), and scan.
 
 **Full walkthrough, hardware BOM, wiring, and tuning:** see `custom/SETUP.md` (our local runbook) and `arduino/main/BUILD.md`.
@@ -224,7 +237,7 @@ The full bill of materials, wiring diagrams, and assembly instructions live in t
 - External 5 V PSU (4–10 A) into the PCA9685 `V+`, common ground with the controller (mandatory)
 - Enclosure and module parts are in `3d model/` (Fusion 360 source + printable `.3mf`)
 
-Upload `arduino/main/main.ino` (ArduinoJson + Adafruit PWM Servo Driver libraries). It communicates via JSON over USB serial (9600 baud): the web app sends `{"bin": N}` and the Arduino runs the routing sequence. Protocol details in `arduino/main/SERIAL_PROTOCOL.md`.
+Upload `arduino/main/main.ino` (libraries: ArduinoJson, Adafruit PWM Servo Driver, WebSockets for the ESP32 build). It communicates via JSON over USB serial (9600 baud): the web app sends `{"bin": N}` and the Arduino runs the routing sequence. Protocol details in `arduino/main/SERIAL_PROTOCOL.md`.
 
 ## Webcam
 

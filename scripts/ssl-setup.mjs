@@ -26,8 +26,16 @@ import { spawnSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
+import { fileURLToPath } from "node:url";
 
-const LOCAL = join("C:", "Mault Revised", ".local");
+// Local state lives in .local/ NEXT TO the repo (i.e. the folder containing
+// the clone) — matches vite.config.ts's cert lookup and this machine's
+// existing install. Override the whole location with DECKSIFT_LOCAL_DIR if
+// you want it inside the repo instead.
+const REPO_PARENT = fileURLToPath(new URL("../../", import.meta.url));
+const LOCAL = process.env.DECKSIFT_LOCAL_DIR
+  ? join(process.env.DECKSIFT_LOCAL_DIR)
+  : join(REPO_PARENT, ".local");
 const BIN_DIR = join(LOCAL, "bin");
 const CERT_DIR = join(LOCAL, "certs");
 const MKCERT_URL =

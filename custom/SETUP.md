@@ -35,10 +35,11 @@ node scripts/local-db.mjs status      # is it running?
 node scripts/local-db.mjs start|stop
 
 # API server (detached; output appends to server.log at the repo root)
-powershell Start-Process -FilePath "C:\Mault Revised\mault\scripts\start-server.cmd" -WindowStyle Hidden
+#   Run the next two lines from the repo root.
+powershell Start-Process -FilePath ".\scripts\start-server.cmd" -WindowStyle Hidden
 
 # Web UI (detached)
-powershell Start-Process -FilePath "C:\Mault Revised\mault\scripts\start-web.cmd" -WindowStyle Hidden
+powershell Start-Process -FilePath ".\scripts\start-web.cmd" -WindowStyle Hidden
 ```
 
 The API has a health check — `curl http://localhost:3001/api/health` returns
@@ -50,7 +51,7 @@ The database on this machine is already seeded. To re-create or repair the
 setup on a fresh install, run the seeder (idempotent, safe to re-run):
 
 ```powershell
-cd C:\Mault Revised\mault\packages\server
+cd packages\server
 npx tsx --env-file ..\..\.env scripts\seed-local.ts
 ```
 
@@ -143,8 +144,8 @@ maxCapacity = floor((binHeightMm / 0.3 mm average card thickness) × 0.9)
 When a bin hits its limit the app routes overflow to the catch-all bin and
 pauses auto-feed. The 10 % headroom keeps the top of a full stack clear of the
 mechanism above. The values live in `BIN_HEIGHTS_MM` / `CARD_THICKNESS_MM` in
-the shared package; `node scripts/apply-bin-capacities.ts` (from
-`packages/server`) re-applies them to the active bin set after a change.
+the shared package; `cd packages/server && npx tsx scripts/apply-bin-capacities.ts`
+re-applies them to the active bin set after a change.
 
 ## Sorting by value (e.g. "over $2 → reject bin")
 
