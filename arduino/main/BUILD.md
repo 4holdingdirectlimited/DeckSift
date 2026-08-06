@@ -7,6 +7,7 @@ Parts list and assembly instructions for the physical sorting unit: a hopper fee
 - **Calibration:** `/app/calibrate` in the web app
 - **Photo references:** the original interactive guide at [mault.xyz/build](https://mault.xyz/build) shows assembly photos for most steps (`/instructions/*.jpg` in the repo)
 - **Print files:** the printable parts are the 3MFs in `3d model/` — `card_sorter.3mf` (original design by dishwasher-detergent) and `card_sorter_decksift.3mf` (DeckSift's revised parts, print-optimized for faster, more efficient batches). Slice either in Bambu Studio/Cura; both are the same machine. See `custom/PLAN.md` for the planned Bambu quantity-kit plate layout.
+- **Shopping list:** print **`BOM.txt`** (this folder) and tick items as you buy them.
 
 ---
 

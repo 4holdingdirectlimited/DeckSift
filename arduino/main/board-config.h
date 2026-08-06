@@ -28,8 +28,12 @@
 // ESP32 / RP2040 emulate EEPROM in flash and require begin(size) first.
 #if defined(ARDUINO_ARCH_ESP32) || defined(ARDUINO_ARCH_RP2040)
   #define BOARD_EEPROM_BEGIN() EEPROM.begin(512)
+  // Flash-emulated EEPROM stages writes in RAM — commit() flushes to flash.
+  // Hardware-EEPROM boards (AVR/Renesas/STM32) persist immediately.
+  #define BOARD_EEPROM_COMMIT() EEPROM.commit()
 #else
   #define BOARD_EEPROM_BEGIN() ((void)0)
+  #define BOARD_EEPROM_COMMIT() ((void)0)
 #endif
 
 // ─── I2C pins (PCA9685) ──────────────────────────────────────────────────────

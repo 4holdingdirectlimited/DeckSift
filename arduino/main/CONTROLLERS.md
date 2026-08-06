@@ -9,14 +9,16 @@ connections than the 5 V Arduino.
 
 | Board | Compiles | Flashing docs | Wiring verified on hardware |
 | --- | --- | --- | --- |
-| **ESP32-S3** | ✅ (CI + local) | ✅ (`README.md` → ESP32-S3 settings) | ⚠️ NOT yet — design reviewed, board not commissioned |
+| **ESP32-S3** | ✅ (CI + local) | ✅ (`README.md` → ESP32-S3 settings) | ⚠️ Partially — flashed + protocol + EEPROM persistence verified on a CH343 dev board; full machine wiring not commissioned |
 | **Arduino Uno R4 Minima** | ✅ (CI + local) | ✅ | ✅ — the original reference build |
 | **RP2040 / Pico** | ✅ (local) | — | ❌ not wired/commissioned |
 | **STM32 (GenF4)** | ✅ (local) | — | ❌ not wired/commissioned |
 
-Until a board has been physically wired and a full calibration run completed,
-treat it as **experimental** — the sketch is portable, but the machine wiring
-has only been proven on the Uno R4.
+Until a board has been wired and a full calibration run completed, treat
+machines on it as **experimental** — the sketch is portable, but the machine
+wiring has only been proven on the Uno R4. The ESP32-S3 has been verified
+flashing + speaking the protocol + persisting calibration on a real dev
+board (see below).
 
 ## The one thing that matters most: logic levels
 
@@ -89,12 +91,18 @@ build_flags =
 
 ## Boot / serial notes
 
-- **ESP32-S3**: enable **USB CDC On Boot** (see `README.md`) so the browser's
-  Web Serial sees a native serial port. The firmware waits up to 5 s for the
-  USB serial to enumerate, then proceeds — a headless power-on won't hang.
+- **ESP32-S3 — two serial paths**, pick the one your board actually exposes:
+  - **USB-serial bridge (CH340/CH343/CP2102) — the common dev board**: keep
+    the Arduino IDE defaults (**USB CDC On Boot: Disabled**) so `Serial` maps
+    to UART0 through the bridge. Flash + Web Serial both use that port.
+    Verified on a CH343 dev board.
+  - **Native USB only** (no bridge chip): enable **USB CDC On Boot** so
+    `Serial` maps to the native USB port.
 - **RP2040 / STM32**: native USB CDC enumerates as a serial port — no extra
   settings. STM32 "USB on Boot" is enabled by default on most generic boards.
 - Uno R4: real EEPROM, no special settings.
+- The firmware waits up to 5 s for the USB serial to enumerate, then proceeds
+  — a headless power-on won't hang.
 
 ## Adding a new board
 

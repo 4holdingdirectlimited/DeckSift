@@ -5,7 +5,9 @@ This folder contains the firmware and build documentation for the **DeckSift TCG
 | File | Purpose |
 | --- | --- |
 | `main.ino` | The firmware — **one universal sketch** that runs on several boards (see below). |
-| `board-config.h` | Board abstraction: EEPROM init, I2C pins, interrupt attach, IR pin defaults. |
+| `board-config.h` | Board abstraction: EEPROM init/commit, I2C pins, interrupt attach, IR pin defaults. |
+| `BOM.txt` | **Printable shopping list** — every part, screw, and tool with quantities. |
+| `CONTROLLERS.md` | Per-board wiring, logic levels, power, and honest support status. |
 | `BUILD.md` | Complete build guide: bill of materials, wiring, assembly, first power-on, calibration. |
 | `SERIAL_PROTOCOL.md` | JSON command/response reference for talking to the firmware over USB serial. |
 
@@ -60,21 +62,27 @@ the board in the Arduino IDE / PlatformIO and flash:
 
 ### ESP32-S3 — recommended Tools menu settings
 
-These matter on real hardware (Web Serial needs a native USB serial port):
+Web Serial needs the board to expose a serial port the browser can see. The
+correct setting depends on which of the two USB paths your board has:
+
+| Board type | USB CDC On Boot | Upload Mode | Notes |
+| --- | --- | --- | --- |
+| **With a USB-serial bridge (CH340/CH343/CP2102) — the common dev board** | **Disabled (default)** | **UART0 / Hardware CDC (default)** | `Serial` maps to UART0 through the bridge; flash and Web Serial both use that port. This is what was verified on a CH343 dev board. |
+| **Native USB only** (no bridge chip) | **Enabled** | UART0 / Hardware CDC | `Serial` maps to the native USB port. |
+
+Other recommended settings for both:
 
 | Setting | Value | Why |
 | --- | --- | --- |
 | Board | **ESP32S3 Dev Module** | Generic S3 board |
-| USB CDC On Boot | **Enabled** | Exposes the native USB serial port the browser's Web Serial connects to |
-| USB Firmware On Boot | **Disabled** (default) | |
-| Upload Mode | **UART0 / Hardware CDC** | UART0 needs a USB-serial chip (e.g. the dev kit's CP2102); Hardware CDC flashes over the native port |
-| Flash Size | **16 MB** (if your module has it) or **8 MB** | Match your module's flash — larger = more room for OTA later |
+| Flash Size | **16 MB** (if your module has it) or **8 MB** | Match your module — larger = room for OTA later |
 | Partition Scheme | **Default 4 MB with spiffs** (fine) | The sketch is ~350 KB; any scheme works |
 | CPU Frequency | **240 MHz** | Default |
 | I2C pins | GPIO **8** (SDA) / **9** (SCL) | PCA9685 bus — override with `-DI2C_SDA=n` if your wiring differs |
 | Upload Speed | **921600** | Faster flashing |
 
-Equivalent `platformio.ini` (PlatformIO):
+Equivalent `platformio.ini` (PlatformIO — drop the `USB_CDC_ON_BOOT` flag on
+a bridge-equipped board, keep it for native-USB-only boards):
 
 ```ini
 [env:esp32s3]
@@ -82,7 +90,7 @@ platform = espressif32
 board = esp32-s3-devkitc-1
 framework = arduino
 build_flags =
-  -DARDUINO_USB_CDC_ON_BOOT=1
+  ; -DARDUINO_USB_CDC_ON_BOOT=1   # only for native-USB-only boards
   -DI2C_SDA=8
   -DI2C_SCL=9
 monitor_speed = 9600

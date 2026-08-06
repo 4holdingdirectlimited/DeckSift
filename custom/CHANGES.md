@@ -2632,6 +2632,55 @@ DeckSift Discord when the invite belongs to the original project).
 
 ---
 
+## Item 58 — ESP32-S3 hardware validation + EEPROM commit fix + printable BOM (firmware + docs)
+
+**Status:** implemented, committed (this commit).
+
+### Why
+
+First real-hardware test of the ESP32-S3 port (a CH343-bridged dev board —
+the most common type). It exposed a genuine portability bug that the Uno
+R4's hardware EEPROM had been masking.
+
+### What changed
+
+- **EEPROM commit() fix (firmware)** — on ESP32/RP2040 the EEPROM library
+  stages writes in RAM; without `EEPROM.commit()` nothing reaches flash.
+  Added `BOARD_EEPROM_COMMIT()` (no-op on hardware-EEPROM boards) and call
+  it in `saveCalibration()`. Verified on hardware: calibration now survives
+  a board reset on the ESP32-S3 (was silently lost before).
+- **ESP32-S3 hardware validation** — flashed and exercised on a real
+  CH343-bridged dev board (COM3): boot `{"status":"ready","proto":2}`,
+  id-correlated replies, readIR, led, get/setTimingConfig, saveConfig,
+  resetConfig, and EEPROM persistence across reset — all pass. Board left
+  at factory defaults.
+- **Docs updated for the two ESP32-S3 serial paths** — the common
+  bridge-equipped dev board should keep the Arduino defaults (USB CDC On
+  Boot: Disabled → `Serial` = UART0 through the bridge; verified). Native
+  USB-only boards need CDC On Boot Enabled. Corrected the earlier
+  unconditional "enable USB CDC" advice in `README.md`, `CONTROLLERS.md`,
+  and the `platformio.ini` snippet.
+- **Printable BOM** — new `arduino/main/BOM.txt`: plain-text shopping list
+  (controller, electronics, sensing, power, printed parts, fasteners,
+  tools) with checkboxes; includes the three optional status LEDs (green/
+  red/orange, ch1-3) that weren't in the markdown BOM. Linked from
+  `BUILD.md` + listed in the arduino README.
+
+### Behavior notes
+
+- `saveCalibration()` now costs one flash write on ESP32/RP2040 (commit());
+  calibration saves are infrequent, so endurance is a non-issue.
+- ESP32-S3 support status: firmware + protocol + persistence verified;
+  full machine wiring still to be commissioned (see CONTROLLERS.md).
+
+### How to revert
+
+1. Remove the `BOARD_EEPROM_COMMIT()` call + macro (persistence breaks on
+   ESP32 again — don't).
+2. Delete `BOM.txt` and its links if unwanted.
+
+---
+
 *Template for future entries:*
 
 ## Item N — <short title> (area)

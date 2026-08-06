@@ -215,6 +215,7 @@ void saveCalibration() {
   data.feeder = feederConfig;
   data.timing = timingConfig;
   EEPROM.put(CONFIG_EEPROM_ADDR, data);
+  BOARD_EEPROM_COMMIT();  // flash-emulated EEPROM (ESP32/RP2040) needs commit()
 }
 
 // Routing delays are now runtime-tunable (timingConfig above, persisted with
