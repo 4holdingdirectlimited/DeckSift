@@ -1,15 +1,19 @@
 # Upstream pull requests — status & ready-to-paste descriptions
 
 Three firmware PRs back to the original project
-(`dishwasher-detergent/mault`). Branches are pushed, compile-verified, and
-ready to open. All three use **LED 1 (ch0) as the scan light** — no
-spare-channel LED 5 wiring — so the LED story is consistent across PRs.
+(`dishwasher-detergent/mault`). All are **open, rebased onto the latest
+upstream master, and MERGEABLE**. All three use **LED 1 (ch0) as the scan
+light** — no spare-channel LED 5 wiring — and upstream's own master has since
+moved to LED 1 too, so the PRs align with the maintainer's direction.
 
-Open each with:
-`https://github.com/dishwasher-detergent/mault/compare/master...4holdingdirectlimited:<branch>`
-then "Create pull request".
+| PR | Branch | Status |
+| --- | --- | --- |
+| [#4](https://github.com/dishwasher-detergent/mault/pull/4) | `pr/fw-robustness` | OPEN · MERGEABLE |
+| [#5](https://github.com/dishwasher-detergent/mault/pull/5) | `pr/fw-config` | OPEN · MERGEABLE · title updated to "scan light (LED 1)" |
+| [#6](https://github.com/dishwasher-detergent/mault/pull/6) | `pr/fw-state-machine` | OPEN · MERGEABLE |
 
-Alternatively, with `gh` authenticated: `gh pr create --repo dishwasher-detergent/mault --head 4holdingdirectlimited:<branch> --base master --title "..." --body-file custom/upstream-pr-1.md` (or open all three with the commands at the bottom).
+Each branch was rebased onto `upstream/master` (61c67e7) with our exact
+firmware content, so each PR's diff is a clean reviewable change set.
 
 ---
 
