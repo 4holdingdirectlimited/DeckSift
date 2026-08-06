@@ -5,6 +5,11 @@
 // board, so the same source flashes to an Uno R4 Minima, an ESP32-S3 (the
 // DeckSift primary), an RP2040/Pico, an STM32, or a classic Uno/Nano.
 //
+// Compiling is NOT the same as being supported: the Uno R4 is the only
+// board whose wiring has been physically commissioned. Read
+// arduino/main/CONTROLLERS.md for per-board wiring (logic levels, pins,
+// power) before building a non-Uno machine.
+//
 // Differences handled here:
 //   - EEPROM persistence (real EEPROM vs flash emulation)
 //   - I2C pins for the PCA9685

@@ -32,11 +32,16 @@ the board in the Arduino IDE / PlatformIO and flash:
 
 | Board | Status | Notes |
 | --- | --- | --- |
-| **ESP32-S3** | ✅ Primary (CI + locally verified) | Plenty of flash/RAM; native-USB Web Serial works in Chrome/Edge. Default PCA9685 I2C on GPIO 8 (SDA) / 9 (SCL) — override with `-DI2C_SDA=n` if your wiring differs. |
-| **Arduino Uno R4 Minima** | ✅ Supported (CI + locally verified) | The original controller; real EEPROM. |
-| **RP2040 / Pico** | ✅ Verified (compiled 3 % flash) | Flash-emulated EEPROM (`EEPROM.begin`), any GPIO for IR. |
-| **STM32** | ✅ Verified (compiled, GenF4) | Flash-emulated EEPROM; define the IR pins for your board if needed. |
+| **ESP32-S3** | ✅ Compiles + flashing docs; ⚠️ wiring not yet commissioned | DeckSift's primary going forward. Flashing settings below; wiring/power/logic-level guide in `CONTROLLERS.md`. |
+| **Arduino Uno R4 Minima** | ✅ Reference build (compiles + wired) | The original controller; real EEPROM. |
+| **RP2040 / Pico** | ✅ Compiles (3 % flash); ❌ not commissioned | Flash-emulated EEPROM (`EEPROM.begin`). See `CONTROLLERS.md` before wiring. |
+| **STM32** | ✅ Compiles (GenF4); ❌ not commissioned | Flash-emulated EEPROM. See `CONTROLLERS.md` before wiring. |
 | **Classic Uno/Nano** | ⚠️ Too little RAM | Sketch needs ~6 KB SRAM; the ATmega328P has 2 KB. |
+
+> ⚠️ **Compiling ≠ supported.** Until a board has been wired and fully
+> calibrated, treat it as experimental — the sketch is portable, but the
+> machine wiring is only proven on the Uno R4. Read **`CONTROLLERS.md`**
+> (logic levels, pins, power) before building a non-Uno machine.
 
 ## Flashing the firmware
 

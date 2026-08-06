@@ -78,10 +78,17 @@ export function BuildWiring() {
       </h2>
       <p className="mt-3 max-w-2xl text-sm/relaxed text-muted-foreground">
         Everything hangs off one I²C bus (PCA9685) and four digital input pins
-        (IR sensors). The PCA9685's logic side runs off the Arduino's 5V; its{" "}
-        <Pin>V+</Pin> servo rail must come from the external supply, and that
-        supply's ground must be tied back to the Arduino's ground - a floating
-        servo ground is the most common reason a freshly wired unit won't move.
+        (IR sensors). The PCA9685's logic side runs off the board's supply
+        (3.3 V on an ESP32-S3, 5 V on the Uno R4); its <Pin>V+</Pin> servo
+        rail must come from the external supply, and that supply's ground must
+        be tied back to the board's ground - a floating servo ground is the
+        most common reason a freshly wired unit won't move.
+      </p>
+      <p className="mt-2 max-w-2xl text-sm/relaxed text-amber-600 dark:text-amber-400">
+        Building on an ESP32-S3 / RP2040 / STM32? Those run at 3.3 V logic and
+        their GPIOs are NOT 5 V tolerant - use 3.3 V IR sensor modules (or a
+        divider), and power the PCA9685 VCC from 3.3 V. Full per-board wiring,
+        pins, and power in <code>arduino/main/CONTROLLERS.md</code>.
       </p>
 
       <div className="mt-8 flex flex-col gap-8">

@@ -48,7 +48,7 @@ Original hardware build: https://makerworld.com/en/models/3066180-tcg-card-sorti
 | Server | Hono + Drizzle ORM + PostgreSQL (pgvector) | Hono 4 · Drizzle 0.45 · Postgres 18.4 |
 | Vision | SigLIP base (patch16-512) via `@huggingface/transformers`, onnxruntime-node (CPU q8 or DirectML GPU fp32) | transformers 3.8 |
 | Auth | **none** — fully-local single-user build, no logins | — |
-| Hardware | Arduino Uno R4 Minima via Web Serial (9600 baud), PCA9685 servo driver, IR sensors, scan-light LED | — |
+| Hardware | ESP32-S3 (primary) or Arduino Uno R4 Minima via Web Serial (9600 baud) — the same sketch also builds for RP2040/Pico + STM32 (see `arduino/main/CONTROLLERS.md`), PCA9685 servo driver, IR sensors, scan-light LED | — |
 | Monorepo | Turborepo + pnpm workspaces | pnpm 9 |
 
 **Security posture (2026-08):** `pnpm audit` reports **0 critical** and **0
@@ -217,11 +217,11 @@ Everything else — scanning, sorting, calibration, the database, and vision —
 
 The full bill of materials, wiring diagrams, and assembly instructions live in the app at `/build`. In short:
 
-- Arduino Uno R4 Minima, driving a PCA9685 servo controller over I2C
+- **Controller** — ESP32-S3 (DeckSift's primary: native-USB Web Serial, more headroom) or the original Arduino Uno R4 Minima, both driving a PCA9685 servo controller over I2C. The same firmware builds for RP2040/Pico and STM32 — see [arduino/main/CONTROLLERS.md](arduino/main/CONTROLLERS.md) for per-board wiring, logic levels, and support status.
 - 9 positional SG90 servos (3 per module: trapdoor, paddle gate, pusher) plus 1 continuous-rotation SG90 for the feeder
 - IR sensors for card-feed detection (hopper + one per module)
-- **Scan light** (LED 5, PCA9685 channel 14) — a small angled LED the firmware toggles for two-frame holo detection
-- External 5 V PSU (4–10 A) into the PCA9685 `V+`, common ground with the Arduino (mandatory)
+- **Scan light** (LED 1, PCA9685 channel 0) — a small angled LED the firmware toggles for two-frame holo detection
+- External 5 V PSU (4–10 A) into the PCA9685 `V+`, common ground with the controller (mandatory)
 - Enclosure and module parts are in `3d model/` (Fusion 360 source + printable `.3mf`)
 
 Upload `arduino/main/main.ino` (ArduinoJson + Adafruit PWM Servo Driver libraries). It communicates via JSON over USB serial (9600 baud): the web app sends `{"bin": N}` and the Arduino runs the routing sequence. Protocol details in `arduino/main/SERIAL_PROTOCOL.md`.
