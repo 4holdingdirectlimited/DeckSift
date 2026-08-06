@@ -36,6 +36,11 @@ belong next to the sketch.
 - `upstream` — a read-only remote pointing at `dishwasher-detergent/mault`;
   `git fetch upstream` then `git merge upstream/master` (or selective
   file-level integration — see `CHANGES.md` Item 50) brings in anything new.
+- **Keeping the fork banner tidy:** when GitHub shows "N commits behind"
+  (upstream advanced), record their history without adopting their code:
+  `git merge -s ours upstream/master -m "Sync with upstream history"` then
+  push. Behind drops to 0; none of upstream's file content changes (their
+  useful changes are still integrated selectively per `CHANGES.md`).
 - There is no `master` branch in this repo — the pre-rename work line that
   briefly lived there was fully superseded by `custom` and deleted.
 
