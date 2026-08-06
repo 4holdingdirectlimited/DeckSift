@@ -2,7 +2,7 @@
 
 A TCG card scanner and physical sorter that runs **entirely on your own machine** — no hosted services, no logins, no cloud. A webcam identifies cards via on-device AI embeddings, a rule engine decides which bin each card belongs in, and an Arduino-driven feeder and servo mechanism physically routes the card there.
 
-DeckSift is a fork of [MAULT](https://mault.xyz) by [dishwasher-detergent](https://github.com/dishwasher-detergent/mault). The v1 machine's Fusion 3D design, build photos, and firmware base come from the original project (MIT — full credit in [Credits](#credits)); DeckSift adds a fully-local, single-user software stack and firmware hardening. A revised Bambu Lab print kit (print-optimized part organization) is planned — see `custom/PLAN.md`.
+DeckSift is a fork of [MAULT](https://mault.xyz) by [dishwasher-detergent](https://github.com/dishwasher-detergent/mault). The v1 machine's Fusion 3D design, build photos, and firmware base come from the original project (MIT — full credit in [Credits](#credits)); DeckSift adds a fully-local, single-user software stack, firmware hardening, and a revised print kit (`card_sorter_decksift.3mf` — same parts, organized for faster, more efficient printing).
 
 **License:** free for personal use. Commercial use (selling DeckSift or building it into a product) requires a license from 4holdingdirectlimited — see [LICENSE](LICENSE). The MAULT-derived portions remain MIT. See [Credits](#credits).
 
@@ -262,9 +262,9 @@ commercial by license).
 **DeckSift work — 4holdingdirectlimited.** Everything else: the fully-local
 software stack (no hosted services, no logins, on-device vision, local card
 storage), the firmware modifications (command-id correlation, jam detection,
-watchdog timing, EEPROM calibration, scan light), and the revised Bambu Lab
-print kit (planned — print-optimized part organization, see `custom/PLAN.md`).
-The full change log is in `custom/CHANGES.md`.
+watchdog timing, EEPROM calibration, scan light), and the revised print kit
+(`3d model/card_sorter_decksift.3mf` — same machine, organized for faster,
+more efficient printing). The full change log is in `custom/CHANGES.md`.
 
 **License.** DeckSift is free for personal use; commercial use is by license from
 4holdingdirectlimited (see [LICENSE](LICENSE)). The MAULT-derived portions

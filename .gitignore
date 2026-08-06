@@ -44,3 +44,6 @@ digimon-cat.json
 
 # server log (start-server.cmd appends here)
 server.log
+
+# desktop staging folder (not part of the project)
+files for review/

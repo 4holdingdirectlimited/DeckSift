@@ -32,10 +32,10 @@ the board in the Arduino IDE / PlatformIO and flash:
 
 | Board | Status | Notes |
 | --- | --- | --- |
-| **ESP32-S3** | ✅ Primary (CI-tested) | Plenty of flash/RAM; native-USB Web Serial works in Chrome/Edge. Default PCA9685 I2C on GPIO 8 (SDA) / 9 (SCL) — override with `-DI2C_SDA=n` if your wiring differs. |
-| **Arduino Uno R4 Minima** | ✅ Supported (CI-tested) | The original controller; real EEPROM. |
-| **RP2040 / Pico** | ✅ Compiles | Flash-emulated EEPROM (`EEPROM.begin`), any GPIO for IR. |
-| **STM32** | ✅ Compiles | Flash-emulated EEPROM; define the IR pins for your board if needed. |
+| **ESP32-S3** | ✅ Primary (CI + locally verified) | Plenty of flash/RAM; native-USB Web Serial works in Chrome/Edge. Default PCA9685 I2C on GPIO 8 (SDA) / 9 (SCL) — override with `-DI2C_SDA=n` if your wiring differs. |
+| **Arduino Uno R4 Minima** | ✅ Supported (CI + locally verified) | The original controller; real EEPROM. |
+| **RP2040 / Pico** | ✅ Verified (compiled 3 % flash) | Flash-emulated EEPROM (`EEPROM.begin`), any GPIO for IR. |
+| **STM32** | ✅ Verified (compiled, GenF4) | Flash-emulated EEPROM; define the IR pins for your board if needed. |
 | **Classic Uno/Nano** | ⚠️ Too little RAM | Sketch needs ~6 KB SRAM; the ATmega328P has 2 KB. |
 
 ## Flashing the firmware
@@ -44,15 +44,47 @@ the board in the Arduino IDE / PlatformIO and flash:
 2. Install the required libraries via **Library Manager**:
    - **ArduinoJson**
    - **Adafruit PWM Servo Driver** (also pulls in Adafruit BusIO)
-3. Select board **Arduino Uno R4 Minima** and the correct COM port.
-4. Open and upload `main.ino` from this folder.
-5. Open the **Serial Monitor at 9600 baud** — after the board resets you should see:
+3. Select your board + COM port (settings below), open and upload `main.ino`.
+4. Open the **Serial Monitor at 9600 baud** — after the board resets you should see:
 
    ```json
    {"status":"ready"}
    ```
 
-6. In the web app, connect the Arduino via **Web Serial**, then calibrate at `/app/calibrate` (see `BUILD.md` → Calibrate from the app).
+5. In the web app, connect the controller via **Web Serial**, then calibrate at `/app/calibrate` (see `BUILD.md` → Calibrate from the app).
+
+### ESP32-S3 — recommended Tools menu settings
+
+These matter on real hardware (Web Serial needs a native USB serial port):
+
+| Setting | Value | Why |
+| --- | --- | --- |
+| Board | **ESP32S3 Dev Module** | Generic S3 board |
+| USB CDC On Boot | **Enabled** | Exposes the native USB serial port the browser's Web Serial connects to |
+| USB Firmware On Boot | **Disabled** (default) | |
+| Upload Mode | **UART0 / Hardware CDC** | UART0 needs a USB-serial chip (e.g. the dev kit's CP2102); Hardware CDC flashes over the native port |
+| Flash Size | **16 MB** (if your module has it) or **8 MB** | Match your module's flash — larger = more room for OTA later |
+| Partition Scheme | **Default 4 MB with spiffs** (fine) | The sketch is ~350 KB; any scheme works |
+| CPU Frequency | **240 MHz** | Default |
+| I2C pins | GPIO **8** (SDA) / **9** (SCL) | PCA9685 bus — override with `-DI2C_SDA=n` if your wiring differs |
+| Upload Speed | **921600** | Faster flashing |
+
+Equivalent `platformio.ini` (PlatformIO):
+
+```ini
+[env:esp32s3]
+platform = espressif32
+board = esp32-s3-devkitc-1
+framework = arduino
+build_flags =
+  -DARDUINO_USB_CDC_ON_BOOT=1
+  -DI2C_SDA=8
+  -DI2C_SCL=9
+monitor_speed = 9600
+```
+
+> Uno R4 / RP2040 / STM32 need no special settings — Web Serial works via
+their built-in USB serial.
 
 ## Quick test after first power-on
 

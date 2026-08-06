@@ -2547,6 +2547,47 @@ Wi-Fi later for the multi-machine plan).
 
 ---
 
+## Item 56 — Board-verification, ESP32-S3 flash docs, print-kit framing, review-folder cleanup (firmware + docs + repo)
+
+**Status:** implemented, committed (this commit).
+
+### Why
+
+Close the loose ends from the universal-firmware batch: prove the RP2040 and
+STM32 build paths actually compile (not just exist), give real ESP32-S3
+flashing settings, correct the print-kit story (the 3MFs in the repo ARE the
+print files), and move the desktop review folder out of the repository.
+
+### What changed
+
+- **RP2040 + STM32 compile verification** — installed the `rp2040:rp2040` and
+  `STMicroelectronics:stm32` cores and compiled `main.ino` for both:
+  Pico = 77,372 B (3 %), STM32 GenF4 = 48,784 B (4 %). All four supported
+  targets now verified locally (plus CI covers R4 + ESP32-S3). The board
+  table in the arduino README reflects verified status.
+- **ESP32-S3 flashing settings** — Tools-menu table (USB CDC On Boot:
+  **Enabled** — required for Web Serial; flash size, upload mode, partition
+  scheme, CPU freq, I2C pins 8/9, upload speed) plus an equivalent
+  `platformio.ini` snippet, added to the arduino README.
+- **Print-kit framing corrected** — the printable parts are the 3MFs already
+  in the repo: `3d model/card_sorter.3mf` (original) and
+  `3d model/card_sorter_decksift.3mf` (DeckSift revision). README + BUILD.md
+  updated to say the print files are included (no longer "planned"); the
+  Bambu quantity-kit plate layout stays on the PLAN.md checklist.
+- **Review folder out of the repo** — `files for review/` is a desktop
+  staging folder (not part of the project); removed from git and gitignored.
+  Its upstream reference copies now live in `C:\Mault Revised\files for
+  review\` on the machine only.
+
+### How to revert
+
+1. Restore `files for review/` if it is ever wanted in the repo (and drop the
+   .gitignore line).
+2. Revert the README/BUILD print-file wording if the kit story changes.
+3. Remove the ESP32-S3 settings table + platformio.ini snippet if unneeded.
+
+---
+
 *Template for future entries:*
 
 ## Item N — <short title> (area)
