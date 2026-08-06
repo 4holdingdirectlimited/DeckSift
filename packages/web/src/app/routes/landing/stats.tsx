@@ -1,8 +1,8 @@
 const STATS = [
   { value: "7", label: "sort bins per run" },
-  { value: "4", label: "rarities tracked automatically" },
+  { value: "5", label: "TCGs with built-in data" },
   { value: "∞", label: "collections, no limit" },
-  { value: "<1s", label: "to recognize a card" },
+  { value: "~1s", label: "to identify a card, on-device" },
 ];
 
 export function LandingStats() {

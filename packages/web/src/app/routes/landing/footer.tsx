@@ -68,7 +68,7 @@ export function LandingFooter() {
         </a>{" "}
         by dishwasher-detergent. The v1 machine's Fusion 3D design and build
         photos are his work (MIT); the DeckSift software stack, firmware
-        changes, and revised Bambu Lab print kit are ours. Personal use of
+        changes, and revised print files are ours. Personal use of
         DeckSift is free; commercial use is by license from 4holdingdirectlimited.
       </p>
     </footer>

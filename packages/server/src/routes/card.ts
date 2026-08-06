@@ -30,6 +30,33 @@ const router = new Hono<AppEnv>();
 // GET /cards/library — browse the synced card library with filters
 // (game, name search, rarity, set code). Art and rarity come from the stored
 // card_data jsonb; image_uris are proxied URLs the client resolves locally.
+// GET /cards/random — a few random cards from the synced library (landing-page
+// hero art). Pure local DB reads — no external API calls from the browser; art
+// URLs go through the local image proxy + disk cache like the rest of the app.
+router.get("/random", requireAuth, async (c) => {
+  const limit = Math.min(12, Math.max(1, Number(c.req.query("limit") ?? 6)));
+  try {
+    const rows = await db
+      .select({
+        scryfallId: cardImageVectors.scryfallId,
+        cardData: cardImageVectors.cardData,
+      })
+      .from(cardImageVectors)
+      .orderBy(sql`random()`)
+      .limit(limit);
+    return c.json({
+      success: true,
+      data: rows.map((r) => ({
+        id: r.scryfallId,
+        ...(r.cardData as Record<string, unknown>),
+      })),
+    });
+  } catch (err) {
+    console.error(err);
+    return c.json({ success: false, message: "Database error." }, 500);
+  }
+});
+
 // GET /cards/price-status — when the collection's card data (incl. prices)
 // was last refreshed, and how many cards it covers. Prices live in the synced
 // card_data jsonb; they refresh automatically as cards re-hydrate on scan and

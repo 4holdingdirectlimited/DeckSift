@@ -1,5 +1,6 @@
 import { buttonVariants } from "@/components/ui/button";
 import { DeckSiftMark } from "@/components/decksift-mark";
+import { getRandomCards } from "@/features/cards/api/card";
 import { cn } from "@/lib/utils";
 import { listCardGameKeys, listSyncSources } from "@/lib/api/admin";
 import type { PlayingCard } from "@magic-vault/shared";
@@ -39,18 +40,15 @@ function useRandomCards(count: number) {
 
   useEffect(() => {
     let cancelled = false;
-
-    Promise.all(
-      Array.from({ length: count }, () =>
-        fetch("https://api.scryfall.com/cards/random")
-          .then((res) => (res.ok ? (res.json() as Promise<PlayingCard>) : null))
-          .catch(() => null),
-      ),
-    ).then((results) => {
-      if (cancelled) return;
-      setCards(results.filter((card): card is PlayingCard => !!card));
-    });
-
+    // Local, not Scryfall: pulls random cards from the synced on-disk library
+    // (art served through the local image proxy + disk cache).
+    getRandomCards(count)
+      .then((results) => {
+        if (!cancelled) setCards(results);
+      })
+      .catch(() => {
+        // library empty / server still booting — hero shows its skeleton
+      });
     return () => {
       cancelled = true;
     };
@@ -206,7 +204,7 @@ export function LandingHero() {
                   <IconScan size={12} />
                   Route
                 </span>
-                <span className="text-foreground">Sol Ring → Bin 4 · 0.42s</span>
+                <span className="text-foreground">Sol Ring → Bin 4 · 1.2s</span>
               </div>
               <div className="mt-2 grid grid-cols-7 gap-1">
                 {[1, 2, 3, 4, 5, 6, 7].map((bin) => (

@@ -1,8 +1,15 @@
-import type { Result, SearchCardMatch } from "@magic-vault/shared";
+import type { PlayingCard, Result, SearchCardMatch } from "@magic-vault/shared";
 import { apiGet, apiPost, apiPostForm } from "@/lib/api/client";
 
 export async function searchByImage(formData: FormData): Promise<Result<SearchCardMatch[] | null>> {
   return apiPostForm<Result<SearchCardMatch[] | null>>("/api/cards", formData);
+}
+
+export async function getRandomCards(limit = 6): Promise<PlayingCard[]> {
+  const result = await apiGet<{ success: boolean; data: PlayingCard[] }>(
+    `/api/cards/random?limit=${limit}`,
+  );
+  return result.data ?? [];
 }
 
 export interface PriceStatus {

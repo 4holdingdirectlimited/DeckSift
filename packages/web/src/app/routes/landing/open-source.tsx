@@ -92,8 +92,8 @@ export function LandingOpenSource() {
             </p>
             <p className="mt-1 text-xs/relaxed text-muted-foreground">
               Print the card sorter yourself. The Fusion 360 design is the
-              original MAULT file; DeckSift adds a revised Bambu Lab quantity
-              kit with print-optimized part organization.
+              original MAULT file; DeckSift's revised print file
+              (card_sorter_decksift.3mf) sits alongside it in the repo.
             </p>
           </div>
           <div className="mt-2 flex flex-wrap gap-2">
@@ -122,8 +122,8 @@ export function LandingOpenSource() {
           <div>
             <p className="font-heading text-sm font-semibold">Community</p>
             <p className="mt-1 text-xs/relaxed text-muted-foreground">
-              Join the Discord to share builds, get help, and talk to other
-              people running their own sorter.
+              Talk to other sorter builders in the community Discord from the
+              original MAULT project.
             </p>
           </div>
           <a
@@ -136,7 +136,7 @@ export function LandingOpenSource() {
             )}
           >
             <IconBrandDiscord size={16} />
-            Join the Discord
+            Join the community
           </a>
         </div>
       </div>

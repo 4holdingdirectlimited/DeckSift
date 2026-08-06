@@ -2588,6 +2588,50 @@ print files), and move the desktop review folder out of the repository.
 
 ---
 
+## Item 57 — Landing-page accuracy pass (web + server)
+
+**Status:** implemented, committed (this commit).
+
+### Why
+
+The landing page claimed "fully local & offline" while the hero itself fetched
+decorative cards straight from `api.scryfall.com` on every load, and a few
+stats/claims had drifted from reality ("<1s", "4 rarities", a still-"planned"
+Bambu kit that is actually the repo's 3MFs, and a community card implying a
+DeckSift Discord when the invite belongs to the original project).
+
+### What changed
+
+- **Hero art is now local** — new `GET /api/cards/random?limit=N` serves
+  random cards from the synced library (pure DB read, `ORDER BY random()`),
+  and the hero uses it. No browser → external API calls anywhere in the web
+  app (verified by grep); art URLs go through the existing local image proxy
+  + disk cache like the rest of the app.
+- **Hero mockup** — the "Sol Ring → Bin 4 · 0.42s" console line now shows
+  a realistic route time (1.2 s).
+- **Stats** — "4 rarities" → "5 TCGs with built-in data" (accurate across
+  games); "<1s to recognize" → "~1s to identify a card, on-device"
+  (settle + embed ≈ 0.9 s measured; the full scan-to-bin cycle is ~3 s).
+- **Print kit wording** — open-source card + footer now say the revised
+  print file (`card_sorter_decksift.3mf`) is in the repo, not a "planned
+  Bambu Lab quantity kit".
+- **Community card** — now attributes the Discord to the original MAULT
+  project's community instead of implying a DeckSift server.
+
+### Behavior notes
+
+- The `/random` endpoint is `ORDER BY random()` over the synced table — a
+  full scan of ~96k rows per landing load (tens of ms locally); fine for a
+  page that loads once.
+
+### How to revert
+
+1. Remove `/random` from `card.ts` + `getRandomCards` in the web client;
+   restore the Scryfall fetch in `hero.tsx`.
+2. Revert the stats/mockup/print-kit/community wording.
+
+---
+
 *Template for future entries:*
 
 ## Item N — <short title> (area)
