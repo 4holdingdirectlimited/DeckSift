@@ -2803,17 +2803,16 @@ until now it only ever talked over USB. The user asked for three things:
 
 ---
 
-## Item 60 — Four new TCGs: Lorcana, One Piece, Star Wars: Unlimited, Union Arena (server + docs)
+## Item 60 — Six new TCGs: Lorcana, One Piece, Star Wars: Unlimited, Union Arena, Flesh and Blood, Pokémon TCG Pocket (server + docs)
 
 **Status:** implemented, uncommitted.
 
 ### Why
 
-The project's goal is 20 functioning, currently-popular TCGs. Lorcana, One
-Piece, Star Wars: Unlimited and Union Arena are four of the highest-ranked
-games that were still missing, and each turned out to have a verifiable data
-source (a hosted API for Lorcana; community GitHub datasets with official
-artwork for the other three).
+The project's goal is 20 functioning, currently-popular TCGs. These six are
+among the highest-ranked games that were still missing, and each turned out to
+have a verifiable data source (a hosted API for Lorcana; community GitHub
+datasets with official artwork for the other five).
 
 ### What changed
 
@@ -2833,16 +2832,29 @@ artwork for the other three).
     `rules_text.en`) via accessors. Note: 53 MB catalog.
   - `unionArenaConfig` — union-arena-tcg-data `cards/en/general.json`, 541
     cards, official Bandai art; rarity codes kept as-is (c/u/r/sr/ur + ★).
+  - `fleshAndBloodConfig` — the-fab-cube `json/english/card-flattened.json`,
+    16,264 printings; every row ships an `image_url` on Google Storage/S3/
+    CloudFront CDNs (fabdb.net itself unreachable, its CDNs are not); rarity
+    codes mapped (C→common, M→majestic, L→legendary, …).
+  - `pocketConfig` — flibustier `dist/cards.json`, 3,761 cards; images resolve
+    from the companion pokemon-tcg-exchange repo
+    (`cards-by-set/{set}/{number}.webp`, 1:1 — verified no duplicate
+    set+number pairs).
 - **Registration** — `resolve.ts` (search) + `sync-job.ts` (sync sources —
-  show up in Admin → Sync automatically) for all four; `routes/card.ts`
+  show up in Admin → Sync automatically) for all six; `routes/card.ts`
   image-proxy allowlist adds `api.lorcana.ravensburger.com`,
   `en.onepiece-cardgame.com`, `cdn.starwarsunlimited.com`,
-  `www.unionarena-tcg.com`; `seed-local.ts` game rows with per-game rarity
-  field definitions.
+  `www.unionarena-tcg.com`, `storage.googleapis.com`, two S3/CloudFront hosts
+  and `raw.githubusercontent.com` (Pocket); `seed-local.ts` game rows with
+  per-game rarity field definitions.
 - **Verified end-to-end** — adapter search + sync catalog fetch tested against
   each live source; server restarted and `GET /api/admin/sync/sources` lists
-  all four. Syncs are one click each in Admin (Lorcana ≈ 30 min GPU, One
-  Piece ≈ 45 min, SWU ≈ 90 min, UA ≈ 5 min).
+  all six. Syncs are one click each in Admin.
+- **New tracking doc** — `custom/TCGS_ROADMAP.md`: live status per game, the
+  deep-research findings for every remaining candidate, and the concrete
+  action to take per blocker (e.g. reach the official DBS/Vanguard/Weiss sites
+  from another network to get their card-DB URLs; request the One Piece API
+  key for prices).
 - **Re-verified 2026-08** — every other candidate on the top-20 list still
   lacks an accessible image-bearing data source (see `custom/TCGS.md` for the
   per-game blocker table): One Piece's REST API is key-gated (request
@@ -2863,13 +2875,59 @@ artwork for the other three).
 
 ### How to revert
 
-1. Remove the four configs from `generic-configs.ts`, their entries in
+1. Remove the six configs from `generic-configs.ts`, their entries in
    `resolve.ts` and `sync-job.ts`, the allowlist entries in `routes/card.ts`,
    and the seed rows in `seed-local.ts`.
 2. Delete the `lorcana`/`onepiece`/`starwars`/`unionarena` game rows in the DB
    (or re-seed after removal).
 3. Revert the `searchFilter`/`nameOf` additions in `generic.ts` (only the
    static-file sources use them).
+
+---
+
+## Item 61 — Misprint / error-card detection from match confidence (shared + web)
+
+**Status:** implemented, uncommitted.
+
+### Why
+
+Misprint and error cards (shifted colors, extra features, wrong-frame
+printings) are often worth more than their normal versions — but nothing
+surfaced them. A misprint still *matches* its catalog card (the embedding
+wins), yet its art differs enough that the match confidence sits noticeably
+below a clean scan. The feature makes that signal visible.
+
+### What changed
+
+- **`packages/shared/src/constants/scryfall.constant.ts`** — a misprint
+  detection band on cosine distance: `MISPRINT_MIN_DISTANCE` (0.07, below =
+  clean) to `MISPRINT_MAX_DISTANCE` (0.2, above = low-confidence/review
+  territory), plus `matchConfidence(distance)` (clamped 0–100 %) and
+  `isPossibleMisprint(distance)` helpers. Band is tunable after real-world
+  scans.
+- **`scanned-card-item.tsx`** — the match-confidence badge gains an amber
+  alert state (warning icon + "Possible misprint/error card — art differs from
+  the catalog; verify before pricing" tooltip) when a card lands in the band.
+- **`card-detail-panel.tsx`** — the sticky header now shows the match % and
+  an amber "possible misprint/error card" note for flagged scans.
+
+### Behavior notes
+
+- The flag is informational: flagged cards still sort normally (they're above
+  the review threshold by construction — the 82 % review flow handles
+  genuinely low-confidence matches separately).
+- Per-game review/auto-reject thresholds are unchanged; the misprint band
+  fills the gap *above* the review floor where a mismatched-but-accepted card
+  previously sailed through silently.
+- Thresholds are distance-based guesses calibrated on the embedding space;
+  tune `MISPRINT_MIN/MAX_DISTANCE` once you have real misprint scans.
+
+### How to revert
+
+1. Remove the header note from `card-detail-panel.tsx` and the amber badge
+   state from `scanned-card-item.tsx`.
+2. Delete the two constants + helpers from `scryfall.constant.ts` (nothing
+   else uses them).
 
 ---
 

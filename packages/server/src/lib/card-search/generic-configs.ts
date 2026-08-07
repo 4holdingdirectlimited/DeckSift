@@ -407,3 +407,132 @@ export const unionArenaConfig: GenericGameConfig = {
     return card;
   },
 };
+
+/** FAB rarity codes → names (see rarity.json in the fab-cube repo). */
+const FAB_RARITIES: Record<string, string> = {
+  C: "common",
+  R: "rare",
+  S: "super rare",
+  M: "majestic",
+  L: "legendary",
+  F: "fabled",
+  T: "token",
+  B: "basic",
+  V: "marvel",
+  P: "promo",
+};
+
+// ─── Flesh and Blood (the-fab-cube/flesh-and-blood-cards) ─────────────────────
+// Verified 2026-08: json/english/card-flattened.json is already one row per
+// printing (16,260 printings) and every row carries a live image_url (Google
+// Storage / S3 / CloudFront — fabdb.net itself is unreachable from this
+// machine, but the dataset's image CDNs are not). Rarity codes map to names
+// via FAB_RARITIES. 39 MB catalog → client-side search, cached 15 min.
+
+export const fleshAndBloodConfig: GenericGameConfig = {
+  key: "fab",
+  label: "Flesh and Blood (fab-cube dataset)",
+  searchUrl:
+    "https://raw.githubusercontent.com/the-fab-cube/flesh-and-blood-cards/main/json/english/card-flattened.json",
+  bulkUrl:
+    "https://raw.githubusercontent.com/the-fab-cube/flesh-and-blood-cards/main/json/english/card-flattened.json",
+  searchFilter: (cards, query) => {
+    const needle = query.trim().toLowerCase();
+    if (!needle) return cards;
+    return cards.filter((c) =>
+      (str(c, "name") ?? "").toLowerCase().includes(needle),
+    );
+  },
+  cardId: (raw) => str(raw, "unique_id") ?? "",
+  nameOf: (raw) => str(raw, "name") ?? "",
+  setCode: (raw) => str(raw, "set_id") ?? "",
+  imageUrl: (raw) => str(raw, "image_url"),
+  toCard: (raw): PlayingCard => {
+    const id = str(raw, "unique_id") ?? "";
+    const card = baseCard();
+    card.id = id;
+    card.oracle_id = id;
+    card.name = str(raw, "name") ?? "";
+    card.type_line = str(raw, "type_text") ?? "";
+    card.oracle_text = str(raw, "functional_text_plain") || undefined;
+    card.cmc = num(raw, "cost") ?? 0;
+    card.power =
+      num(raw, "power") != null ? String(num(raw, "power")) : undefined;
+    card.toughness =
+      num(raw, "defense") != null ? String(num(raw, "defense")) : undefined;
+    const color = str(raw, "color");
+    card.colors = color && color !== "-" ? [color] : [];
+    card.color_identity = card.colors;
+    card.keywords = Array.isArray(raw.card_keywords)
+      ? raw.card_keywords.map(String)
+      : [];
+    card.image_uris = imageUris(str(raw, "image_url"));
+    card.rarity = FAB_RARITIES[str(raw, "rarity") ?? ""] ?? "";
+    card.set = str(raw, "set_id") ?? "";
+    card.set_id = card.set;
+    card.collector_number = str(raw, "id") ?? "";
+    card.artist = Array.isArray(raw.artists)
+      ? (raw.artists as string[])[0] ?? ""
+      : "";
+    return card;
+  },
+};
+
+/** Pokémon TCG Pocket rarity codes → names (see rarities.json). */
+const POCKET_RARITIES: Record<string, string> = {
+  C: "common",
+  U: "uncommon",
+  R: "rare",
+  RR: "double rare",
+  AR: "art rare",
+  SR: "super rare",
+  SAR: "special art rare",
+  IM: "immersive rare",
+  UR: "crown rare",
+  S: "shiny",
+  SSR: "shiny super rare",
+};
+
+// ─── Pokémon TCG Pocket (flibustier/pokemon-tcg-pocket-database) ──────────────
+// Verified 2026-08: dist/cards.json has 3,761 cards; each (set, number) pair is
+// unique, so images resolve 1:1 from the companion pokemon-tcg-exchange repo at
+// public/images/cards-by-set/{set}/{number}.webp. Rarity codes map via
+// POCKET_RARITIES. Static file → client-side search.
+
+export const pocketConfig: GenericGameConfig = {
+  key: "pokemonpocket",
+  label: "Pokémon TCG Pocket (flibustier database)",
+  searchUrl:
+    "https://raw.githubusercontent.com/flibustier/pokemon-tcg-pocket-database/main/dist/cards.json",
+  bulkUrl:
+    "https://raw.githubusercontent.com/flibustier/pokemon-tcg-pocket-database/main/dist/cards.json",
+  searchFilter: (cards, query) => {
+    const needle = query.trim().toLowerCase();
+    if (!needle) return cards;
+    return cards.filter((c) =>
+      (str(c, "name") ?? "").toLowerCase().includes(needle),
+    );
+  },
+  cardId: (raw) => `${str(raw, "set") ?? ""}-${num(raw, "number") ?? ""}`,
+  nameOf: (raw) => str(raw, "name") ?? "",
+  setCode: (raw) => str(raw, "set") ?? "",
+  imageUrl: (raw) =>
+    `https://raw.githubusercontent.com/flibustier/pokemon-tcg-exchange/main/public/images/cards-by-set/${str(raw, "set") ?? ""}/${num(raw, "number") ?? ""}.webp`,
+  toCard: (raw): PlayingCard => {
+    const id = `${str(raw, "set") ?? ""}-${num(raw, "number") ?? ""}`;
+    const card = baseCard();
+    card.id = id;
+    card.oracle_id = id;
+    card.name = str(raw, "name") ?? "";
+    card.type_line = "Pokémon";
+    card.cmc = 0;
+    card.image_uris = imageUris(
+      `https://raw.githubusercontent.com/flibustier/pokemon-tcg-exchange/main/public/images/cards-by-set/${str(raw, "set") ?? ""}/${num(raw, "number") ?? ""}.webp`,
+    );
+    card.rarity = POCKET_RARITIES[str(raw, "rarity") ?? ""] ?? "";
+    card.set = str(raw, "set") ?? "";
+    card.set_id = card.set;
+    card.collector_number = id;
+    return card;
+  },
+};

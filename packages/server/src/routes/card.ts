@@ -394,6 +394,11 @@ const ALLOWED_IMAGE_HOSTS = new Set([
   "en.onepiece-cardgame.com",
   "cdn.starwarsunlimited.com",
   "www.unionarena-tcg.com",
+  "storage.googleapis.com",
+  "legendstory-production-s3-public.s3.amazonaws.com",
+  "d2wlb52bya4y8z.cloudfront.net",
+  "dhhim4ltzu1pj.cloudfront.net",
+  "raw.githubusercontent.com",
 ]);
 
 router.get("/image-proxy", async (c) => {

@@ -160,6 +160,43 @@ const GAMES: GameSeed[] = [
       "sr★★★",
     ],
   },
+  {
+    key: "fab",
+    name: "Flesh and Blood",
+    dataSourceUrl:
+      "https://raw.githubusercontent.com/the-fab-cube/flesh-and-blood-cards/main/json/english/card-flattened.json",
+    rarities: [
+      "common",
+      "rare",
+      "super rare",
+      "majestic",
+      "legendary",
+      "fabled",
+      "token",
+      "basic",
+      "marvel",
+      "promo",
+    ],
+  },
+  {
+    key: "pokemonpocket",
+    name: "Pokémon TCG Pocket",
+    dataSourceUrl:
+      "https://raw.githubusercontent.com/flibustier/pokemon-tcg-pocket-database/main/dist/cards.json",
+    rarities: [
+      "common",
+      "uncommon",
+      "rare",
+      "double rare",
+      "art rare",
+      "super rare",
+      "special art rare",
+      "immersive rare",
+      "crown rare",
+      "shiny",
+      "shiny super rare",
+    ],
+  },
 ];
 
 /** FIELD_DEFINITIONS with the rarity options replaced for the given game. */

@@ -28,6 +28,8 @@ differences live entirely in the **card data adapters**.
 | **One Piece** | punk-records dataset (`english/index/cards_by_id.json`) | ✅ generic config, added 2026-08 (4,672 cards, official Bandai CDN art) — sync pending |
 | **Star Wars: Unlimited** | swu-cards-json dataset (`data/v1/all-cards.json`) | ✅ generic config, added 2026-08 (9,058 cards, official FFG CDN art — note: 53 MB catalog) — sync pending |
 | **Union Arena** | union-arena-tcg-data (`cards/en/general.json`) | ✅ generic config, added 2026-08 (541 cards, official Bandai CDN art; rarity codes stay as codes — c/u/r/sr/ur + ★ variants) — sync pending |
+| **Flesh and Blood** | the-fab-cube dataset (`json/english/card-flattened.json`) | ✅ generic config, added 2026-08 (16,264 printings, image_url fields on Google Storage/S3/CloudFront — fabdb.net unreachable but its CDNs are not) — sync pending |
+| **Pokémon TCG Pocket** | flibustier database + exchange images | ✅ generic config, added 2026-08 (3,761 cards, images resolve from the companion pokemon-tcg-exchange repo) — sync pending |
 
 All five games' `card_data` is populated, so library browsing, detail
 hydration, and bundle/chase CSV exports work fully offline.
@@ -102,10 +104,13 @@ Notes:
 
 ## Recommended next games
 
+**Live tracker with per-game actions:** `custom/TCGS_ROADMAP.md` — what's
+integrated, what's blocked, and what to do to unblock each remaining game.
+
 **Integrated 2026-08 (all verified live):** Lorcana (2,694), One Piece
-(4,672), Star Wars: Unlimited (9,058), Union Arena (541) — each is a generic
-config; run its sync once from Admin (Settings → Games must have a matching
-game row — the seeder adds them).
+(4,672), Star Wars: Unlimited (9,058), Union Arena (541), Flesh and Blood
+(16,264), Pokémon TCG Pocket (3,761) — each is a generic config; run its sync
+once from Admin (the seeder adds the game rows).
 
 Still needing a data source (all re-verified 2026-08; the blocker is almost
 always **images** — a dataset without art can't feed the embedding pipeline):

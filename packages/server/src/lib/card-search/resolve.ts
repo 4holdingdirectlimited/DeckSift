@@ -6,8 +6,10 @@ import { withCache } from "./cache";
 import { createSearchAdapter } from "./generic";
 import {
   digimonConfig,
+  fleshAndBloodConfig,
   lorcanaConfig,
   onePieceConfig,
+  pocketConfig,
   starWarsConfig,
   unionArenaConfig,
   yugiohConfig,
@@ -24,6 +26,8 @@ const RAW_ADAPTERS: Record<string, CardSearchAdapter> = {
   onepiece: createSearchAdapter(onePieceConfig),
   starwars: createSearchAdapter(starWarsConfig),
   unionarena: createSearchAdapter(unionArenaConfig),
+  fab: createSearchAdapter(fleshAndBloodConfig),
+  pokemonpocket: createSearchAdapter(pocketConfig),
 };
 
 const ADAPTERS_BY_GAME_KEY: Record<string, CardSearchAdapter> = {
@@ -36,6 +40,8 @@ const ADAPTERS_BY_GAME_KEY: Record<string, CardSearchAdapter> = {
   onepiece: withCache(createSearchAdapter(onePieceConfig)),
   starwars: withCache(createSearchAdapter(starWarsConfig)),
   unionarena: withCache(createSearchAdapter(unionArenaConfig)),
+  fab: withCache(createSearchAdapter(fleshAndBloodConfig)),
+  pokemonpocket: withCache(createSearchAdapter(pocketConfig)),
 };
 
 /**

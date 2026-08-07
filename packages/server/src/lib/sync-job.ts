@@ -8,8 +8,10 @@ import { scryfallSyncSource } from "./scryfall/sync";
 import type { SyncSource, SyncSourceCard } from "./card-search/sync-types";
 import {
   digimonConfig,
+  fleshAndBloodConfig,
   lorcanaConfig,
   onePieceConfig,
+  pocketConfig,
   starWarsConfig,
   unionArenaConfig,
   yugiohConfig,
@@ -31,6 +33,8 @@ export const SYNC_SOURCES: Record<string, SyncSource> = {
   onepiece: createSyncSource(onePieceConfig),
   starwars: createSyncSource(starWarsConfig),
   unionarena: createSyncSource(unionArenaConfig),
+  fab: createSyncSource(fleshAndBloodConfig),
+  pokemonpocket: createSyncSource(pocketConfig),
 };
 
 type SseWriter = (event: string, data: unknown) => void;
