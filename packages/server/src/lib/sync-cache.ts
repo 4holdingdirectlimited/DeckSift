@@ -1,6 +1,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { SyncSourceCard } from "./card-search/sync-types";
+import { logger } from "./logger";
 
 // Disk cache for downloaded bulk catalogs (Scryfall's unique_artwork file is
 // several hundred MB). The cache is keyed by the catalog's version token
@@ -51,6 +52,6 @@ export function saveCachedCatalog(
     writeFileSync(metaPath(gameKey), JSON.stringify({ version }));
     writeFileSync(catalogPath(gameKey), JSON.stringify(cards));
   } catch (err) {
-    console.error(`[sync-cache] failed to cache ${gameKey} catalog:`, err);
+    logger.error(`[sync-cache] failed to cache ${gameKey} catalog`, err);
   }
 }

@@ -1,5 +1,5 @@
-# CI checks for the fork: typecheck the web app and compile the firmware on
-# every push to custom and on pull requests.
+# CI checks for the fork: typecheck + lint + unit tests for the TS workspace
+# and compile the firmware on every push to custom and on pull requests.
 #
 # Note: GitHub disables Actions on forks by default — enable them at
 # Settings -> Actions -> General -> "Allow all actions and reusable workflows".
@@ -27,6 +27,21 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm lint
+
+  tests:
+    name: Unit tests (shared + server)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.1.3
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test
 
   firmware-compile:
     name: Firmware compile (Uno R4 + ESP32-S3)

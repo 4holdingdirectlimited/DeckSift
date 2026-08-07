@@ -1,6 +1,7 @@
 import type { PlayingCard, Result } from "@magic-vault/shared";
 import { QUERY_MIN_LENGTH } from "@magic-vault/shared";
 import type { CardSearchAdapter } from "../card-search/types";
+import { fetchWithRetry } from "../retry";
 
 export const SCRYFALL_DEFAULT_URL = "https://api.scryfall.com/cards";
 
@@ -22,7 +23,7 @@ export async function Search(
 
   const scryfallUrl = `${baseUrl}/search?q=${encodeURIComponent(query)}&unique=prints&order=released&dir=desc`;
 
-  const response = await fetch(scryfallUrl, {
+  const response = await fetchWithRetry(scryfallUrl, {
     headers: SCRYFALL_HEADERS,
   });
 
@@ -53,7 +54,7 @@ export async function SearchById(
   id: string,
   baseUrl: string = SCRYFALL_DEFAULT_URL,
 ): Promise<Result<PlayingCard>> {
-  const response = await fetch(`${baseUrl}/${id}`, {
+  const response = await fetchWithRetry(`${baseUrl}/${id}`, {
     headers: SCRYFALL_HEADERS,
   });
 

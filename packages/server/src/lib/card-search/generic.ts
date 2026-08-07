@@ -2,6 +2,7 @@ import type { PlayingCard, Result } from "@magic-vault/shared";
 import { QUERY_MIN_LENGTH } from "@magic-vault/shared";
 import type { CardSearchAdapter } from "./types";
 import type { SyncSource, SyncSourceCard } from "./sync-types";
+import { fetchWithRetry } from "../retry";
 
 // Config-driven adapter factory: one code path for any TCG whose source offers
 // a JSON search + a JSON bulk catalog. Adding a game = a config object (URLs +
@@ -178,6 +179,12 @@ function extractCards(
 
 const MAX_SEARCH_RESULTS = 30;
 
+// Full-catalog downloads (bulk sync + the no-id-endpoint searchById fallback)
+// can be tens of MB — the default 15s per-call budget would kill them on
+// slow links, so these sites get an explicit 2-minute budget. Search-style
+// single responses keep the default.
+const BULK_FETCH_TIMEOUT_MS = 120_000;
+
 async function fetchRawById(
   cfg: GenericGameConfig,
   id: string,
@@ -185,14 +192,14 @@ async function fetchRawById(
 ): Promise<Record<string, unknown> | null> {
   if (cfg.searchByIdUrl) {
     const url = cfg.searchByIdUrl.replace("{id}", encodeURIComponent(id));
-    const res = await fetch(url, { headers });
+    const res = await fetchWithRetry(url, { headers });
     if (res.ok) {
       return extractCards(cfg, await res.json())[0] ?? null;
     }
     return null;
   }
   // No id endpoint — filter the bulk catalog (fine for small catalogs).
-  const res = await fetch(cfg.bulkUrl, { headers });
+  const res = await fetchWithRetry(cfg.bulkUrl, { headers }, { timeoutMs: BULK_FETCH_TIMEOUT_MS });
   if (!res.ok) return null;
   return extractCards(cfg, await res.json()).find((c) => cfg.cardId(c) === id) ?? null;
 }
@@ -205,7 +212,7 @@ export function createSearchAdapter(cfg: GenericGameConfig): CardSearchAdapter {
       return { message: `Your query must be greater than ${QUERY_MIN_LENGTH}`, success: false };
     }
     const url = cfg.searchUrl.replace("{q}", encodeURIComponent(query));
-    const response = await fetch(url, { headers });
+    const response = await fetchWithRetry(url, { headers });
     if (!response.ok) {
       return { message: `Failed to fetch from ${cfg.label}.`, success: false };
     }
@@ -233,7 +240,7 @@ export function createSyncSource(cfg: GenericGameConfig): SyncSource {
   const headers = { "User-Agent": "MagicVault/1.0", Accept: "application/json", ...cfg.headers };
 
   async function fetchCards(): Promise<SyncSourceCard[]> {
-    const res = await fetch(cfg.bulkUrl, { headers });
+    const res = await fetchWithRetry(cfg.bulkUrl, { headers }, { timeoutMs: BULK_FETCH_TIMEOUT_MS });
     if (!res.ok) throw new Error(`${cfg.label} catalog fetch failed: ${res.status}`);
     return extractCards(cfg, await res.json()).map((raw) => ({
       id: cfg.cardId(raw),

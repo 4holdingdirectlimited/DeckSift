@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { logger } from "./logger";
+import { fetchWithRetry } from "./retry";
 
 // Local-first card art cache. The image proxy serves from here, and the card
 // sync warms it by saving every image it downloads for embedding — so after a
@@ -45,7 +47,7 @@ export function saveArtToCache(
     writeFileSync(metaPath, contentType);
   } catch (err) {
     // Best-effort — a failed cache write must never break a scan or sync.
-    console.error(`[art-cache] failed to cache ${url.slice(0, 80)}:`, err);
+    logger.error(`[art-cache] failed to cache ${url.slice(0, 80)}`, err);
   }
 }
 
@@ -67,7 +69,7 @@ export async function fetchImageWithCache(
 
   const promise = (async () => {
     try {
-      const res = await fetch(url, {
+      const res = await fetchWithRetry(url, {
         headers: { "User-Agent": "MagicVault/1.0", Accept: "image/*" },
         signal: AbortSignal.timeout(30_000),
       });

@@ -3,6 +3,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { sql } from "drizzle-orm";
 import type { AppEnv } from "./middleware/auth";
+import { logger } from "./lib/logger";
 import { adminRouter } from "./routes/admin";
 import { sortBinsRouter } from "./routes/bins";
 import { bundlesRouter } from "./routes/bundles";
@@ -20,7 +21,7 @@ import { authQuery, pool } from "./db";
 // ─── Config ──────────────────────────────────────────────────────────────────
 // Fail fast with a clear message instead of crashing later on the first query.
 if (!process.env.DATABASE_URL) {
-  console.error(
+  logger.error(
     "[server] FATAL: DATABASE_URL is not set. Copy .env.example to .env and fill it in.",
   );
   process.exit(1);
@@ -79,7 +80,7 @@ app.get("/api/health", async (c) => {
       timestamp: new Date().toISOString(),
     });
   } catch (err) {
-    console.error("[server] Health check failed:", err);
+    logger.error("[server] Health check failed", err);
     return c.json({ success: false, status: "error" }, 503);
   }
 });
@@ -87,8 +88,8 @@ app.get("/api/health", async (c) => {
 // JSON 404 + 500 for every route — the browser client always expects JSON.
 app.notFound((c) => c.json({ success: false, message: "Not found." }, 404));
 app.onError((err, c) => {
-  console.error(
-    `[server] Unhandled error on ${c.req.method} ${c.req.path}:`,
+  logger.error(
+    `[server] Unhandled error on ${c.req.method} ${c.req.path}`,
     err,
   );
   return c.json({ success: false, message: "Internal server error." }, 500);
@@ -100,11 +101,11 @@ let shuttingDown = false;
 async function shutdown(signal: string) {
   if (shuttingDown) return;
   shuttingDown = true;
-  console.log(`[server] ${signal} received — shutting down...`);
+  logger.info(`[server] ${signal} received — shutting down...`);
   try {
     await pool.end();
   } catch (err) {
-    console.error("[server] Error closing DB pool:", err);
+    logger.error("[server] Error closing DB pool", err);
   }
   process.exit(0);
 }
@@ -114,14 +115,14 @@ process.on("SIGTERM", () => void shutdown("SIGTERM"));
 // Fail fast on uncaught errors so a supervisor/operator notices; log first so
 // the file log has the details.
 process.on("uncaughtException", (err) => {
-  console.error("[server] Uncaught exception:", err);
+  logger.error("[server] Uncaught exception", err);
   process.exit(1);
 });
 process.on("unhandledRejection", (reason) => {
-  console.error("[server] Unhandled rejection:", reason);
+  logger.error("[server] Unhandled rejection", reason);
   process.exit(1);
 });
 
 serve({ fetch: app.fetch, port: PORT, hostname: "0.0.0.0" }, () => {
-  console.log(`[server] Running on port:${PORT}`);
+  logger.info(`[server] Running on port:${PORT}`);
 });
