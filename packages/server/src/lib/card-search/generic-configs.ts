@@ -424,9 +424,12 @@ const FAB_RARITIES: Record<string, string> = {
 
 // ─── Flesh and Blood (the-fab-cube/flesh-and-blood-cards) ─────────────────────
 // Verified 2026-08: json/english/card-flattened.json is already one row per
-// printing (16,260 printings) and every row carries a live image_url (Google
-// Storage / S3 / CloudFront — fabdb.net itself is unreachable from this
-// machine, but the dataset's image CDNs are not). Rarity codes map to names
+// printing (16,260 with live image_url on Google Storage / S3 / CloudFront —
+// fabdb.net itself is unreachable from this machine, but the dataset's image
+// CDNs are not). cardId uses printing_unique_id so every PRINTING syncs — a
+// card reprinted across sets keeps its per-set rarity and art (cards with
+// identical art across printings embed the same, so scans match whichever row;
+// cards with set-specific art now match the right printing). Rarity codes map
 // via FAB_RARITIES. 39 MB catalog → client-side search, cached 15 min.
 
 export const fleshAndBloodConfig: GenericGameConfig = {
@@ -443,7 +446,7 @@ export const fleshAndBloodConfig: GenericGameConfig = {
       (str(c, "name") ?? "").toLowerCase().includes(needle),
     );
   },
-  cardId: (raw) => str(raw, "unique_id") ?? "",
+  cardId: (raw) => str(raw, "printing_unique_id") ?? "",
   nameOf: (raw) => str(raw, "name") ?? "",
   setCode: (raw) => str(raw, "set_id") ?? "",
   imageUrl: (raw) => str(raw, "image_url"),

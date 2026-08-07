@@ -2931,6 +2931,38 @@ below a clean scan. The feature makes that signal visible.
 
 ---
 
+## Item 62 — FAB per-printing sync (rarity accuracy) (server)
+
+**Status:** implemented, uncommitted.
+
+### Why
+
+Flesh and Blood cards are reprinted across sets with set-specific rarity
+and often set-specific art. The initial adapter keyed rows on the card's
+`unique_id`, collapsing ~16,264 printings into 4,861 unique cards — so a
+card's rarity reflected its first-seen printing.
+
+### What changed
+
+- **`generic-configs.ts`** — `fleshAndBloodConfig.cardId` now uses
+  `printing_unique_id` (the dataset's per-printing id), so every printing
+  syncs with its own rarity + art. Existing card-level rows were cleared and
+  the game re-synced (~16,260 rows with images).
+
+### Behavior notes
+
+- Printings with identical art embed the same vector, so a scan may match any
+  of them — the rarity shown is that printing's (correct for distinct-art
+  reprints; arbitrary-but-consistent for identical-art reprints).
+- Cards previously scanned under FAB keep their stored snapshots (the
+  collection stores its own card copy, independent of the `cards` table).
+
+### How to revert
+
+1. Point `cardId` back at `unique_id` and re-sync (collapse to unique cards).
+
+---
+
 *Template for future entries:*
 
 ## Item N — <short title> (area)

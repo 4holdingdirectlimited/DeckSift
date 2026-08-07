@@ -24,14 +24,18 @@ row in `packages/server/scripts/seed-local.ts`. The seeder is idempotent
 | 7 | Disney Lorcana | lorcana-api.com | 2,694 | ✅ | ✅ done |
 | 8 | One Piece | buhbbl/punk-records | 4,672 | ✅ | 🔄 running |
 | 9 | Star Wars: Unlimited | Team-Zura/swu-cards-json | 9,058 | ✅ | ⏳ queued |
-| 10 | Flesh and Blood | the-fab-cube/flesh-and-blood-cards | 16,264 | ✅ | ⏳ queued |
+| 10 | Flesh and Blood | the-fab-cube/flesh-and-blood-cards | 16,264 printings | ✅ | 🔄 re-syncing (per-printing rarity) |
 | 11 | Pokémon TCG Pocket | flibustier/pokemon-tcg-pocket-database | 3,761 | ✅ | ⏳ queued |
 
 Notes: FAB images come from the dataset's `image_url` fields (Google
 Storage/S3/CloudFront CDNs — fabdb.net itself is unreachable from this
-machine, but its CDNs are not). SWU/FAB catalogs are 39–53 MB, so the first
-search per 15-min cache window is slow; Pocket images resolve 1:1 from the
-companion pokemon-tcg-exchange repo.
+machine, but its CDNs are not). FAB syncs **one row per printing**
+(`printing_unique_id`), so a card reprinted across sets keeps its per-set
+rarity and art — cards with identical art across printings embed the same
+(scan matching picks any row; the rarity shown is that printing's).
+SWU/FAB catalogs are 39–53 MB, so the first search per 15-min cache window
+is slow; Pocket images resolve 1:1 from the companion pokemon-tcg-exchange
+repo.
 
 ## 🎯 Remaining target games — deep research (verified 2026-08)
 
