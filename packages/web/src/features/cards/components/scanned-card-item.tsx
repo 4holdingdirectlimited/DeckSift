@@ -8,8 +8,13 @@ import {
 import { BinLocationDiagram } from "@/features/bins/components/bin-location-diagram";
 import type { ScannedCardItemProps } from "@/features/cards/types";
 import { cn, resolveCardImageUrl } from "@/lib/utils";
-import { getCardImageUris } from "@magic-vault/shared";
 import {
+  getCardImageUris,
+  isPossibleMisprint,
+  matchConfidence,
+} from "@magic-vault/shared";
+import {
+  IconAlertTriangle,
   IconCheck,
   IconDownload,
   IconHelpCircle,
@@ -28,6 +33,9 @@ export const ScannedCardItem = memo(function ScannedCardItem({
   isFoil = false,
   isDownloaded = false,
 }: ScannedCardItemProps) {
+  const confidence = matchConfidence(card.distance);
+  const possibleMisprint = isPossibleMisprint(card.distance);
+
   return (
     <div
       className={cn(
@@ -64,30 +72,36 @@ export const ScannedCardItem = memo(function ScannedCardItem({
                     variant="secondary"
                     className={cn(
                       "gap-1 shadow-md",
+                      possibleMisprint &&
+                        "border-amber-500/50 text-amber-600 dark:text-amber-400",
                       card.distance == null && "opacity-70",
                     )}
                   >
-                    <span
-                      className={cn(
-                        "size-1.5 rounded-full shrink-0",
-                        card.distance == null
-                          ? "bg-muted-foreground"
-                          : card.distance < 0.15
-                            ? "bg-emerald-500"
-                            : card.distance < 0.25
-                              ? "bg-amber-500"
-                              : "bg-red-500",
-                      )}
-                    />
-                    {card.distance != null
-                      ? `${(100 - card.distance * 100).toFixed(0)}%`
-                      : "—"}
+                    {possibleMisprint ? (
+                      <IconAlertTriangle className="size-2.5 shrink-0" />
+                    ) : (
+                      <span
+                        className={cn(
+                          "size-1.5 rounded-full shrink-0",
+                          card.distance == null
+                            ? "bg-muted-foreground"
+                            : card.distance < 0.15
+                              ? "bg-emerald-500"
+                              : card.distance < 0.25
+                                ? "bg-amber-500"
+                                : "bg-red-500",
+                        )}
+                      />
+                    )}
+                    {confidence != null ? `${confidence.toFixed(0)}%` : "—"}
                   </Badge>
                 }
               />
               <TooltipContent>
                 {card.distance != null
-                  ? `Match confidence ${(100 - card.distance * 100).toFixed(1)}% (distance ${card.distance.toFixed(3)}) — visual similarity to the scanned image`
+                  ? possibleMisprint
+                    ? `Possible misprint/error card — ${confidence?.toFixed(1)}% match. Art differs from the catalog (distance ${card.distance.toFixed(3)}); verify before pricing.`
+                    : `Match confidence ${confidence?.toFixed(1)}% (distance ${card.distance.toFixed(3)}) — visual similarity to the scanned image`
                   : "No match distance (added manually or imported)"}
               </TooltipContent>
             </Tooltip>

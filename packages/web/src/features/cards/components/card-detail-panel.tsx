@@ -19,6 +19,8 @@ import { cn, resolveCardImageUrl } from "@/lib/utils";
 import {
   getCardFaceName,
   getCardImageUris,
+  isPossibleMisprint,
+  matchConfidence,
   QUERY_MIN_LENGTH,
   type PlayingCard,
   type PlayingCardWithDistance,
@@ -245,6 +247,20 @@ export function CardDetailPanel({
             {typeLine && (
               <p className="text-sm text-muted-foreground truncate">
                 {typeLine}
+              </p>
+            )}
+            {selectedCard?.distance != null && (
+              <p
+                className={cn(
+                  "font-mono text-xs",
+                  isPossibleMisprint(selectedCard.distance)
+                    ? "text-amber-600 dark:text-amber-400"
+                    : "text-muted-foreground",
+                )}
+              >
+                {matchConfidence(selectedCard.distance)?.toFixed(1)}% match
+                {isPossibleMisprint(selectedCard.distance) &&
+                  " · possible misprint/error card — art differs from catalog"}
               </p>
             )}
           </div>
