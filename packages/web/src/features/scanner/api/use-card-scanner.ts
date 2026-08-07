@@ -8,9 +8,10 @@ import {
   SCANNABLE_STATUSES,
 } from "@/features/scanner/constants";
 import {
-  canvasToBlob,
-  drawDetectionOverlay,
   autoOrientCard,
+  canvasToBlob,
+  downscaleCanvas,
+  drawDetectionOverlay,
   extractCardImage,
   getDefaultCardContour,
 } from "@/features/scanner/lib/card-detection";
@@ -133,8 +134,10 @@ async function searchCardImage(
   }
 
   // Encode once: the upload blob and the debug image share the same JPEG,
-  // so we don't run two full canvas encodes per scan.
-  const blob = await canvasToBlob(uploadCanvas);
+  // so we don't run two full canvas encodes per scan. The canvas is
+  // downscaled to the model's 512px input first — same embeddings, ~5-10x
+  // smaller upload and stored capture.
+  const blob = await canvasToBlob(downscaleCanvas(uploadCanvas), 0.9);
   const debugImageUrl = await blobToDataUrl(blob);
   const formData = new FormData();
   formData.append("image", blob, "card.jpg");

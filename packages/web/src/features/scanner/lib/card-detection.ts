@@ -284,6 +284,31 @@ export function canvasToBlob(
 }
 
 /**
+ * The vision model (SigLIP base) downsamples every card to 512×512 before
+ * embedding, so the upload blob only needs ~512 px on its long edge — a 5–10×
+ * smaller JPEG, faster server decode, and far less base64 bloat in the DB
+ * (the captured image is persisted per scan). Accuracy is unchanged: the model
+ * input ends up the same 512×512 either way. Returns the same canvas when it
+ * is already small enough.
+ */
+export function downscaleCanvas(
+  canvas: HTMLCanvasElement,
+  maxEdge = 512,
+): HTMLCanvasElement {
+  const scale = Math.min(1, maxEdge / Math.max(canvas.width, canvas.height));
+  if (scale >= 1) return canvas;
+  const out = document.createElement("canvas");
+  out.width = Math.max(1, Math.round(canvas.width * scale));
+  out.height = Math.max(1, Math.round(canvas.height * scale));
+  const ctx = out.getContext("2d");
+  if (!ctx) return canvas;
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(canvas, 0, 0, out.width, out.height);
+  return out;
+}
+
+/**
  * Draw the detection overlay (rounded quadrilateral border) on a canvas context.
  * Uses the CSS --primary color from the page.
  */
