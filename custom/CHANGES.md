@@ -2963,6 +2963,220 @@ card's rarity reflected its first-seen printing.
 
 ---
 
+## Item 63 — Upload-size optimization: downscale scans to the model input (web)
+
+**Status:** implemented, uncommitted.
+
+### Why
+
+The scanner uploaded the full-resolution card crop (~100–500 KB at JPEG
+0.95) even though SigLIP base downsampled it to 512×512 anyway — wasting
+upload time, server decode/resize time, and (because the capture is
+persisted per scan as a base64 data URL) DB space.
+
+### What changed
+
+- **`card-detection.ts`** — new `downscaleCanvas()` (high-quality canvas
+  downscale, long edge capped at 512 px, no-op when already small).
+- **`use-card-scanner.ts`** — the upload blob is now
+  `canvasToBlob(downscaleCanvas(uploadCanvas), 0.9)`. Foil detection still
+  runs on the full-res frame; only the upload is downscaled.
+
+### Behavior notes
+
+- Same model input (512×512) → identical embeddings, zero accuracy change.
+- Uploads ~5–10× smaller; stored `captured_image_data_url` shrinks the same
+  way (the debug/display image is 512 px, which is above grid/detail render
+  sizes).
+
+### How to revert
+
+1. Revert to `canvasToBlob(uploadCanvas)` and delete `downscaleCanvas()`.
+
+---
+
+## Item 64 — Automated test suite + server hardening for commercial use (repo + server)
+
+**Status:** implemented, uncommitted.
+
+### Why
+
+DeckSift had zero automated tests — every behavior check was manual, which is
+not viable once the machine is on a card shop's counter. The highest-value
+pure logic (the bin-rule engine that decides where every card lands, and the
+server's search/cache/retry helpers) had no regression protection.
+
+### What changed
+
+- **Vitest harness (root)** — `vitest` added as a dev dependency (root +
+  `packages/shared` + `packages/server`), a root `vitest.config.ts` that runs
+  both packages' `src/**/*.test.ts` files in the node environment, and a
+  `pnpm test` script (`vitest run`, no turbo indirection needed since the
+  suite runs from the repo root). The suite is pure-logic only — no database,
+  no network (fetch/fs are mocked) — so it runs anywhere CI does.
+- **Shared tests** — `evaluate-bin.test.ts` (22 tests: equality/numeric/set
+  operators, and/or/nested groups, catch-all fallback, first-match-wins
+  ordering), `sort-bins.constant.test.ts` (bin capacity math, sleeved
+  capacity, default bin layouts), `scryfall.constant.test.ts` (match
+  confidence + misprint band boundaries), `game-acronyms.constant.test.ts`,
+  `scryfall.test.ts` (DFC image/name fallbacks).
+- **Server tests** — `retry.test.ts` (backoff, 429 Retry-After, no-retry on
+  4xx/abort), `art-cache.test.ts` (disk round-trip, in-flight dedupe, cache
+  misses), `card-search/cache.test.ts` (TTL, query normalization, no caching
+  of failures, concurrent dedupe), `card-search/generic.test.ts` (adapter
+  normalization, result cap, bulk fallback), `scryfall/search.test.ts`
+  (query validation, URL encoding, 404 handling, 5xx retry), and
+  `sync-cache.test.ts` (version-keyed catalog cache).
+- **Retry/backoff for external calls (server)** — new `lib/retry.ts`
+  (`fetchWithRetry`): retries network errors and 408/429/500/502/503/504
+  with exponential backoff + jitter, honors `Retry-After`, never retries
+  4xx or caller aborts, and never re-sends request bodies (GET-only usage).
+  Wired into the image art-cache fetch, the Scryfall search adapter, and the
+  generic multi-TCG adapter's search/id/bulk fetches — the three paths a
+  live shop most depends on.
+- **Structured logging (server)** — new `lib/logger.ts` emitting one JSON
+  line per event (`level`, `ts`, `msg`, optional `details`; errors serialize
+  name/message/stack) instead of multi-line console output. `index.ts` now
+  logs startup, health-check failures, unhandled errors, graceful shutdown,
+  and the fatal `DATABASE_URL` check through it — so `server.log` is
+  greppable/tailable by ops tooling.
+- **CI (`.github/workflows/checks.yml`)** — new `tests` job runs `pnpm test`
+  alongside the existing typecheck/lint and firmware-compile jobs.
+
+### Behavior notes
+
+- No behavior change for correct inputs: retries only kick in on transient
+  failures, and the logger writes to stdout (where `start-server.cmd` already
+  redirects), so existing `[server]`-prefixed messages still appear.
+- Test files live beside the code in each package's `src/`, so
+  `tsc --noEmit` typechecks them as part of the normal typecheck task.
+- 94 tests, ~1s runtime.
+
+### How to revert
+
+1. Remove the `test` script from root `package.json`, delete
+   `vitest.config.ts` and all `*.test.ts` files.
+2. `git checkout` the touched `lib/` files (`retry.ts`, `art-cache.ts`,
+   `lib/scryfall/search.ts`, `lib/card-search/generic.ts`, `lib/logger.ts`,
+   `src/index.ts`).
+3. Drop the `tests` job from `.github/workflows/checks.yml`.
+
+---
+
+## Item 65 — Retry budget, timeouts, and logger hardening (server + repo)
+
+**Status:** implemented, uncommitted.
+
+### Why
+
+QA review of Item 64 (report: `custom/QA_REPORT.md`) found two Medium
+hardening edges in the new `fetchWithRetry` wiring and two Low logging
+issues:
+
+1. The caller's `AbortSignal.timeout(...)` did not cover the inter-attempt
+   backoff sleeps — a 429 with `Retry-After: 60` could stall the
+   image-proxy path well past its intended 30s budget.
+2. Retries were added to Scryfall/generic-adapter calls that had no timeout
+   at all, so a hung upstream would stall 3× (plus backoff) instead of once.
+3. The logger's `JSON.stringify` could throw on circular details, masking
+   the original error inside the error handlers; two `lib/` files still
+   wrote non-JSON `console.error` lines, so `server.log` mixed formats.
+
+### What changed
+
+- **`lib/retry.ts`** — the whole-call budget is now always bounded:
+  - Backoff sleeps are abort-aware: they race the caller's signal, so a
+    `Retry-After`/backoff can never exceed a caller's `AbortSignal.timeout`.
+  - `Retry-After` is capped at 30s; unparsable values (e.g. HTTP-dates)
+    fall back to exponential backoff.
+  - When no `init.signal` is passed, an internal per-call timeout
+    (`options.timeoutMs`, default 15s) is applied to the fetch — a hung
+    upstream now fails with a TimeoutError after one bounded attempt instead
+    of stalling forever. Caller signals still fully own the budget.
+  - Aborts and internal timeouts are never retried; transient 5xx/network
+    errors still are. Docstring updated to describe the real semantics.
+- **`lib/card-search/generic.ts`** — full-catalog downloads (bulk sync and
+  the no-id-endpoint `searchById` fallback) pass an explicit 120s budget;
+  search-style calls keep the 15s default.
+- **`lib/logger.ts`** — `JSON.stringify` is guarded: unserializable
+  `details` (circular objects, BigInt) drop the details and log a marker
+  instead of masking the original error.
+- **`lib/art-cache.ts` / `lib/sync-cache.ts`** — cache-write failures now
+  log through the JSON logger (was `console.error`), so `server.log` is
+  uniformly JSON lines.
+- **Tests** — `retry.test.ts` adds: `retries: 1` (no retry), HTTP-date
+  `Retry-After` → backoff fallback, a pinned backoff sleep duration (a
+  0ms-sleep regression fails), abort-during-backoff, an internal-timeout
+  bound on a hung upstream, and caller-signal-owns-the-budget.
+  `sort-bins.constant.test.ts` pins known-good capacity literals (bin 1 =
+  465, bin 7 = 180, sleeved 199/77) alongside the headroom property test.
+- **`vitest.config.ts`** — comment documenting why `vitest` is also a
+  devDependency of `packages/shared` and `packages/server` (per-package
+  `tsc --noEmit` type resolution, not for running tests).
+
+### Behavior notes
+
+- No behavior change for healthy upstreams: retries still only fire on
+  408/429/5xx or network errors, and 4xx/abort pass straight through.
+- The server process currently running on port 3001 predates Items 64–65
+  (its `server.log` has no JSON lines); restart it once after merge to load
+  the new retry/logger code.
+- Test count is now 100 (94 from Item 64 + 6 new retry tests).
+
+### How to revert
+
+1. `git checkout` the touched files: `lib/retry.ts`,
+   `lib/card-search/generic.ts`, `lib/logger.ts`, `lib/art-cache.ts`,
+   `lib/sync-cache.ts`, `lib/retry.test.ts`,
+   `packages/shared/src/constants/sort-bins.constant.test.ts`,
+   `vitest.config.ts`, and this file.
+
+---
+
+## Item 66 — Commercial-readiness review: research, QA sign-off, v2 plan (docs)
+
+**Status:** implemented, uncommitted.
+
+### Why
+
+Goal: make DeckSift ready for commercial use (software-only; no hardware
+changes). This required (a) independent market research to ground the v2
+positioning, (b) an independent QA review of the uncommitted Items 63–65
+work, and (c) a hardened, phased v2 roadmap that synthesizes every existing
+planning doc with the research and the QA findings.
+
+### What changed
+
+- **`custom/RESEARCH_MARKET.md`** — market research by the research agent:
+  segments, competitor landscape (Roca/CardBot/Magic Sorter/CardMill/
+  GlideSorter/SortSwift), ranked feature wants, pain points, and a
+  marked in/out-of-scope wishlist. All sources verified by direct fetch or
+  flagged as snippet/model-knowledge.
+- **`custom/QA_REPORT.md`** — independent QA review of Items 63–65 + the
+  test suite + CI: 0 Critical/High findings, verdict APPROVE, with the two
+  Medium findings (M1 abort budget vs backoff, M2 missing timeouts) that
+  Item 65 then fixed. Second pass re-verifies all seven findings resolved.
+- **`custom/V2_PLAN.md`** — the lead's synthesized, phased roadmap (Phases
+  0–7), each with a gate; the consolidated feature backlog (17 items,
+  source-tagged); the TCG 12→20 expansion path; v2 KPI targets; and the
+  list of decisions that need the owner. Supersedes the roadmap sections
+  of `PLAN.md`/`PRODUCT.md`/`HARDWARE_V2.md` where they overlap.
+
+### Behavior notes
+
+- No code or behavior changes — docs only. The QA report's one action item
+  (restart the API to load Items 64–65 code) still applies to the running
+  process on port 3001.
+- The 3-agent process (research / implement / QA) is recorded here so the
+  decision trail is auditable.
+
+### How to revert
+
+1. Delete `custom/RESEARCH_MARKET.md`, `custom/QA_REPORT.md`,
+   `custom/V2_PLAN.md`, and this entry.
+
+---
+
 *Template for future entries:*
 
 ## Item N — <short title> (area)
