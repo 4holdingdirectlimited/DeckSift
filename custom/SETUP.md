@@ -240,6 +240,49 @@ Postgres, the API, the web app, the vision model (SigLIP), and card art
 (disk-cached) all run on this machine. Only the one-time sync and any brand-new
 card art need the internet.
 
+## AI GPU — GTX 970 dedicated embedding card
+
+The vision model runs on a **dedicated GTX 970** (DirectML adapter 1), not the
+Quadro M4000 that drives the desktop. Measured 2026-08-08 on this machine
+(`pnpm bench:vectorize`, fp32, 15 runs):
+
+| GPU | Full scan-path embed | Model forward |
+| --- | --- | --- |
+| Quadro M4000 (adapter 0, primary display) | 374 ms mean | 332 ms mean |
+| GTX 970 (adapter 1, no display) | **284 ms mean** | **243 ms mean** |
+
+→ ~1.3× faster per scan, and because the 970 is not the primary display, the
+embedding load no longer shares the GPU with the desktop compositor — a full-
+tilt sync no longer makes Windows feel sluggish (the pacing tunables below
+still apply, but as a safety net rather than a necessity).
+
+Config (`.env` / start command):
+
+```
+VECTORIZE_DEVICE=dml          # use DirectML (already set in .env)
+VECTORIZE_DML_DEVICE_ID=1     # DirectML adapter index; 1 = GTX 970 on this machine
+# VECTORIZE_DTYPE=fp16        # optional: ~10% faster on the 970 (258 vs 284 ms),
+                              # slightly reduced embedding precision — fp32 is the default
+```
+
+**Adapter numbering gotcha:** `VECTORIZE_DML_DEVICE_ID` is the *DirectML* index
+(DXGI order — primary display first), not the `nvidia-smi` index. On this
+machine `nvidia-smi` lists GTX 970=0 / M4000=1, but DirectML is the reverse
+(0=M4000, 1=GTX 970). To verify which GPU is doing the work, watch
+`nvidia-smi` during a sync: the 970 should peg while the M4000 stays at
+normal desktop load. If the GPU topology changes (different display wiring,
+another card), re-check and adjust `VECTORIZE_DML_DEVICE_ID`.
+
+## Multi-language cards
+
+Foreign-language cards scan fine — the vision matcher reads artwork, not
+text (verified: a Japanese MTG card matches its English row at distance 0.25
+vs the 0.30 threshold). Pokémon rows also carry their localized names
+(fr/de/es/it/pt), and the Library search matches them — typing "Dracaufeu"
+finds Charizard. MTG/Yu-Gi-Oh! sources don't ship localized names (see
+`custom/TCGS.md` "Multi-language cards" for the per-game table). The UI
+stays English throughout.
+
 ## Machine responsiveness during sync
 
 The sync saturates the GPU while it runs (that's the embedding step), and on

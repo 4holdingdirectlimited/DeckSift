@@ -3175,6 +3175,363 @@ planning doc with the research and the QA findings.
 1. Delete `custom/RESEARCH_MARKET.md`, `custom/QA_REPORT.md`,
    `custom/V2_PLAN.md`, and this entry.
 
+## Item 67 — Phase 1 completion: route integration tests, wait-on-health startup, reliability telemetry (server + web + scripts + CI + docs)
+
+**Status:** implemented, uncommitted.
+
+### Why
+
+`V2_PLAN.md` Phase 1 (v1.5 commercial hardening) had three remaining
+software items after Items 63–65: route-level tests (the suite was
+pure-logic only), a startup script that reports a clean failure instead of a
+silent half-up state, and a shop-facing stats view surfacing the telemetry
+Item 52 started collecting. All three are software-only and unblock the
+Phase 0 machine-commissioning measurement gate (cards/hr KPIs).
+
+### What changed
+
+1. **Route integration tests against a scratch Postgres** — the Hono app
+   is now built by `createApp()` in `packages/server/src/app.ts` (new),
+   and `src/index.ts` only serves it + owns shutdown — so tests exercise the
+   real app with `app.request()` and no port. New
+   `packages/server/src/routes/app.integration.test.ts` runs the real
+   migrations + seeds a card, then asserts the wire contracts: `/api/health`,
+   `/api/admin/sync/sources`, `/api/cards/library` (shape, search, pagination),
+   JSON 404s, and `/api/stats`. It self-skips when `TEST_DATABASE_URL` is
+   unset, so the default `pnpm test` still needs no database. The CI `tests`
+   job now starts a `pgvector/pgvector:pg16` service and sets
+   `TEST_DATABASE_URL` so the suite runs on every push (100 → 107 tests).
+2. **Startup wait-on-health** — `scripts/start-server.cmd` now launches the
+   server in the background, polls `GET /api/health` via the new
+   `scripts/wait-for-health.ps1` (30 s, IPv4 `127.0.0.1` — the server binds
+   `0.0.0.0` and Windows `localhost` can resolve to `::1`), reports
+   "healthy after Ns", and on failure stops the half-up process and exits
+   non-zero instead of leaving a silently broken server. If an instance is
+   already healthy it says so and does nothing. Verified both ways on this
+   machine: healthy path (DB up) and clean-failure path (DB stopped — JSON
+   `Health check failed` lines in `server.log`, process killed).
+3. **Reliability telemetry (Stats page)** — new `GET /api/stats`
+   (`packages/server/src/routes/stats.ts`) aggregates `collection_cards`
+   scans: total / today / last-hour, cards-per-hour today, a zero-filled
+   14-day daily series, per-game and top-collection totals. New `/app/stats`
+   page (`packages/web/src/app/routes/app/stats.tsx`) shows those as stat
+   cards + a CSS bar chart + breakdowns, and a live-session block (live rate,
+   last scan, session errors) when the local operator is scanning — surfaced
+   from `useScannedCards` / `useSessionMonitor`, the Item 52 data. Nav item
+   "Stats" (`IconChartBar`) and route added.
+
+### Behavior notes
+
+- Locally, run the integration suite with:
+  `node scripts/local-db.mjs start`, create a `decksift_test` database, then
+  `set TEST_DATABASE_URL=postgres://postgres@127.0.0.1:5433/decksift_test`
+  and `pnpm test`. The suite truncates only the tables it seeds.
+- `start-server.cmd` exit code is now meaningful: 0 = healthy, 1 = startup
+  failed (half-up server stopped). The server keeps running in the same
+  console after the script exits, as before.
+- Stats date buckets use the DB session timezone (UTC by default) — the same
+  wall clock the app writes when storing `scanned_at`.
+- Jam counters are *not* in this view: serial events are still only
+  classified for Discord notifications (`lib/serial-events.ts`), not
+  persisted. Firmware-side jam coverage (V2_PLAN Phase 3 item 11) is the
+  prerequisite for a persisted jam KPI; the session error count covers the
+  scan-error side today.
+
+### How to revert
+
+1. Delete `packages/server/src/routes/app.integration.test.ts` and the
+   `services:` block + `TEST_DATABASE_URL` env in `.github/workflows/checks.yml`;
+   restore `src/index.ts` to its pre-split form and delete `src/app.ts`.
+2. Restore the old `scripts/start-server.cmd` (foreground `call tsx.CMD`)
+   and delete `scripts/wait-for-health.ps1`.
+3. Delete `packages/server/src/routes/stats.ts` + its mount in `src/app.ts`,
+   `packages/web/src/lib/api/stats.ts`, `packages/web/src/app/routes/app/stats.tsx`,
+   the `/app/stats` route in `router.tsx`, and the Stats nav item in `nav.tsx`.
+
+## Item 68 — Dedicated AI GPU: GTX 970 for embedding (server + docs)
+
+**Status:** implemented, uncommitted.
+
+### Why
+
+A GTX 970 was installed as a second GPU (not the primary display) to run the
+card-scan embeddings, both to speed up each scan and to stop the sync from
+slowing the desktop (the embedding previously shared the primary display GPU
+with the Windows compositor).
+
+### What changed
+
+- **DirectML adapter selection** — `packages/server/src/lib/vectorize.ts` now
+  pins the DML execution provider to a chosen adapter via
+  `session_options.executionProviders` (`onnxruntime 1.21`
+  `DmlExecutionProviderOption.deviceId`). New `VECTORIZE_DML_DEVICE_ID` env
+  (default `1` = the GTX 970 on this machine). Without this, DML silently
+  used the default device — the primary display adapter (M4000).
+- **Optional dtype override** — `VECTORIZE_DTYPE=fp16` opt-in; the defaults
+  are unchanged (q8 on CPU, fp32 on DML). fp16 is ~10% faster on the 970
+  (258 vs 284 ms) at slightly reduced embedding precision, so fp32 stays the
+  default.
+- **Benchmark supports adapter pinning** — `bench-vectorize.ts` gained
+  `BENCH_DML_DEVICE_ID` so each GPU can be measured independently.
+
+### Measured (this machine, 2026-08-08, `pnpm bench:vectorize`, fp32, 15 runs)
+
+| GPU | Full scan-path embed | Model forward |
+| --- | --- | --- |
+| Quadro M4000 (adapter 0, primary display) | 374 ms mean | 332 ms mean |
+| GTX 970 (adapter 1, no display) | **284 ms mean** | **243 ms mean** |
+
+→ ~1.3× faster per scan. `nvidia-smi` sampling during a pinned run shows the
+970 pegged (94%) while the M4000 stays at desktop load (~24%), confirming the
+AI/display split works as intended.
+
+### Behavior notes
+
+- **Adapter index gotcha:** `VECTORIZE_DML_DEVICE_ID` is the DirectML/DXGI
+  index (primary display first), which is the *reverse* of `nvidia-smi`'s
+  enumeration on this machine (nvidia-smi: 970=0, M4000=1; DirectML: 0=M4000,
+  1=GTX 970). Documented in `custom/SETUP.md` with a verify-by-utilization
+  procedure.
+- `.env` on this machine needs `VECTORIZE_DML_DEVICE_ID=1` added (or rely on
+  the code default of `1`); `.env.example` should get the same line.
+- The model load log now prints the adapter: `device=dml(adapter 1)`.
+
+### How to revert
+
+1. In `packages/server/src/lib/vectorize.ts`, drop `DML_DEVICE_ID`,
+   `session_options`, and the `VECTORIZE_DTYPE` override; restore the plain
+   `device: DEVICE` call and `DTYPE` = `DEVICE === "dml" ? "fp32" : "q8"`.
+2. In `packages/server/scripts/bench-vectorize.ts`, drop `DML_DEVICE_ID`/
+   `session_options`.
+3. Remove the new SETUP.md section and this entry.
+
+## Item 69 — Multi-language card scans + localized names (server + web + docs)
+
+**Status:** implemented, uncommitted.
+
+### Why
+
+Operator wants to feed foreign-language TCG cards through the sorter (not a
+localized interface — English UI, foreign cards). Two parts: prove/ensure the
+vision matcher identifies foreign printings, and store localized names where
+the data source provides them cheaply so search can find cards by their own
+language.
+
+### What changed
+
+- **Verified scanning is language-agnostic** — SigLIP matches artwork, not
+text: a Japanese MTG printing embedded to cosine distance **0.25** vs its
+English DB row (match threshold 0.30). No matching changes needed.
+- **`names` field** — optional `names?: Record<string, string>` (BCP-47 → name)
+on the shared `PlayingCard`; the interface stays English.
+- **Pokémon localized names** — `pokemon/search.ts` adds
+  `fetchLocalizedNameMaps()` (TCGdex per-locale *list* endpoints — cheap,
+  no per-card fetches) and `normalizePokemonCard()` attaches the map.
+  `pokemon/sync.ts` includes it in every sync. **Backfilled 20,222 existing
+  Pokémon rows** (fr/de/es/it/pt) via new
+  `scripts/backfill-localized-names.ts` (jsonb_set on card_data only — no
+  re-embedding).
+- **Localized-name search** — `/api/cards/library` name search also matches
+  `card_data->'names'` (jsonb_each_text), so "Dracaufeu" finds Charizard.
+
+### Behavior notes
+
+- Sources without cheap localized names stay English: Scryfall's
+  `unique_artwork` bulk omits `foreign_data`; YGOPRODeck removed its
+  localized name fields from the API (both verified 2026-08). Documented in
+  `custom/TCGS.md` "Multi-language cards" with the per-game table.
+- Cards never printed in a locale simply have no entry for it (e.g. the
+  French catalog 404s for some English printings).
+- Re-syncing Pokémon from scratch now includes names automatically; the
+  backfill script is the update path for already-synced rows.
+
+### How to revert
+
+1. Drop `names` from `packages/shared/src/interfaces/scryfall.interface.ts`;
+   remove the `names` merge in `pokemon/search.ts` + `pokemon/sync.ts`.
+2. Revert the library search clause in `routes/card.ts`.
+3. Delete `scripts/backfill-localized-names.ts`; re-embedding Pokémon rows
+  would be needed to clear the stored `names` (or leave them — harmless).
+4. Remove the TCGS.md "Multi-language cards" section and this entry.
+
+---
+
+## Item 70 — Feeder clear button, eBay/Shopify exports, docs refresh (web + docs)
+
+**Status:** implemented, uncommitted.
+
+### Why
+
+Loose ends from the v1.5 hardening pass: the PRODUCT.md backlog's one
+remaining 🔜 item (feeder "clear" for jam recovery), two marketplace export
+targets called out in the v2 plan (#9 eBay/Shopify), and docs that had gone
+stale (TCG sync statuses, item counts).
+
+### What changed
+
+- **Feeder clear button** — Calibrate → Feeder Calibration now has a
+  "Clear / Stop (jam recovery)" button (`feeder-calibration-panel.tsx` +
+  `handleClearJam` in `use-calibration-page.ts`) that sends the firmware's
+  existing `{"cancel":true}` + `{"cancelFeed":true}` and clears the red
+  fault lamp (LED 3) — quick recovery without recalibration. No firmware
+  change needed.
+- **eBay + Shopify exports** — `exportToEbay` (file-exchange bulk columns,
+  condition → eBay Condition ID mapping) and `exportToShopify` (product
+  import CSV with SKU/price/qty/image) in `export-formats.ts`, wired into
+  the Session Summary download menu for every game (marketplaces are
+  game-agnostic).
+- **Docs refresh** — `custom/TCGS.md` + `custom/TCGS_ROADMAP.md` sync
+  statuses corrected (all 11 games synced, live counts); FAB row unblocked;
+  `custom/README.md` + `CHANGES.md` header item counts 1–59 → 1–70;
+  `.env.example` documents `VECTORIZE_DML_DEVICE_ID`.
+
+### Behavior notes
+
+- The clear button works over USB and Wi-Fi (any transport `sendCommand`
+  supports) and is safe to press mid-operation.
+- eBay CSV uses Condition IDs 2750–2754 for NM→Damaged (falls back to 1);
+  the human-readable condition is echoed in the Description column.
+
+### How to revert
+
+1. Remove `onClear` from `feeder-calibration-panel.tsx` +
+   `use-calibration-page.ts` + `calibrate.tsx`.
+2. Remove `exportToEbay`/`exportToShopify` from `export-formats.ts` and the
+   menu entries in `session-summary-dialog.tsx`.
+3. Revert the TCGS/README/CHANGES header/`.env.example` edits and this entry.
+
+## Item 71 — TCGplayer API freeze recorded; pricing/listing status updated (docs)
+
+**Status:** implemented, uncommitted.
+
+### Why
+
+The v2 plan's Phase 4 (TCGplayer price source + catalog match) was "blocked
+on seller-API keys", assuming a new seller account could apply for keys. The
+official TCGplayer docs (docs.tcgplayer.com/docs/getting-started, v1.39,
+verified 2026-08) state **"We are no longer granting new API access at this
+time"** — so a new account cannot obtain keys, and the plan's user-action
+path is closed.
+
+### What changed (docs only — no code)
+
+- `custom/TCGS.md` "Future: TCGplayer integration" — blocker rewritten: key-
+gated auth confirmed (public/private key → bearer token), new grants frozen;
+the CSV-export path marked ✅ built; the price-source adapter + catalog-match
+job marked parked-until-keys.
+- `custom/V2_PLAN.md` — Phase 4 + backlog item 12 + §7 decision #1 updated to
+"blocked at the source"; notes that MTG/YGO are already priced without the
+API (Scryfall carries TCGplayer market prices; YGOPRODeck's `tcgplayer_price`
+is the market price) and the TCGplayer CSV export covers manual listing.
+- `custom/PRODUCT.md` — TCGplayer price-source backlog row reflects the freeze.
+
+### Behavior notes
+
+- No credentials or keys are stored anywhere in the repo (seller login stays
+  out of git entirely).
+- If the seller account turns out to hold pre-freeze keys, the integration
+  can proceed: token endpoint + catalog/pricing endpoints are documented in
+  TCGS.md.
+
+### How to revert
+
+1. Revert the three doc edits above and remove this entry.
+
+## Item 72 — Four new TCGs: Altered, Force of Will, Duel Masters, Weiss Schwarz (server + scripts + seed)
+
+**Status:** implemented, uncommitted.
+
+### Why
+
+Operator asked to push the TCG expansion past the 20-game target "as many as
+possible, more is better" and approved Altered TCG. Investigation (incl.
+parallel research agents) found four games with reachable, image-bearing
+data — Altered and Weiss ship art in-repo (raw.githubusercontent.com, already
+allowed), Force of Will serves art from `fowsim.s3.amazonaws.com` (verified
+200), and Duel Masters art resolves via the English Fandom wiki CDN
+(`static.wikia.nocookie.net/duelmasters`, md5 path layout, verified 200).
+
+### What changed
+
+- **Dataset builders** — `packages/server/scripts/datasets/`: `build-altered.mjs`
+  (3,464 cards, official repo art), `build-fow.mjs` (7,663 cards, S3 art from
+  the source's image_cache), `build-duel-masters.mjs` (1,267 printings;
+  Fandom `pageimage` map via 24 batched MediaWiki calls + deterministic
+  fallback), `build-weiss.mjs` (669 cards parsed from the sim's CardData.txt,
+  real scans matched by series-specific filename patterns). Each produces a
+  flat `{id,name,set_code,image_url,rarity,...}` JSON for `import-cardset.ts`.
+- **Local-DB search adapter** — new `lib/card-search/local.ts`
+  (`createLocalAdapter(gameKey)`): search + hydration read the synced `cards`
+  table, so the four games work fully offline (picker search, scan hydration,
+  library) with no live API. Registered in `resolve.ts`.
+- **Seed rows + image allowlist** — `seed-local.ts` gains the four game rows;
+  `routes/card.ts` image-proxy allowlist gains `fowsim.s3.amazonaws.com` +
+  `static.wikia.nocookie.net`.
+- **Imported + verified live** — Altered 3,464 · Force of Will 7,272 · Duel
+  Masters 1,248 · Weiss Schwarz 581 (12,565 rows; catalog 11 → **15 games**,
+  ~158k cards). Library search verified for all four via the API.
+
+### Behavior notes
+
+- Dataset games are imported via `scripts/import-cardset.ts` (embed once); they
+  are not in the Admin sync list (no live source to re-sync). Re-import is
+  idempotent (onConflictDoNothing) and the builders are reproducible.
+- FoW: 390 cards have no image in the source cache (reported as import errors;
+  7,272/7,663 embedded). DM: 19 printings without an English wiki page. WS:
+  88 intra-dataset id collisions dedupe to 581 unique. Altered: the official
+  S3 `imagePath` bucket rejects hotlinks (403), so repo art is used.
+- Not integrated (verified this session): Shadowverse Evolve (no image URLs in
+  data; official CDN pattern not found), WIXOSS (JP-only, no images), Final
+  Fantasy TCG (ffdecks.com SPA — API not trivially exposed), Dragon Ball
+  Fusion World (images only, no metadata JSON).
+
+### How to revert
+
+1. Delete the four dataset builders, `lib/card-search/local.ts`, the resolve.ts
+   registrations, the seed rows, the two allowlist hosts, and this entry.
+2. Optionally `DELETE FROM cards WHERE game_key IN ('altered','fow',
+   'duelmasters','weiss')` and remove the game rows.
+
+---
+
+## Item 73 — Bambu print kit + duplicate cap + docs refresh (3d model + web + docs)
+
+**Status:** implemented, uncommitted.
+
+### Why
+
+Finish the PLAN.md Bambu kit checklist (print-side, no hardware), and Phase 2
+store-intake items that are pure software (duplicate cap; the rest already
+covered — exports Item 70, condition photos via `capturedImageUrl`).
+
+### What changed
+
+- **Bambu Lab print kit** — `3d model/kit/` with `QUANTITY_SHEET.md` (tick-box
+  parts checklist derived from the BUILD.md BOM + the 30-part/16-plate
+  `card_sorter_decksift.3mf`), `PLATES.md` (16-plate plan; plate previews are
+  embedded in the 3mf), and a `README.md`. Wired into `arduino/main/BUILD.md`.
+  The 3mf objects are unnamed meshes, so the sheet groups parts by machine
+  role; the plate previews are the source of truth for exact layouts.
+- **Duplicate cap** (V2_PLAN Phase 2 item 6) — scanner menu gains "Max copies
+  per card" (0–20, persisted in localStorage); when a card reaches the cap,
+  extras route to the catch-all/reject bin with a toast. Implemented in
+  `use-scanned-cards.tsx` (state + routing via a new `cardsRef` mirror) +
+  `scanner-menu.tsx` + `card-scanner.tsx` + the `ScannedCardsContextValue`
+  type. Applies in normal routing mode; bundle/chase keep their own
+  duplicate logic.
+- **Docs refresh** — `custom/TCGS.md` + `TCGS_ROADMAP.md` updated to 15 games
+  with the four additions documented; V2_PLAN Phase 2 status updated (duplicate
+  cap built; intake mode documented as covered by digitize mode + Session
+  Summary exports; pre-release data + sort-to-ship remain); README counts
+  1–71 → 1–73.
+
+### How to revert
+
+1. Delete `3d model/kit/` + the BUILD.md print-files line.
+2. Remove the duplicate-cap state/check/UI (use-scanned-cards, scanner-menu,
+  card-scanner, types) and the `cardsRef` mirror.
+3. Revert the TCGS/V2_PLAN/README edits and this entry.
+
 ---
 
 *Template for future entries:*

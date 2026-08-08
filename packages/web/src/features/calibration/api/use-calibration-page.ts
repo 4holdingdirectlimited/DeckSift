@@ -273,6 +273,19 @@ export function useCalibrationPage() {
     sendCommand(JSON.stringify({ feeder: true }));
   }, [sendCommand]);
 
+  // Quick jam recovery without recalibration: abort any in-flight operation
+  // back to neutral, drop a queued feed, and clear the red fault lamp (LED 3).
+  // The firmware clears the fault lamp itself on the next operation start, but
+  // this makes the recovery explicit and immediate.
+  const handleClearJam = useCallback(() => {
+    sendCommand(JSON.stringify({ cancel: true }));
+    sendCommand(JSON.stringify({ cancelFeed: true }));
+    sendCommand(JSON.stringify({ led: 3, on: false }));
+    toast.success("Machine cleared", {
+      description: "Operation aborted to neutral, queued feed dropped.",
+    });
+  }, [sendCommand]);
+
   const readIR = useCallback(async () => {
     if (irBusyRef.current || activeBinRef.current !== null) return;
     irBusyRef.current = true;
@@ -348,6 +361,7 @@ export function useCalibrationPage() {
     handleFeederSetPauseDuration,
     handleFeederSetSettleDuration,
     handleFeed,
+    handleClearJam,
     isSampleRunning,
     handleSampleRun,
     irStates,

@@ -62,6 +62,12 @@ export interface PlayingCard {
   tcgplayer_id?: number;
   cardmarket_id?: number;
   name: string;
+  /** Localized names (BCP-47 language code → name), when the data source
+   *  provides them (e.g. YGOPRODeck's frname/dename/...). Absent for
+   *  English-only sources (Scryfall unique_artwork, the dataset-based games).
+   *  The interface stays English — this powers localized-name search and
+   *  future language-aware exports. */
+  names?: Record<string, string>;
   lang: string;
   released_at: string;
   uri: string;

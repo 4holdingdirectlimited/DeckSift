@@ -183,3 +183,97 @@ export function exportToCardKingdom(cards: ScannedCard[], collection: string) {
   const csv = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
   downloadCsv(csv, `magic-vault-cardkingdom-${dateSuffix()}-${collection}.csv`);
 }
+
+// eBay Condition IDs for trading card singles (collectibles category). Near
+// Mint and below map onto eBay's graded-condition ladder; anything unknown
+// falls back to 1 (New) so the file always imports.
+function ebayConditionId(condition: string | undefined): number {
+  switch ((condition ?? "").toLowerCase().replace(/[^a-z]/g, "")) {
+    case "nearmint":
+      return 2750;
+    case "lightlyplayed":
+      return 2751;
+    case "moderatelyplayed":
+      return 2752;
+    case "heavilyplayed":
+      return 2753;
+    case "damaged":
+      return 2754;
+    default:
+      return 1;
+  }
+}
+
+export function exportToEbay(cards: ScannedCard[], collection: string) {
+  if (cards.length === 0) return;
+  const grouped = groupByCardIdAndFoil(cards);
+  // Condition is per-scan; for a grouped (multi-copy) row use the first
+  // scan's grade.
+  const conditionByCardId = new Map(
+    cards.map((c) => [c.card.id, c.condition] as const),
+  );
+  // eBay file-exchange bulk listing (Selling Manager) — minimal column set.
+  // The condition text is echoed in the description so a human can verify the
+  // numeric ID before upload.
+  const headers = [
+    "Title",
+    "Subtitle",
+    "Condition ID",
+    "Price",
+    "Quantity",
+    "Custom label (SKU)",
+    "Description",
+  ];
+  const rows = Array.from(grouped.values()).map(
+    ({ card, quantity, isFoil }) => [
+      csvEscape(card.name),
+      isFoil ? "FOIL" : "",
+      String(ebayConditionId(conditionByCardId.get(card.id))),
+      card.prices.usd ?? "",
+      String(quantity),
+      `${card.id}${isFoil ? "-f" : ""}`,
+      csvEscape(
+        [
+          `${card.set_name} (${card.set.toUpperCase()}) #${card.collector_number}`,
+          isFoil ? "Foil printing" : "",
+        ]
+          .filter(Boolean)
+          .join(" — "),
+      ),
+    ],
+  );
+  const csv = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
+  downloadCsv(csv, `magic-vault-ebay-${dateSuffix()}-${collection}.csv`);
+}
+
+export function exportToShopify(cards: ScannedCard[], collection: string) {
+  if (cards.length === 0) return;
+  const grouped = groupByCardIdAndFoil(cards);
+  // Shopify product-import CSV (product + variant rows in one).
+  const headers = [
+    "Title",
+    "Handle",
+    "Tags",
+    "Variant SKU",
+    "Variant Inventory Policy",
+    "Variant Inventory Qty",
+    "Variant Price",
+    "Image Src",
+    "Status",
+  ];
+  const rows = Array.from(grouped.values()).map(
+    ({ card, quantity, isFoil }) => [
+      csvEscape(isFoil ? `${card.name} (Foil)` : card.name),
+      csvEscape(card.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")),
+      csvEscape(card.set_name),
+      `${card.id}${isFoil ? "-f" : ""}`,
+      "deny",
+      String(quantity),
+      card.prices.usd ?? "",
+      csvEscape(card.image_uris?.large ?? ""),
+      "active",
+    ],
+  );
+  const csv = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
+  downloadCsv(csv, `magic-vault-shopify-${dateSuffix()}-${collection}.csv`);
+}

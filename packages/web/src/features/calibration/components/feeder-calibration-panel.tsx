@@ -27,6 +27,7 @@ interface FeederCalibrationPanelProps {
   onSetPulseDuration: () => void;
   onSetPauseDuration: () => void;
   onSetSettleDuration: () => void;
+  onClear: () => void;
 }
 
 export function FeederCalibrationPanel({
@@ -48,6 +49,7 @@ export function FeederCalibrationPanel({
   onSetPulseDuration,
   onSetPauseDuration,
   onSetSettleDuration,
+  onClear,
 }: FeederCalibrationPanelProps) {
   return (
     <div className="grid grid-cols-1 md:grid-cols-3">
@@ -374,6 +376,27 @@ export function FeederCalibrationPanel({
               {calibration.settleDuration} ms
             </p>
           ) : null}
+        </div>
+        <div className="flex flex-col gap-2 md:col-span-3">
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  variant="outline"
+                  disabled={!isConnected}
+                  onClick={onClear}
+                  className="w-full border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                >
+                  Clear / Stop (jam recovery)
+                </Button>
+              }
+            />
+            <TooltipContent>
+              Aborts any in-flight operation back to neutral, drops a queued
+              feed, and clears the red fault lamp — quick jam recovery without
+              recalibrating.
+            </TooltipContent>
+          </Tooltip>
         </div>
       </div>
     </div>

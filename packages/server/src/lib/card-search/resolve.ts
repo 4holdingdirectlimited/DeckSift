@@ -14,7 +14,12 @@ import {
   unionArenaConfig,
   yugiohConfig,
 } from "./generic-configs";
+import { createLocalAdapter } from "./local";
 import type { CardSearchAdapter } from "./types";
+
+// Dataset-imported games (no live API): search + hydration read the local
+// cards table. Onboarded via scripts/import-cardset.ts + scripts/datasets/.
+const DATASET_GAMES = ["altered", "fow", "duelmasters", "weiss"] as const;
 
 const RAW_ADAPTERS: Record<string, CardSearchAdapter> = {
   mtg: scryfallAdapter,
@@ -28,6 +33,7 @@ const RAW_ADAPTERS: Record<string, CardSearchAdapter> = {
   unionarena: createSearchAdapter(unionArenaConfig),
   fab: createSearchAdapter(fleshAndBloodConfig),
   pokemonpocket: createSearchAdapter(pocketConfig),
+  ...Object.fromEntries(DATASET_GAMES.map((k) => [k, createLocalAdapter(k)])),
 };
 
 const ADAPTERS_BY_GAME_KEY: Record<string, CardSearchAdapter> = {
@@ -42,6 +48,7 @@ const ADAPTERS_BY_GAME_KEY: Record<string, CardSearchAdapter> = {
   unionarena: withCache(createSearchAdapter(unionArenaConfig)),
   fab: withCache(createSearchAdapter(fleshAndBloodConfig)),
   pokemonpocket: withCache(createSearchAdapter(pocketConfig)),
+  ...Object.fromEntries(DATASET_GAMES.map((k) => [k, withCache(createLocalAdapter(k))])),
 };
 
 /**

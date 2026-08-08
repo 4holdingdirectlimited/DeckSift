@@ -16,8 +16,10 @@ import { useBinConfigs } from "@/features/bins/api/use-bin-configs";
 import {
   exportToCardKingdom,
   exportToCsv,
+  exportToEbay,
   exportToManabox,
   exportToMoxfield,
+  exportToShopify,
   exportToTcgplayer,
 } from "@/features/cards/lib/export-formats";
 import { useCollections } from "@/features/collections/api/use-collections";
@@ -79,6 +81,12 @@ export function SessionSummaryDialog({
   const { fieldDefinitions } = useBinConfigs();
 
   const isMtg = activeCollection?.game?.key === "mtg";
+  // Marketplace exports (eBay/Shopify) are game-agnostic; the MTG-specific
+  // ones only make sense for Scryfall-backed collections.
+  const marketplaceOptions: ExportOption[] = [
+    { key: "ebay", label: "eBay", fn: exportToEbay },
+    { key: "shopify", label: "Shopify", fn: exportToShopify },
+  ];
   const exportOptions: ExportOption[] = isMtg
     ? [
         { key: "manabox", label: "Manabox", fn: exportToManabox },
@@ -89,6 +97,7 @@ export function SessionSummaryDialog({
           label: "Card Kingdom Buylist",
           fn: exportToCardKingdom,
         },
+        ...marketplaceOptions,
       ]
     : [
         {
@@ -96,6 +105,7 @@ export function SessionSummaryDialog({
           label: "CSV",
           fn: (c, collection) => exportToCsv(c, collection, fieldDefinitions),
         },
+        ...marketplaceOptions,
       ];
 
   const cardsPerHour =

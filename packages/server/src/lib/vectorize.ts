@@ -13,24 +13,58 @@ const MODEL_NAME = "Xenova/siglip-base-patch16-512";
 //                            bundles DirectML.dll). Measured ~1.9x faster than
 //                            CPU q8 on this machine (703ms → 375ms).
 // The q8 model crashes natively on the DirectML EP, so dtype is forced to
-// fp32 whenever DML is selected.
+// fp32 whenever DML is selected (unless VECTORIZE_DTYPE overrides it).
 const DEVICE: "cpu" | "dml" =
   process.env.VECTORIZE_DEVICE === "dml" ? "dml" : "cpu";
-const DTYPE: "fp32" | "q8" = DEVICE === "dml" ? "fp32" : "q8";
+
+// Which DirectML adapter to run the model on. This is the DXGI/DirectML
+// adapter index, NOT the nvidia-smi index (they enumerate differently: on
+// this machine nvidia-smi lists GTX 970=0 / M4000=1, but DXGI lists the
+// primary display first, so DirectML deviceId 0=M4000 and 1=GTX 970).
+//
+// The GTX 970 is the dedicated AI card (not the primary display), so the
+// scan embeddings run on it while the M4000 keeps driving the desktop —
+// verified ~1.3x faster than the M4000 (284ms vs 374ms full scan-path).
+// Override with VECTORIZE_DML_DEVICE_ID if the GPU topology changes.
+const DML_DEVICE_ID = Number(process.env.VECTORIZE_DML_DEVICE_ID ?? "1");
+
+// VECTORIZE_DTYPE overrides the dtype (fp32|fp16|q8). Defaults preserve the
+// long-standing behavior: q8 on CPU, fp32 on DML. fp16 is ~10% faster than
+// fp32 on the GTX 970 (258ms vs 284ms full-path) at slightly reduced
+// embedding precision — opt in with VECTORIZE_DTYPE=fp16.
+function resolveDtype(): "fp32" | "fp16" | "q8" {
+  const override = process.env.VECTORIZE_DTYPE;
+  if (override === "fp32" || override === "fp16" || override === "q8") {
+    return override;
+  }
+  return DEVICE === "dml" ? "fp32" : "q8";
+}
+const DTYPE = resolveDtype();
+
+// Pin the DirectML execution provider to the chosen adapter (onnxruntime
+// 1.21+: DmlExecutionProviderOption.deviceId). Without this, DML uses the
+// default device — the primary display adapter, i.e. the M4000.
+const session_options =
+  DEVICE === "dml"
+    ? { executionProviders: [{ name: "dml" as const, deviceId: DML_DEVICE_ID }] }
+    : undefined;
 
 let modelPromise: Promise<SiglipVisionModel> | null = null;
 let processorPromise: Promise<Processor> | null = null;
 
 async function getModel(): Promise<SiglipVisionModel> {
   if (!modelPromise) {
-    console.log(`[vectorize] Loading SigLIP model (${DTYPE}) on ${DEVICE}...`);
+    const where =
+      DEVICE === "dml" ? `dml(adapter ${DML_DEVICE_ID})` : DEVICE;
+    console.log(`[vectorize] Loading SigLIP model (${DTYPE}) on ${where}...`);
     modelPromise = SiglipVisionModel.from_pretrained(MODEL_NAME, {
       dtype: DTYPE,
       device: DEVICE,
+      ...(session_options ? { session_options } : {}),
     });
     await modelPromise;
     console.log(
-      `[vectorize] SigLIP model loaded successfully (768 dimensions, device=${DEVICE}, dtype=${DTYPE})`,
+      `[vectorize] SigLIP model loaded successfully (768 dimensions, device=${where}, dtype=${DTYPE})`,
     );
   }
   return modelPromise;

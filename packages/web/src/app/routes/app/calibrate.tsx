@@ -160,6 +160,7 @@ export default function CalibratePage() {
     handleFeederSetPulseDuration,
     handleFeederSetPauseDuration,
     handleFeederSetSettleDuration,
+    handleClearJam,
     handleFeed,
     isSampleRunning,
     handleSampleRun,
@@ -262,6 +263,7 @@ export default function CalibratePage() {
           onSetPulseDuration={handleFeederSetPulseDuration}
           onSetPauseDuration={handleFeederSetPauseDuration}
           onSetSettleDuration={handleFeederSetSettleDuration}
+          onClear={handleClearJam}
         />
       </div>
 

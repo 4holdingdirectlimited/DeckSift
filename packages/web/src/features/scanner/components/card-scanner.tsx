@@ -32,6 +32,8 @@ export function CardScanner({ className, compact }: CardScannerProps) {
     sendCatchAllBin,
     autoFeed,
     setAutoFeed,
+    maxCopiesPerCard,
+    setMaxCopiesPerCard,
     registerCardArrivedHook,
     registerPauseHook,
     registerResumeHook,
@@ -431,6 +433,7 @@ export function CardScanner({ className, compact }: CardScannerProps) {
           isConnected={isConnected}
           autoFeed={autoFeed}
           allowDuplicates={allowDuplicates}
+          maxCopiesPerCard={maxCopiesPerCard}
           reviewQueue={reviewQueue}
           reviewMatchPercent={reviewMatchPercent}
           autoRejectMatchPercent={autoRejectMatchPercent}
@@ -448,6 +451,7 @@ export function CardScanner({ className, compact }: CardScannerProps) {
           onCalibrate={() => navigate("/app/calibrate")}
           onAutoFeedChange={setAutoFeed}
           onAllowDuplicatesChange={setAllowDuplicates}
+          onMaxCopiesPerCardChange={setMaxCopiesPerCard}
           onReviewQueueChange={setReviewQueue}
           onReviewMatchPercentChange={setReviewMatchPercent}
           onAutoRejectMatchPercentChange={setAutoRejectMatchPercent}

@@ -16,6 +16,7 @@ import { cn } from "@/lib/utils";
 import {
   IconAdjustments,
   IconCamera,
+  IconChartBar,
   IconDatabase,
   IconFolders,
   IconLayoutSidebarLeftCollapse,
@@ -233,6 +234,12 @@ export function AppNav() {
       icon: <IconWifi size={20} />,
       label: "Monitor",
       badge: hasLiveSessions,
+    },
+    {
+      to: "/app/stats",
+      icon: <IconChartBar size={20} />,
+      label: "Stats",
+      desktopOnly: true,
     },
     {
       to: "/app/calibrate",

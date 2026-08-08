@@ -16,6 +16,7 @@ const LibraryPage = lazy(() => import("@/app/routes/app/library"));
 const CalibratePage = lazy(() => import("@/app/routes/app/calibrate"));
 const SettingsPage = lazy(() => import("@/app/routes/app/settings"));
 const AdminPage = lazy(() => import("@/app/routes/app/admin"));
+const StatsPage = lazy(() => import("@/app/routes/app/stats"));
 const MonitorSessionsPage = lazy(() => import("@/app/routes/app/monitor-sessions"));
 const MonitorPage = lazy(() => import("@/app/routes/app/monitor"));
 
@@ -118,6 +119,14 @@ export const router = createBrowserRouter([
             element: (
               <PageSuspense>
                 <SettingsPage />
+              </PageSuspense>
+            ),
+          },
+          {
+            path: "/app/stats",
+            element: (
+              <PageSuspense>
+                <StatsPage />
               </PageSuspense>
             ),
           },

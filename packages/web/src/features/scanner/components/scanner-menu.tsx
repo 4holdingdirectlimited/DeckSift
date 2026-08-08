@@ -23,6 +23,7 @@ interface ScannerMenuProps {
   isConnected: boolean;
   autoFeed: boolean;
   allowDuplicates: boolean;
+  maxCopiesPerCard: number;
   reviewQueue: boolean;
   reviewMatchPercent: number;
   autoRejectMatchPercent: number;
@@ -40,6 +41,7 @@ interface ScannerMenuProps {
   onCalibrate: () => void;
   onAutoFeedChange: (enabled: boolean) => void;
   onAllowDuplicatesChange: (enabled: boolean) => void;
+  onMaxCopiesPerCardChange: (value: number) => void;
   onReviewQueueChange: (enabled: boolean) => void;
   onReviewMatchPercentChange: (value: number) => void;
   onAutoRejectMatchPercentChange: (value: number) => void;
@@ -50,6 +52,7 @@ export function ScannerMenu({
   isConnected,
   autoFeed,
   allowDuplicates,
+  maxCopiesPerCard,
   reviewQueue,
   reviewMatchPercent,
   autoRejectMatchPercent,
@@ -67,6 +70,7 @@ export function ScannerMenu({
   onCalibrate,
   onAutoFeedChange,
   onAllowDuplicatesChange,
+  onMaxCopiesPerCardChange,
   onReviewQueueChange,
   onReviewMatchPercentChange,
   onAutoRejectMatchPercentChange,
@@ -160,6 +164,33 @@ export function ScannerMenu({
                   >
                     Allow duplicates
                   </DropdownMenuCheckboxItem>
+                  <div
+                    className="px-2 py-1.5 flex flex-col gap-1"
+                    onPointerDown={(e) => e.stopPropagation()}
+                  >
+                    <p className="text-xs text-muted-foreground flex items-center justify-between">
+                      Max copies per card
+                      <span className="font-semibold text-foreground">
+                        {maxCopiesPerCard === 0 ? "Unlimited" : maxCopiesPerCard}
+                      </span>
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="range"
+                        min={0}
+                        max={20}
+                        step={1}
+                        value={Math.min(maxCopiesPerCard, 20)}
+                        onChange={(e) =>
+                          onMaxCopiesPerCardChange(Number(e.target.value))
+                        }
+                        className="flex-1 cursor-pointer accent-foreground"
+                      />
+                    </div>
+                    <p className="text-[10px] text-muted-foreground leading-tight">
+                      Over this limit, extras route to the catch-all (reject) bin.
+                    </p>
+                  </div>
                   <DropdownMenuCheckboxItem
                     checked={reviewQueue}
                     onCheckedChange={onReviewQueueChange}

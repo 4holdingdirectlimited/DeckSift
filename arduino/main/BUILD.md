@@ -6,7 +6,7 @@ Parts list and assembly instructions for the physical sorting unit: a hopper fee
 - **Enclosure:** `3d model/Card Sorter.f3d` (Fusion 360 source) or `3d model/card_sorter.3mf` (mesh, slicer-ready) — the original design by dishwasher-detergent. DeckSift's revised parts live alongside as `3d model/card_sorter_decksift.3mf` — both files are the same machine; use whichever matches your print setup. 3D files are CC BY-NC-SA 4.0 (see `3d model/LICENSE`).
 - **Calibration:** `/app/calibrate` in the web app
 - **Photo references:** the original interactive guide at [mault.xyz/build](https://mault.xyz/build) shows assembly photos for most steps (`/instructions/*.jpg` in the repo)
-- **Print files:** the printable parts are the 3MFs in `3d model/` — `card_sorter.3mf` (original design by dishwasher-detergent) and `card_sorter_decksift.3mf` (DeckSift's revised parts, print-optimized for faster, more efficient batches). Slice either in Bambu Studio/Cura; both are the same machine. See `custom/PLAN.md` for the planned Bambu quantity-kit plate layout.
+- **Print files:** the printable parts are the 3MFs in `3d model/` — `card_sorter.3mf` (original design by dishwasher-detergent) and `card_sorter_decksift.3mf` (DeckSift's revised parts, print-optimized for faster, more efficient batches — 30 parts across 16 plates). Slice either in Bambu Studio/Cura; both are the same machine. The **DeckSift Bambu print kit** (`3d model/kit/`) has a tick-box quantity sheet + the 16-plate plan for `card_sorter_decksift.3mf`.
 - **Shopping list:** print **`BOM.txt`** (this folder) and tick items as you buy them.
 
 ---

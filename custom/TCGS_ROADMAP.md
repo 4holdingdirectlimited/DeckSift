@@ -5,7 +5,8 @@ its game row exists, the adapter can search, and the sync can populate the
 card database with **images** (images are the hard requirement — the SigLIP
 embedding pipeline can't work without card art).
 
-**Current count: 11 integrated, 4 syncing now.** Adding a game = one config in
+**Current count: 15 integrated (11 synced + 4 dataset-imported), all searchable** (status `idle` verified 2026-08).
+Adding a game = one config in
 `packages/server/src/lib/card-search/generic-configs.ts` + registration in
 `resolve.ts` / `sync-job.ts` / the image allowlist in `routes/card.ts` + a seed
 row in `packages/server/scripts/seed-local.ts`. The seeder is idempotent
@@ -16,16 +17,20 @@ row in `packages/server/scripts/seed-local.ts`. The seeder is idempotent
 | # | Game | Source | Cards | Images | Sync |
 | --- | --- | --- | --- | --- | --- |
 | 1 | MTG | Scryfall | 54,009 | ✅ | ✅ done |
+| 12 | Altered TCG | Altered-TCG-Card-Database | 3,464 | ✅ | ✅ imported |
+| 13 | Force of Will | TCG-Arena-FoW | 7,272 | ✅ | ✅ imported |
+| 14 | Duel Masters | duel-masters-json + Fandom | 1,248 | ✅ | ✅ imported |
+| 15 | Weiss Schwarz | Weiss-Sim-Card-Data | 581 | ✅ | ✅ imported |
 | 2 | Pokémon | TCGdex | 21,756 | ✅ | ✅ done |
 | 3 | Yu-Gi-Oh! | YGOPRODeck | 14,477 | ✅ | ✅ done |
 | 4 | Digimon | digimoncard.io | 4,373 | ✅ | ✅ done |
 | 5 | Gundam | gundam-gcg.com | 1,816 | ✅ | ✅ done |
 | 6 | Union Arena | apitcg/union-arena-tcg-data | 541 | ✅ | ✅ done |
 | 7 | Disney Lorcana | lorcana-api.com | 2,694 | ✅ | ✅ done |
-| 8 | One Piece | buhbbl/punk-records | 4,672 | ✅ | 🔄 running |
-| 9 | Star Wars: Unlimited | Team-Zura/swu-cards-json | 9,058 | ✅ | ⏳ queued |
-| 10 | Flesh and Blood | the-fab-cube/flesh-and-blood-cards | 16,264 printings | ✅ | 🔄 re-syncing (per-printing rarity) |
-| 11 | Pokémon TCG Pocket | flibustier/pokemon-tcg-pocket-database | 3,761 | ✅ | ⏳ queued |
+| 8 | One Piece | buhbbl/punk-records | 4,672 | ✅ | ✅ done |
+| 9 | Star Wars: Unlimited | Team-Zura/swu-cards-json | 9,058 | ✅ | ✅ done |
+| 10 | Flesh and Blood | the-fab-cube/flesh-and-blood-cards | 16,264 printings | ✅ | ✅ done (per-printing rarity) |
+| 11 | Pokémon TCG Pocket | flibustier/pokemon-tcg-pocket-database | 3,761 | ✅ | ✅ done |
 
 Notes: FAB images come from the dataset's `image_url` fields (Google
 Storage/S3/CloudFront CDNs — fabdb.net itself is unreachable from this
@@ -35,7 +40,8 @@ rarity and art — cards with identical art across printings embed the same
 (scan matching picks any row; the rarity shown is that printing's).
 SWU/FAB catalogs are 39–53 MB, so the first search per 15-min cache window
 is slow; Pocket images resolve 1:1 from the companion pokemon-tcg-exchange
-repo.
+repo. Pokémon rows carry localized names (fr/de/es/it/pt) — see `TCGS.md`
+"Multi-language cards".
 
 ## 🎯 Remaining target games — deep research (verified 2026-08)
 

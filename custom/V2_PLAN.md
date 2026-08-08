@@ -77,19 +77,19 @@ Priority = value × evidence, not effort. Effort: ●○○ hours · ●●○ a
 | 2 | **Route integration tests + startup wait-on-health** (CI-tested API routes; start script waits for `/api/health` before declaring up) | [I][QA] | ●●○ | 1 |
 | 3 | **Reliability telemetry dashboard** (cards/hr, jams/1,000, error rate per session; the ROI evidence shops ask for) | [R §6][P] | ●●○ | 1 |
 | 4 | **Store-intake workflow:** hopper → value-sift by threshold → digitize → TCGplayer CSV in one pass | [R §5][P] | ●●● | 2 |
-| 5 | **Per-card condition photo capture** stored with each scan (grading-ready record; no AI grading) | [R §6] | ●○○ | 2 |
-| 6 | **Duplicate/overstock control** ("keep max N per card" — PhyzBatch parity) | [R §6] | ●○○ | 2 |
+| 5 | **Per-card condition photo capture** stored with each scan (grading-ready record; no AI grading) — ✅ already covered by each scan's `capturedImageUrl` (Item 70) | [R §6] | ●○○ | 2 |
+| 6 | **Duplicate/overstock control** ("keep max N per card") — ✅ shipped: Scanner menu → "Max copies per card", extras route to the reject bin (Item 73) | [R §6] | ●○○ | 2 |
 | 7 | **Pre-release set data** (sync new sets before release) | [R §6] | ●●○ | 2 |
 | 8 | **Sort-to-ship:** import order/pull-sheet CSV → route to bins by order | [R §6][T] | ●●○ | 2 |
-| 9 | **More export targets** (eBay/Shopify/ManaBox CSVs) | [R §6] | ●○○ | 2 |
-| 10 | **TCG expansion 12 → 20 games** (see §5; most blocked on *images*, not code) | [T] | ●○○ each | 2/3 |
+| 9 | **More export targets** (eBay/Shopify/ManaBox CSVs) — ✅ eBay + Shopify shipped (Item 70) | [R §6] | ●○○ | 2 |
+| 10 | **TCG expansion 12 → 20 games** (see §5) — **15 done** as of Item 72 (+Altered, Force of Will, Duel Masters, Weiss Schwarz); remaining mostly blocked on *images*, not code | [T] | ●○○ each | 2/3 |
 | 11 | **Firmware per-phase stall watchdogs + full jam coverage** (mid-sequence, all modules) | [F §6–7] | ●●○ | 3 |
-| 12 | **TCGplayer price source + catalog match job** (blocked on seller-API keys) | [T][P] | ●●● | 3 |
+| 12 | **TCGplayer price source + catalog match job** — 🔒 blocked at the source: TCGplayer froze new API grants (official docs, verified 2026-08); needs an account with pre-freeze keys | [T][P] | ●●● | 3 |
 | 13 | **Store inventory sync + order manifest → sort-to-ship (full)** | [T] | ●●● | 3 |
 | 14 | **Hardware v2 single machine** (ASA/PETG + brass inserts, MG90S, bearings, encoder, comparator) — *gated on Phase 0–1 measurements* | [H §1–4] | ●●● | 4 |
 | 15 | **Multi-machine station** (`station_id`, per-station islands, 3×serial+3×camera, one GPU) | [H §5] | ●●● | 5 |
 | 16 | **Faster vector search** (HNSW index or GPU offload for the embedding matcher — revisit when catalog > ~150k cards) | [I] | ●●○ | 5 |
-| 17 | **Bambu Lab print-kit** (quantity sheet + reorganized plates; pure software/print-side) | [F] | ●○○ | any |
+| 17 | **Bambu Lab print-kit** (quantity sheet + reorganized plates; pure software/print-side) — ✅ shipped: `3d model/kit/` + 16-plate plan for `card_sorter_decksift.3mf` (Item 73) | [F] | ●○○ | any |
 
 **Carried but deliberately parked** (do not build in v2 — [R §6]): AI condition
 grading (capture photos now, grade later), sports cards, cloud/multi-tenant
@@ -112,42 +112,50 @@ Fix what the numbers say (feeder first — it is almost always the bottleneck).
 four numbers become the KPIs every upgrade is judged against.
 
 ### Phase 1 — v1.5 commercial hardening (software; now → next)
-Mostly **done**: 100-test suite + CI (`Item 64`), retry/timeout/logger
-hardening (`Item 65`), upload downscale (`Item 63`) — QA-approved for merge.
-Remaining in this phase:
-- **Route integration tests** — the current suite is pure-logic only; add a
-  small set of route-level tests (health, sync sources, search) against a test
-  DB so the API contract is regression-safe **[I][QA]**.
-- **Startup wait-on-health** — `scripts/start-server.cmd` should poll
-  `/api/health` and report a clean failure instead of a silent half-up state **[I]**.
-- **Reliability telemetry** — surface scan-rate/error/jam counters (data
-  already collected, Item 52) as a simple shop-facing stats view **[P][R]**.
-**Gate:** `pnpm test/typecheck/lint/build` green on fresh cache; API restart
-procedure documented (JSON log line confirms the new code is live) **[QA §5]**.
+
+**Done (Item 67):** 100-test suite + CI (`Item 64`), retry/timeout/logger
+hardening (`Item 65`), upload downscale (`Item 63`), **route integration
+tests** (health / sync sources / library search against a scratch Postgres
+in CI), **startup wait-on-health** (`start-server.cmd` polls `/api/health`
+and stops a half-up server on failure), and **reliability telemetry**
+(`GET /api/stats` + the `/app/stats` shop-facing view: totals, throughput,
+14-day series, live session block).
+**Gate:** `pnpm test/typecheck/lint/build` green on fresh cache — ✅ 107/107
+tests (incl. 7 route integration), typecheck/lint/build clean. API restart
+procedure: `scripts/start-server.cmd` now confirms health before declaring
+up (JSON log line in `server.log` proves the new code is live) **[QA §5]**.
 
 ### Phase 2 — Store-intake workflow (the commercial wedge)
-Ship the highest-ROI software first — most pieces exist:
-1. **Intake mode** (#4): one flow that value-sifts (existing price rules) and
-   digitizes (existing digitize mode) into a bulk inventory + TCGplayer CSV
-   (existing export) without any sorting setup.
-2. **Condition photos** (#5), **duplicate cap** (#6), **extra exports** (#9):
-   small, additive.
-3. **Pre-release data** (#7) and **sort-to-ship CSV** (#8): medium; sort-to-ship
-   reuses bundle/chase routing.
+Ship the highest-ROI software first — most pieces exist. **Progress (Items 70,
+73):** extra exports done (eBay + Shopify in the Session Summary menu);
+condition photos (#5) are effectively covered — every scan stores its captured
+image (`capturedImageUrl`) on the card record; **duplicate cap (#6) shipped**
+(Scanner menu → "Max copies per card", extras route to the reject bin);
+multi-language scanning (Item 69) landed. **Intake mode (#4) is documented as
+covered** by the existing flow — Digitize mode + value rules + Session Summary
+exports already give one-pass value-sift → digitize → CSV with no sorting
+setup (the Phase 2 gate's 1,000-card dry-run is the remaining validation).
+Remaining: **Pre-release data (#7)** and **sort-to-ship CSV (#8)** (medium;
+sort-to-ship reuses bundle/chase routing).
 **Gate:** a dry-run of the full intake pipeline on one real 1,000-card bulk
 box produces a clean, importable CSV; session stats recorded for the shop ROI
 story.
 
-### Phase 3 — TCG expansion 12 → 20
-See §5. Each game is ~1 day once a source with images exists. This phase runs
-alongside 1–2; the goal is 20 *functioning* (search + sync + images) games.
+### Phase 3 — TCG expansion 12 → 20 (15 done)
+See §5. **15 games live as of Item 72** — Altered, Force of Will, Duel Masters
+and Weiss Schwarz were integrated from community datasets this session. The
+goal stays 20+ *functioning* games; each remaining one is ~1 day once a source
+with images exists.
 **Gate:** 20 games with images synced; each verified by one search + one sync.
 
-### Phase 4 — TCGplayer price + listing (blocked on keys)
-Unblocks the single most-cited commercial feature (digitize → list). Requires
-a TCGplayer **seller account + API application** (user action — see §7).
-Roadmap is already written in `TCGS.md`: price-source adapter → catalog match
-job → (optional) inventory sync + order manifests.
+### Phase 4 — TCGplayer price + listing (blocked at the source)
+Unblocks the most-cited commercial feature (digitize → list), but TCGplayer
+is **no longer granting new API access** (official docs, verified 2026-08) —
+a new seller account cannot obtain keys. The only route is an account that
+already holds pre-freeze keys. Until then, the 80/20 path is already built:
+MTG + Yu-Gi-Oh! are priced without the API (Scryfall carries TCGplayer market
+prices; YGOPRODeck's `tcgplayer_price` *is* the market price), and the
+TCGplayer inventory CSV export feeds the seller portal's manual upload.
 **Gate:** keys exist; catalog match accuracy ≥99% on a 500-card spot check.
 
 ### Phase 5 — Hardware v2 (one machine; gated on Phases 0–1)
@@ -180,14 +188,16 @@ code is never the blocker.
 
 | Game | Status / blocker | Unblock action (user) |
 | --- | --- | --- |
-| Dragon Ball Super | Official `en.dbs-card.com` unreachable from this machine (geo/WAF) | Browse from phone/VPN, find card-list URL; or ask DBS community for a JSON export |
-| Cardfight!! Vanguard | Official site path-gated (404 from here) | Find the working card-DB URL in a browser, or a community dataset on the Vanguard Discord |
-| Weiss Schwarz | Only fragmented per-series sim data | Official `en.ws-tcg.com` card-list URL, or a merged community JSON |
-| Final Fantasy TCG | `ffdecks.com` is a SPA | Check DevTools → Network for a JSON cards endpoint |
+| ✅ Altered TCG | ✅ integrated (Item 72, 3,464 cards) | — |
+| ✅ Duel Masters | ✅ integrated (Item 72, 1,248 printings, Fandom wiki art) | — |
+| ✅ Weiss Schwarz | ✅ integrated (Item 72, 581 cards, sim scans) | — |
+| ✅ Force of Will | ✅ integrated (Item 72, 7,272 cards, S3 art) | — |
+| Dragon Ball Super | Images-only repo found (`TCG-Arena-DBSFW`); no metadata JSON | Browse from phone/VPN for the card-list URL, or a community JSON export |
+| Cardfight!! Vanguard | No dataset with images found | Community dataset from the Vanguard Discord |
+| Final Fantasy TCG | `ffdecks.com` is a SPA; API not trivially exposed | Check DevTools → Network for a JSON cards endpoint |
 | Hololive OCG | Fan DBs, no stable image-bearing JSON | Check a fan site's network requests for card JSON + image CDN |
-| Shadowverse Evolve | Data embedded in sim app code | Clone `anthonychian/shadowverse-client`, find the cards JSON/SQL |
-| Altered TCG | Fragmented per-set files + IMAGES dir | I can consolidate locally (one-time build step) — decide if wanted |
-| Duel Masters | Complete data, **no image URLs** | Find the official/community image CDN (dm-wiki/takaratomy) URL pattern — data side is ready |
+| Shadowverse Evolve | Sim-client data has English names but **no image URLs** | Find the official card-image URL pattern in a browser |
+| WIXOSS | JP-only dataset (736 cards), no images | Skip unless building a JP-focused rig |
 | Battle Spirits | JP-only | Skip unless building a JP-focused rig |
 
 Full per-game notes, verified 2026-08: `custom/TCGS_ROADMAP.md` §"Remaining
@@ -211,14 +221,16 @@ target games".
 
 ## 7. Decisions that need you (the owner)
 
-1. **TCGplayer seller account + API application** — the only hard blocker on
-   the digitize→list workflow (Phase 4). Costs nothing but an application.
-2. **Blocked data sources** (DBS, Vanguard, Weiss, FF, Hololive, SV, Duel
-   Masters images) — each needs one URL/dataset from your network or a
-   community contact (playbook in `TCGS_ROADMAP.md` §"Finding the needed parts").
-3. **Altered TCG** — one-time local consolidation step; say the word.
-4. **Bambu Lab print kit** — ready to produce when you want it (print-side only,
-   no firmware change).
+1. **TCGplayer API keys** — formerly "seller account + API application";
+   that path is closed (TCGplayer froze new API grants, verified 2026-08).
+   Only actionable if the 4holdingdirectlimited account turns out to hold
+   pre-freeze keys; otherwise this stays parked (the manual CSV path covers
+   listing today).
+2. **Blocked data sources** (DBS, Vanguard, FF, Hololive, SV images, WIXOSS)
+   — each needs one URL/dataset from your network or a community contact
+   (playbook in `TCGS_ROADMAP.md` §"Finding the needed parts").
+3. ~~**Altered TCG**~~ — ✅ done (Item 72).
+4. ~~**Bambu Lab print kit**~~ — ✅ shipped (Item 73, `3d model/kit/`).
 5. **Commercial licensing** — v2 units are sold by license from
    4holdingdirectlimited; the plan assumes that channel stays as documented in
    `PRODUCT.md`.

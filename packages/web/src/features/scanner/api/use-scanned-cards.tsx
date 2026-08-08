@@ -51,6 +51,12 @@ export function ScannedCardsProvider({
   children: React.ReactNode;
 }) {
   const [cards, setCards] = useState<ScannedCard[]>([]);
+  // Mirror for useCallback closures (addCard etc.) that must read the current
+  // session cards without re-creating themselves on every scan.
+  const cardsRef = useRef<ScannedCard[]>([]);
+  useEffect(() => {
+    cardsRef.current = cards;
+  }, [cards]);
   const [isLoading, setIsLoading] = useState(true);
   const [digitize, setDigitize] = useState(false);
   const digitizeRef = useRef(digitize);
@@ -63,6 +69,26 @@ export function ScannedCardsProvider({
   // measurable without watching the session average (which includes idle).
   const scanTimesRef = useRef<number[]>([]);
   const [lastScanAt, setLastScanAt] = useState<number | null>(null);
+  // Duplicate/overstock cap: when set (>0), a card already scanned that many
+  // times this session routes to the catch-all (reject) bin instead of its
+  // matched bin — "keep max N per card" (V2_PLAN Phase 2 item 6).
+  const [maxCopiesPerCard, setMaxCopiesPerCardState] = useState<number>(() =>
+    Number(localStorage.getItem("maxCopiesPerCard") ?? "0"),
+  );
+  const maxCopiesRef = useRef(maxCopiesPerCard);
+  useEffect(() => {
+    maxCopiesRef.current = maxCopiesPerCard;
+    if (maxCopiesPerCard > 0) {
+      localStorage.setItem("maxCopiesPerCard", String(maxCopiesPerCard));
+    } else {
+      localStorage.removeItem("maxCopiesPerCard");
+    }
+  }, [maxCopiesPerCard]);
+  const setMaxCopiesPerCard = useCallback(
+    (value: number) => setMaxCopiesPerCardState(Math.max(0, Math.floor(value))),
+    [],
+  );
+
   const recordScanTime = useCallback(() => {
     const now = Date.now();
     scanTimesRef.current = [
@@ -741,6 +767,42 @@ export function ScannedCardsProvider({
       }
 
       // ── Normal mode: evaluate bin rules ──
+      // Duplicate cap: if this card already hit the session limit, the copy
+      // goes to the catch-all (reject) bin — overstock control, keep max N.
+      const maxCopies = maxCopiesRef.current;
+      const copyCount = cardsRef.current.filter(
+        (entry) => entry.card.id === card.id,
+      ).length;
+      if (maxCopies > 0 && copyCount >= maxCopies) {
+        const rejectBin = getCatchAllBin(binConfigsRef.current);
+        if (rejectBin) {
+          const rejectCapacity = rejectBin.maxCapacity ?? 0;
+          if (
+            rejectCapacity > 0 &&
+            (binCountsRef.current[rejectBin.binNumber] ?? 0) >= rejectCapacity
+          ) {
+            pauseForFullBin(rejectBin.binNumber);
+            return;
+          }
+          const record: ScannedCard = {
+            scanId: generateScanId(),
+            card,
+            scannedAt: Date.now(),
+            binNumber: rejectBin.binNumber,
+            capturedImageUrl: effectiveImage,
+            isFoil: isFoil ?? false,
+            alternativeMatches: alternativeMatches?.length
+              ? alternativeMatches
+              : undefined,
+          };
+          commitScan(record, rejectBin.binNumber);
+          toast.info(`Duplicate limit reached: ${card.name}`, {
+            description: `${copyCount + 1} copies would exceed the cap of ${maxCopies} — sent to the reject bin.`,
+          });
+          return;
+        }
+      }
+
       const matchedBin = evaluateCardBin(
         card,
         binConfigsRef.current,
@@ -993,6 +1055,8 @@ export function ScannedCardsProvider({
         setAutoFeed,
         digitize,
         setDigitize,
+        maxCopiesPerCard,
+        setMaxCopiesPerCard,
         registerCardArrivedHook,
         registerPauseHook,
         registerResumeHook,

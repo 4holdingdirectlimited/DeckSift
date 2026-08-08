@@ -189,7 +189,10 @@ router.get("/library", requireAuth, async (c) => {
   if (gameKey) conditions.push(sql`${cardImageVectors.gameKey} = ${gameKey}`);
   if (search)
     conditions.push(
-      sql`${cardImageVectors.name} ILIKE ${`%${search}%`}`,
+      sql`(${cardImageVectors.name} ILIKE ${`%${search}%`} OR EXISTS (
+        SELECT 1 FROM jsonb_each_text(${cardImageVectors.cardData}->'names') AS n(lang, localized_name)
+        WHERE n.localized_name ILIKE ${`%${search}%`}
+      ))`,
     );
   if (rarity)
     conditions.push(
@@ -396,6 +399,8 @@ const ALLOWED_IMAGE_HOSTS = new Set([
   "www.unionarena-tcg.com",
   "storage.googleapis.com",
   "legendstory-production-s3-public.s3.amazonaws.com",
+  "fowsim.s3.amazonaws.com",
+  "static.wikia.nocookie.net",
   "d2wlb52bya4y8z.cloudfront.net",
   "dhhim4ltzu1pj.cloudfront.net",
   "raw.githubusercontent.com",

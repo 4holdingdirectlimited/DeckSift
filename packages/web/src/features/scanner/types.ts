@@ -41,6 +41,10 @@ export interface ScannedCardsContextValue {
   /** Digitize mode: scan + record every card without sorting (routes to catch-all). */
   digitize: boolean;
   setDigitize: (enabled: boolean) => void;
+  /** Keep max N copies per card this session (0 = unlimited); extras route
+   *  to the catch-all/reject bin. */
+  maxCopiesPerCard: number;
+  setMaxCopiesPerCard: (value: number) => void;
   addCard: (
     card: PlayingCardWithDistance,
     capturedImageUrl?: string,

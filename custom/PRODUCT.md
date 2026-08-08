@@ -58,7 +58,7 @@ Legend: effort ●○○ = tiny (hours) · ●●○ = a session · ●●● = 
 | Bundle SKU + inventory + CSV | Traceable bundle records | ●●○ | ✅ built |
 | Total collection value | Per-session + per-collection totals | ●○○ | ✅ part |
 | Condition field | Per-scan condition for TCG export (defaults NM) | ●●○ | ✅ built |
-| TCGplayer price source | Needs seller API access (TCGS.md roadmap) | ●●● | 🧰 |
+| TCGplayer price source | Needs API keys — TCGplayer froze new grants (verified 2026-08); parked until keys exist (TCGS.md roadmap) | ●●● | 🧰 |
 
 ### Everyday QoL
 

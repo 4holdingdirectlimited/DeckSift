@@ -42,6 +42,9 @@ packages/server/.cache/
 .mault-orig-bundle.js
 digimon-cat.json
 
+# local data (dataset clones for the TCG importers live here, not in git)
+.local/
+
 # server log (start-server.cmd appends here)
 server.log
 

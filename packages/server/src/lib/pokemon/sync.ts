@@ -1,6 +1,7 @@
 import type { SyncSource, SyncSourceCard } from "../card-search/sync-types";
 import {
   fetchDetail,
+  fetchLocalizedNameMaps,
   normalizePokemonCard,
   POKEMON_DEFAULT_URL,
   POKEMON_HEADERS,
@@ -75,6 +76,12 @@ async function fetchCards(
     return detail;
   });
 
+  // Localized names (fr/de/es/it/pt) via the cheap per-locale list endpoints,
+  // so foreign-language Pokémon cards are searchable by their own name.
+  addLog("Fetching localized card names (fr/de/es/it/pt)...");
+  const localizedNames = await fetchLocalizedNameMaps(baseUrl);
+  addLog(`Localized names loaded for ${localizedNames.size} cards.`);
+
   const cards: SyncSourceCard[] = [];
   let skipped = 0;
   for (const detail of details) {
@@ -89,7 +96,7 @@ async function fetchCards(
       imageUrl: highResUrl(detail.image),
       // Full PlayingCard (rarity, set, etc.) so rarity binning, bundle
       // recipes, and offline hydration all work without a second lookup.
-      cardData: normalizePokemonCard(detail),
+      cardData: normalizePokemonCard(detail, localizedNames.get(detail.id)),
     });
   }
   addLog(

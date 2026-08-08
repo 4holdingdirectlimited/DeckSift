@@ -197,6 +197,44 @@ const GAMES: GameSeed[] = [
       "shiny super rare",
     ],
   },
+  {
+    key: "altered",
+    name: "Altered TCG",
+    dataSourceUrl: "local",
+    rarities: ["common", "uncommon", "rare", "exalted"],
+  },
+  {
+    key: "fow",
+    name: "Force of Will",
+    dataSourceUrl: "local",
+    rarities: [
+      "common",
+      "uncommon",
+      "rare",
+      "super rare",
+      "master rare",
+      "ruler",
+      "n",
+      "xr",
+      "ar",
+      "er",
+      "jr",
+      "rr",
+      "mr",
+    ],
+  },
+  {
+    key: "duelmasters",
+    name: "Duel Masters",
+    dataSourceUrl: "local",
+    rarities: ["common", "uncommon", "rare", "very rare", "super rare"],
+  },
+  {
+    key: "weiss",
+    name: "Weiss Schwarz",
+    dataSourceUrl: "local",
+    rarities: ["common", "uncommon", "rare"],
+  },
 ];
 
 /** FIELD_DEFINITIONS with the rarity options replaced for the given game. */

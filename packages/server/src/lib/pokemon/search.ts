@@ -92,7 +92,57 @@ function assetUrl(image: string, quality: "low" | "high"): string {
   return `/api/cards/image-proxy?url=${encodeURIComponent(`${image}/${quality}.webp`)}`;
 }
 
-export function normalizePokemonCard(raw: PokemonCardDetail): PlayingCard {
+// Languages TCGdex can list cards in, beyond the English sync catalog. These
+// map onto the card ids the en sync uses (the list endpoint returns {id,
+// localId, name} per locale), so foreign Pokémon cards scan-identify via the
+// vision matcher and their localized names are stored for search/export.
+// MTG (Scryfall unique_artwork bulk omits foreign_data) and Yu-Gi-Oh!
+// (YGOPRODeck removed its localized name fields) have no cheap source.
+export const POKEMON_LOCALES = ["fr", "de", "es", "it", "pt"] as const;
+export type PokemonLocale = (typeof POKEMON_LOCALES)[number];
+
+/**
+ * Fetches the per-locale name lists (id → localized name) for the configured
+ * locales. One paginated list call per locale — far cheaper than per-card
+ * locale fetches. Returns a map keyed by the same card ids the en sync uses.
+ */
+export async function fetchLocalizedNameMaps(
+  baseUrl: string,
+): Promise<Map<string, Partial<Record<PokemonLocale, string>>>> {
+  const listUrl = baseUrl.replace(/\/[a-z]{2}\/cards$/, "/{locale}/cards");
+  const map = new Map<string, Partial<Record<PokemonLocale, string>>>();
+
+  for (const locale of POKEMON_LOCALES) {
+    const url = listUrl.replace("{locale}", locale);
+    let page = 1;
+    for (;;) {
+      const res = await fetch(
+        `${url}?pagination:page=${page}&pagination:itemsPerPage=1000`,
+        { headers: POKEMON_HEADERS },
+      );
+      if (!res.ok) {
+        throw new Error(`TCGdex ${locale} card list fetch failed: ${res.status}`);
+      }
+      const rows = (await res.json()) as { id: string; name: string }[];
+      for (const row of rows) {
+        let entry = map.get(row.id);
+        if (!entry) {
+          entry = {};
+          map.set(row.id, entry);
+        }
+        if (row.name) entry[locale] = row.name;
+      }
+      if (rows.length < 1000) break;
+      page += 1;
+    }
+  }
+  return map;
+}
+
+export function normalizePokemonCard(
+  raw: PokemonCardDetail,
+  names?: Partial<Record<PokemonLocale, string>>,
+): PlayingCard {
   const small = raw.image ? assetUrl(raw.image, "low") : "";
   const large = raw.image ? assetUrl(raw.image, "high") : "";
   const colors = raw.types ?? [];
@@ -116,11 +166,18 @@ export function normalizePokemonCard(raw: PokemonCardDetail): PlayingCard {
       .join(" - ") ||
     (raw.category ?? "");
 
+  const namesMap: Record<string, string> | undefined = names
+    ? (Object.fromEntries(
+        Object.entries(names).filter(([, v]) => v && v !== (raw.name ?? "")),
+      ) as Record<string, string>)
+    : undefined;
+
   return {
     object: "card",
     id: raw.id,
     oracle_id: raw.id,
     name: raw.name ?? "",
+    ...(namesMap && Object.keys(namesMap).length > 0 ? { names: namesMap } : {}),
     lang: "en",
     released_at: raw.set?.releaseDate ?? "",
     uri: "",
@@ -248,7 +305,7 @@ export async function Search(
     message: "Cards successfully retrieved.",
     data: details
       .filter((d): d is PokemonCardDetail => d !== null)
-      .map(normalizePokemonCard),
+      .map((d) => normalizePokemonCard(d)),
     success: true,
   };
 }

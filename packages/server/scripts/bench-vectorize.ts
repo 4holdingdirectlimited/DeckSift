@@ -22,6 +22,15 @@ const SAMPLE_PATH = join(process.cwd(), ".cache", "bench-card.jpg");
 // (onnxruntime-node bundles DirectML.dll on Windows).
 const DEVICE: string = process.env.BENCH_DEVICE ?? "cpu";
 const DTYPE: string = process.env.BENCH_DTYPE ?? "q8";
+// BENCH_DML_DEVICE_ID=0|1 — DirectML adapter index (DXGI order: primary
+// display first). Use nvidia-smi to see which physical GPU each index is;
+// on this machine 0=Quadro M4000 (primary display), 1=GTX 970.
+const DML_DEVICE_ID: string | undefined = process.env.BENCH_DML_DEVICE_ID;
+
+const session_options =
+  DEVICE === "dml" && DML_DEVICE_ID !== undefined
+    ? { executionProviders: [{ name: "dml" as const, deviceId: Number(DML_DEVICE_ID) }] }
+    : undefined;
 
 function stats(label: string, times: number[]): void {
   const sorted = [...times].sort((a, b) => a - b);
@@ -73,6 +82,7 @@ async function main(): Promise<void> {
   const model = await SiglipVisionModel.from_pretrained(MODEL_NAME, {
     dtype: DTYPE,
     device: DEVICE,
+    ...(session_options ? { session_options } : {}),
   });
   const processor = await AutoProcessor.from_pretrained(MODEL_NAME);
   console.log(`Model loaded in ${(performance.now() - t0).toFixed(0)} ms`);
